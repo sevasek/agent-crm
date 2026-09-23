@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Partners — crm{% endblock %}
+{% block content %}
+<h1>Partners</h1>
+<form method="get" action="/partners" style="margin-bottom: 1rem;">
+    <input type="text" name="q" value="{{ q }}" placeholder="Search name or email">
+</form>
+<a class="btn" href="/partners/new">+ New partner</a>
+<table>
+    <tr><th>Name</th><th>Type</th><th>Email</th><th>Phone</th></tr>
+    {% for p in partners %}
+    <tr>
+        <td><a href="/partners/{{ p.id }}">{{ p.name }}</a></td>
+        <td>{{ "Company" if p.is_company else "Person" }}</td>
+        <td>{{ p.email or "" }}</td>
+        <td class="nowrap">{{ p.phone or "" }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="4" class="muted">No partners yet.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

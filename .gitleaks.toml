@@ -1,0 +1,24 @@
+title = "agent-crm"
+
+# Extends gitleaks' default rules. Allowlisted strings are documented
+# placeholders and test fixtures, not live secrets. Do not add real
+# secret values here. Separate allowlist blocks are OR'd; conditions inside one
+# block are AND'd.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test fixtures and example env — not production secrets"
+paths = [
+  '''^tests/''',
+  '''^\.env\.example$''',
+]
+
+[[allowlists]]
+description = "Documented placeholders used in compose/CI, not live secrets"
+regexes = [
+  '''dev-secret-change-in-prod''',
+  '''test-secret-key''',
+  '''test-crm-api-key''',
+  '''ci-test-key''',
+]

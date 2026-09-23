@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Services — crm{% endblock %}
+{% block content %}
+<h1>Services</h1>
+<a class="btn" href="/services/new">+ New service</a>
+<table>
+    <tr><th>Name</th><th>Slug</th><th>Nurture list</th><th>Active</th><th></th></tr>
+    {% for s in services %}
+    <tr>
+        <td>{{ s.name }}</td>
+        <td>{{ s.slug }}</td>
+        <td>{{ s.nurture_list_slug or "—" }}</td>
+        <td>{{ "yes" if s.active else "no" }}</td>
+        <td><a href="/services/{{ s.id }}/edit">Edit</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">No services yet.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

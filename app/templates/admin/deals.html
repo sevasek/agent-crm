@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Deals — crm{% endblock %}
+{% block content %}
+<h1>Deals</h1>
+<div style="margin-bottom:1rem;">
+    <a href="/deals" class="{{ 'btn' if not current_stage and not current_due else 'btn-secondary' }}">All</a>
+    <a href="/deals?due=1" class="{{ 'btn' if current_due else 'btn-secondary' }}">Due</a>
+    {% for s in stages %}
+    <a href="/deals?stage={{ s.key }}" class="{{ 'btn' if current_stage == s.key else 'btn-secondary' }}">{{ s.label }}</a>
+    {% endfor %}
+    <a class="btn" href="/deals/new">+ New deal</a>
+    <a class="btn-secondary btn" href="/pipeline">Pipeline view</a>
+</div>
+<table>
+    <tr><th>Partner</th><th>Service</th><th>Stage</th><th>Value</th><th>Next action</th><th></th></tr>
+    {% for d in deals %}
+    <tr>
+        <td><a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
+        <td>{{ d.service_name }}</td>
+        <td><span class="pill">{{ d.stage }}</span></td>
+        <td>{% if d.value_estimate %}${{ "%.0f"|format(d.value_estimate) }}{% endif %}</td>
+        <td>
+            {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
+            {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
+            {{ d.next_action or "" }}{% if d.next_action_date %} ({{ (d.next_action_date or "")[:10] }}){% endif %}
+        </td>
+        <td><a href="/deals/{{ d.id }}/edit">Edit</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">{% if current_due %}No deals due or overdue.{% else %}No deals yet.{% endif %}</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

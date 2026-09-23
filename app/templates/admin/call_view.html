@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Call {{ partner.name }} — crm{% endblock %}
+{% block content %}
+<div class="call-view">
+    <p class="muted call-view-back"><a href="/calls">&larr; Today's calls</a></p>
+
+    <h1>{{ partner.name }}</h1>
+    <p class="muted">{{ service.name }}{% if deal.value_estimate %} · ${{ "%.0f"|format(deal.value_estimate) }}{% endif %}</p>
+
+    <div class="call-view-dial">
+        {% if partner.phone is dialable %}
+        <a href="{{ partner.phone|tel_href }}" class="btn-tel btn-tel-big"
+           onclick="logCallTap('/deals/{{ deal.id }}/call-tel', '{{ csrf_token }}')">Call {{ partner.phone }}</a>
+        {% else %}
+        <p class="muted">No phone number on file.</p>
+        {% endif %}
+    </div>
+
+    {% if score %}
+    <p class="muted call-view-score">
+        Score {{ score.score }}/{{ score_max }}
+    </p>
+    {% endif %}
+
+    {% if fit %}
+    <p class="muted call-view-score">
+        Fit {{ fit.score }}/{{ fit.max }}{% if fit.matched %} —
+        {% for m in fit.matched %}{{ m.label or m.field }}{% if not loop.last %} · {% endif %}{% endfor -%}
+        {% endif %}
+    </p>
+    {% endif %}
+
+    <h2>Offer</h2>
+    {% if offer %}
+    <div class="call-view-talk-track">
+        <p><strong>{{ offer.name }}</strong></p>
+        {% if offer.pitch %}<p>{{ offer.pitch }}</p>{% endif %}
+        {% if offer.proof_point %}<p class="muted">Proof: {{ offer.proof_point }}</p>{% endif %}
+        {% if offer.price_anchor %}<p class="muted">Price: {{ offer.price_anchor }}</p>{% endif %}
+    </div>
+    {% else %}
+    <p class="muted">No offer selected for this deal.</p>
+    {% endif %}
+    {% if offer_options %}
+    <form method="post" action="/deals/{{ deal.id }}/offer" class="stage-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <select name="offer_id" onchange="this.form.submit()">
+            <option value="">— none —</option>
+            {% for o in offer_options %}
+            <option value="{{ o.id }}" {% if offer and offer.id == o.id %}selected{% endif %}>{{ o.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Save</button>
+    </form>
+    {% endif %}
+    <details class="call-view-new-offer">
+        <summary class="muted">+ New offer</summary>
+        <form method="post" action="/deals/{{ deal.id }}/offer/new">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <div class="form-row"><input type="text" name="name" placeholder="Offer name" required></div>
+            <div class="form-row"><input type="text" name="pitch" placeholder="Pitch"></div>
+            <div class="form-row"><input type="text" name="proof_point" placeholder="Proof point"></div>
+            <div class="form-row"><input type="text" name="price_anchor" placeholder="Price anchor"></div>
+            <button type="submit">Create &amp; use</button>
+        </form>
+    </details>
+
+    {% if deal.pain_points or deal.goals or deal.next_action %}
+    <div class="call-view-talk-track">
+        {% if deal.pain_points %}<p><strong>Pain points:</strong> {{ deal.pain_points }}</p>{% endif %}
+        {% if deal.goals %}<p><strong>Goals:</strong> {{ deal.goals }}</p>{% endif %}
+        {% if deal.next_action %}<p><strong>Next action:</strong> {{ deal.next_action }}{% if deal.next_action_date %} ({{ deal.next_action_date[:10] }}){% endif %}</p>{% endif %}
+    </div>
+    {% endif %}
+
+    <h2>Log this call</h2>
+    <form method="post" action="/deals/{{ deal.id }}/call-outcome" class="call-outcome-form call-view-outcome-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="next" value="call_view">
+        <input type="text" name="note" placeholder="Note (optional)"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+        {% for key, label, _ in outcomes %}
+        <button type="submit" name="outcome" value="{{ key }}" class="btn-outcome btn-outcome-{{ key }}">{{ label }}</button>
+        {% endfor %}
+    </form>
+
+    <h2>Recent history</h2>
+    {% for a in activities %}
+    <div class="activity">
+        <span class="pill">{{ a.type }}</span> {{ a.display_body or a.body or "" }}
+        <div class="meta">{{ a.occurred_at }}</div>
+    </div>
+    {% else %}
+    <p class="muted">No activity yet.</p>
+    {% endfor %}
+
+    <p><a href="/partners/{{ partner.id }}">Full partner record &rarr;</a></p>
+</div>
+{% endblock %}

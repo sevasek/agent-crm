@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}ICP fit — crm{% endblock %}
+{% block content %}
+<h1>ICP fit criteria</h1>
+<p class="muted">
+    A deterministic, transparent fit score — not a prediction — over fields already on the
+    partner/deal. A lead's fit score is the sum of the weights below whose criterion matches;
+    there's no pass/fail cutoff, just a number and the reasons, shown on the
+    <a href="/calls">call view</a>. <strong>is_not_null</strong> checks the field is set;
+    <strong>boolean</strong> compares against true/false; <strong>fuzzy_match</strong> does a
+    rough case-insensitive string match; the rest compare numbers.
+</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<div class="table-scroll">
+<table class="wide-form-table">
+    <tr>
+        <th>Label</th><th>Field</th><th>Operator</th><th>Value</th><th>Weight</th><th>Active</th><th></th>
+    </tr>
+    {% for c in criteria %}
+    <form id="icp-edit-{{ c.id }}" method="post" action="/icp/{{ c.id }}/edit"></form>
+    <tr>
+        <td><input type="text" name="label" value="{{ c.label or '' }}" form="icp-edit-{{ c.id }}" placeholder="e.g. Enterprise-sized"></td>
+        <td>
+            <select name="field" form="icp-edit-{{ c.id }}">
+                {% for key, name in fields.items() %}
+                <option value="{{ key }}" {% if c.field == key %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td>
+            <select name="operator" form="icp-edit-{{ c.id }}">
+                {% for key, name in operators.items() %}
+                <option value="{{ key }}" {% if c.operator == key %}selected{% endif %}>{{ key }} — {{ name }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td><input type="text" name="value" value="{{ c.value or '' }}" form="icp-edit-{{ c.id }}" placeholder="ignored for is_not_null"></td>
+        <td><input type="number" name="weight" value="{{ c.weight }}" form="icp-edit-{{ c.id }}" style="width:5rem;"></td>
+        <td><input type="checkbox" name="active" form="icp-edit-{{ c.id }}" {% if c.active %}checked{% endif %}></td>
+        <td>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="icp-edit-{{ c.id }}">
+            <button type="submit" form="icp-edit-{{ c.id }}">Save</button>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No criteria yet — add one below. Until you do, no fit score shows on the call view.</td></tr>
+    {% endfor %}
+</table>
+</div>
+
+<h2>Add a criterion</h2>
+<form method="post" action="/icp/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="label">Label</label>
+        <input type="text" id="label" name="label" placeholder="e.g. Has an email on file">
+    </div>
+    <div class="form-row">
+        <label for="field">Field</label>
+        <select id="field" name="field">
+            {% for key, name in fields.items() %}
+            <option value="{{ key }}">{{ name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="operator">Operator</label>
+        <select id="operator" name="operator">
+            {% for key, name in operators.items() %}
+            <option value="{{ key }}">{{ key }} — {{ name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="value">Value</label>
+        <input type="text" id="value" name="value" placeholder="e.g. 10 (for team_size &gt; 10), or true, or childcare">
+    </div>
+    <div class="form-row">
+        <label for="weight">Weight</label>
+        <input type="number" id="weight" name="weight" value="1" style="width:5rem;">
+    </div>
+    <div class="form-row">
+        <label><input type="checkbox" name="active" checked> Active</label>
+    </div>
+    <button type="submit">Add criterion</button>
+</form>
+
+<h2>Delete a criterion</h2>
+{% for c in criteria %}
+<form method="post" action="/icp/{{ c.id }}/delete" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn-secondary" onclick="return confirm('Delete this criterion?')">Delete: {{ c.label or c.field }} ({{ c.operator }})</button>
+</form>
+{% endfor %}
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit partner" if partner else "New partner" }} — crm{% endblock %}
+{% block content %}
+<h1>{{ "Edit partner" if partner else "New partner" }}</h1>
+<form method="post" action="{{ '/partners/' ~ partner.id ~ '/edit' if partner else '/partners/new' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label><input type="checkbox" id="is_company" name="is_company" value="1" {% if partner and partner.is_company %}checked{% endif %}> This is a company</label>
+    </div>
+    <div class="form-row">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ partner.name if partner else '' }}" required>
+    </div>
+    <div class="form-row js-person-only" {% if partner and partner.is_company %}hidden{% endif %}>
+        <label for="parent_id">Company (if this is a person)</label>
+        <select id="parent_id" name="parent_id">
+            <option value="">— none —</option>
+            {% for c in companies %}
+            <option value="{{ c.id }}" {% if partner and partner.parent_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row js-person-only" {% if partner and partner.is_company %}hidden{% endif %}>
+        <label for="title">Title (role at company)</label>
+        <input type="text" id="title" name="title" value="{{ (partner.title or '') if partner else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ (partner.email or '') if partner else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="phone">Phone</label>
+        <input type="text" id="phone" name="phone" value="{{ (partner.phone or '') if partner else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" value="{{ (partner.website or '') if partner else '' }}">
+    </div>
+    {% for field, label in social_fields %}
+    <div class="form-row">
+        <label for="{{ field }}">{{ label }}</label>
+        <input type="text" id="{{ field }}" name="{{ field }}"
+               value="{{ (partner.get(field) or '') if partner else '' }}">
+    </div>
+    {% endfor %}
+    <div class="form-row">
+        <label for="address">Address</label>
+        <input type="text" id="address" name="address" value="{{ (partner.address or '') if partner else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="preferred_channel">Preferred contact channel</label>
+        <select id="preferred_channel" name="preferred_channel">
+            <option value="">— unspecified —</option>
+            {% for ch in ["email", "phone", "text"] %}
+            <option value="{{ ch }}" {% if partner and partner.preferred_channel == ch %}selected{% endif %}>{{ ch }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="industry">Industry</label>
+        <input type="text" id="industry" name="industry" value="{{ (partner.industry or '') if partner else '' }}">
+    </div>
+    <div class="form-row js-company-only" {% if not partner or not partner.is_company %}hidden{% endif %}>
+        <label for="team_size">Team size</label>
+        <input type="number" id="team_size" name="team_size" min="0" value="{% if partner and partner.team_size is not none %}{{ partner.team_size }}{% endif %}">
+    </div>
+    <div class="form-row">
+        <label for="owner_key">Owner</label>
+        <input type="text" id="owner_key" name="owner_key" placeholder="alice, bob, sales-agent"
+               value="{{ (partner.owner_key or '') if partner else '' }}">
+    </div>
+    <button type="submit">Save</button>
+</form>
+<script>
+    (function () {
+        var box = document.getElementById("is_company");
+        if (!box) return;
+        function syncCompanyFields() {
+            var isCompany = box.checked;
+            document.querySelectorAll(".js-person-only").forEach(function (el) {
+                el.hidden = isCompany;
+            });
+            document.querySelectorAll(".js-company-only").forEach(function (el) {
+                el.hidden = !isCompany;
+            });
+        }
+        box.addEventListener("change", syncCompanyFields);
+        syncCompanyFields();
+    })();
+</script>
+{% endblock %}

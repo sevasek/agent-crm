@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}crm{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    {% if user %}
+    <nav class="topnav">
+        <a class="brand" href="/partners">crm</a>
+        <a href="/partners">Partners</a>
+        <a href="/calls">Calls</a>
+        <a href="/pipeline">Pipeline</a>
+        <a href="/deals">Deals</a>
+        <a href="/services">Services</a>
+        <a href="/stages">Stages</a>
+        <a href="/offers">Offers</a>
+        <a href="/icp">ICP</a>
+        <a class="right" href="/settings">Settings</a>
+        <a href="/auth/logout">Logout</a>
+    </nav>
+    {% endif %}
+    <main class="{% block main_class %}container{% endblock %}">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        // Fired alongside a real <a href="tel:..."> tap. The dial itself
+        // goes through the browser's native, reliable tel: link handling;
+        // this is just a fire-and-forget log of the tap, so it can't ever
+        // block or delay the actual call (sendBeacon queues and returns
+        // immediately, unlike a redirect the browser has to resolve first).
+        function logCallTap(url, csrfToken) {
+            if (!navigator.sendBeacon) return;
+            var fd = new FormData();
+            fd.append("csrf_token", csrfToken);
+            navigator.sendBeacon(url, fd);
+        }
+    </script>
+</body>
+</html>

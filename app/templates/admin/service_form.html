@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit service" if service else "New service" }} — crm{% endblock %}
+{% block content %}
+<h1>{{ "Edit service" if service else "New service" }}</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" action="{{ '/services/' ~ service.id ~ '/edit' if service else '/services/new' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{{ service.name if service else '' }}" required>
+    </div>
+    {% if not service %}
+    <div class="form-row">
+        <label for="slug">Slug</label>
+        <input type="text" id="slug" name="slug" placeholder="e.g. consulting" required>
+    </div>
+    {% endif %}
+    <div class="form-row">
+        <label for="description">Description</label>
+        <textarea id="description" name="description">{{ (service.description or '') if service else '' }}</textarea>
+    </div>
+    <div class="form-row">
+        <label for="nurture_list_slug">Nurture list slug</label>
+        <input type="text" id="nurture_list_slug" name="nurture_list_slug"
+               value="{{ (service.nurture_list_slug or '') if service else '' }}"
+               placeholder="e.g. automation-interest">
+    </div>
+    {% if service %}
+    <div class="form-row">
+        <label><input type="checkbox" name="active" value="1" {% if service.active %}checked{% endif %}> Active</label>
+    </div>
+    {% endif %}
+    <button type="submit">Save</button>
+</form>
+{% endblock %}

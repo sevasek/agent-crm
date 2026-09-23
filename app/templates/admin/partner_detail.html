@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ partner.name }} — crm{% endblock %}
+{% block content %}
+<h1>{{ partner.name }} <span class="pill">{{ "company" if partner.is_company else "person" }}</span></h1>
+<p class="muted">
+    {% if partner.email %}{{ partner.email }} · {% endif %}
+    {% if partner.phone is dialable %}
+    <a href="{{ partner.phone|tel_href }}" class="btn-tel"
+       onclick="logCallTap('/partners/{{ partner.id }}/call-tel', '{{ csrf_token }}')">{{ partner.phone }}</a>
+    ·
+    {% endif %}
+    {% if partner.title %}{{ partner.title }}{% endif %}
+</p>
+<p class="muted">
+    {% if partner.industry %}{{ partner.industry }} · {% endif %}
+    {% if partner.is_company and partner.team_size is not none %}{{ partner.team_size }} people · {% endif %}
+    {% if partner.preferred_channel %}prefers {{ partner.preferred_channel }} · {% endif %}
+    {% if partner.address %}{{ partner.address }} · {% endif %}
+    {% for label, url in social_links %}
+    <a href="{{ url }}" target="_blank" rel="noopener">{{ label }}</a>{% if not loop.last %} · {% endif %}
+    {% endfor %}
+</p>
+<a class="btn btn-secondary" href="/partners/{{ partner.id }}/edit">Edit</a>
+<a class="btn" href="/deals/new?partner_id={{ partner.id }}">+ New deal</a>
+
+{% if partner.is_company and children %}
+<h2>People at this company</h2>
+<table>
+    <tr><th>Name</th><th>Title</th><th>Email</th></tr>
+    {% for c in children %}
+    <tr><td><a href="/partners/{{ c.id }}">{{ c.name }}</a></td><td>{{ c.title or "" }}</td><td>{{ c.email or "" }}</td></tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+<h2>Deals</h2>
+{% for d in deals %}
+<div class="deal-card">
+    <strong>{{ d.service_name }}</strong> — <span class="pill">{{ d.stage }}</span>
+    {% if d.value_estimate %}· ${{ "%.0f"|format(d.value_estimate) }}{% endif %}
+    {% if d.parent_deal_id %}<span class="muted"> · follow-on of deal #{{ d.parent_deal_id }}</span>{% endif %}
+    {% set kids = deals | selectattr("parent_deal_id", "equalto", d.id) | list %}
+    {% if kids %}
+    <span class="muted"> · ladder:
+      {% for k in kids %}{{ k.service_name }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </span>
+    {% endif %}
+    {% if d.pain_points %}<br><span class="muted">Pain points: {{ d.pain_points }}</span>{% endif %}
+    {% if d.goals %}<br><span class="muted">Goals: {{ d.goals }}</span>{% endif %}
+    <form class="next-action-form" method="post" action="/deals/{{ d.id }}/next-action">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="text" name="next_action" value="{{ d.next_action or '' }}" placeholder="Next action">
+        <input type="date" name="next_action_date" value="{{ (d.next_action_date or '')[:10] }}">
+        {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
+        {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
+        <button type="submit">Save</button>
+    </form>
+    <p><a class="btn btn-secondary" href="/deals/{{ d.id }}/edit">Edit deal</a></p>
+    <form class="stage-form" method="post" action="/deals/{{ d.id }}/stage">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <select name="stage" onchange="this.form.submit()">
+            {% for s in stages %}
+            <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
+            {% endfor %}
+        </select>
+    </form>
+</div>
+{% else %}
+<p class="muted">No deals yet.</p>
+{% endfor %}
+
+<h2>Activity</h2>
+<form method="post" action="/partners/{{ partner.id }}/activities" style="margin-bottom:1rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <select name="type" style="width:auto;">
+            <option value="note">Note</option>
+            <option value="call">Call</option>
+            <option value="email">Email</option>
+            <option value="meeting">Meeting</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <textarea name="body" placeholder="What happened?"></textarea>
+    </div>
+    <button type="submit">Add</button>
+</form>
+{% for a in activities %}
+<div class="activity">
+    <span class="pill">{{ a.type }}</span> {{ a.display_body or a.body or "" }}
+    <div class="meta">{{ a.occurred_at }}</div>
+</div>
+{% else %}
+<p class="muted">No activity yet.</p>
+{% endfor %}
+{% endblock %}

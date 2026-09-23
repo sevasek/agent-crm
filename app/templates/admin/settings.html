@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Settings — crm{% endblock %}
+{% block content %}
+<h1>Account settings</h1>
+
+<h2>API keys</h2>
+<p class="muted">
+    Give a bot or script access to the <code>/api/v1/leads</code> endpoint by creating a key
+    below and sending it as the <code>X-API-Key</code> header. This is not the Grok MCP
+    secret (<code>CRM_MCP_API_KEY</code>) and does not authorize <code>/mcp</code> or
+    <code>/api/v1/stages</code>.
+</p>
+
+{% if new_key %}
+<div class="api-key-new">
+    <p><strong>New key created.</strong> Copy it now — it won't be shown again.</p>
+    <div class="api-key-value">
+        <code id="new-api-key">{{ new_key }}</code>
+        <button type="button" class="btn-secondary" onclick="navigator.clipboard.writeText('{{ new_key }}')">Copy</button>
+    </div>
+</div>
+{% endif %}
+
+<table>
+    <tr><th>Label</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>
+    {% for k in api_keys %}
+    <tr>
+        <td>{{ k.label }}</td>
+        <td><code>{{ k.key_prefix }}…</code></td>
+        <td class="nowrap">{{ k.created_at }}</td>
+        <td class="nowrap">{{ k.last_used_at or "Never" }}</td>
+        <td>
+            <form method="post" action="/settings/api-keys/{{ k.id }}/delete" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="btn-secondary" onclick="return confirm('Revoke this key? Any bot using it will stop working.')">Revoke</button>
+            </form>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" class="muted">No API keys yet.</td></tr>
+    {% endfor %}
+</table>
+
+<h2>Create an API key</h2>
+<form method="post" action="/settings/api-keys/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="label">Label</label>
+        <input type="text" id="label" name="label" placeholder="e.g. lead-import job" required>
+    </div>
+    <button type="submit">Create key</button>
+</form>
+{% endblock %}

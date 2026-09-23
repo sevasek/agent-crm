@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Stages — crm{% endblock %}
+{% block content %}
+<h1>Pipeline stages</h1>
+<p class="muted">
+    The workflow leads move through, top to bottom. Role checkboxes replace what used to be
+    hardcoded stage names: <strong>Default</strong> is where new deals start, <strong>Qualified
+    pool</strong> feeds the <a href="/calls">call queue</a>, <strong>Triggers nurture</strong>
+    enrolls the partner on the service's nurture list on entry, and <strong>Won/Lost</strong> close
+    the deal (sets <code>closed_at</code>) — a stage can't be both. If more than one stage
+    carries the same role, the call queue uses all of them, but a call outcome (won/lost/nurture)
+    acts on the first one in this order. Also configurable via the API — see
+    <code>GET/POST/PATCH/DELETE /api/v1/stages</code>, authenticated with
+    <code>CRM_STAGES_API_KEY</code> (a separate secret from the lead-ingest API key).
+    Saving a row below sends every checkbox's current state, checked or not — leaving one
+    unchecked before Save turns that role off, it isn't a partial update.
+</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<table>
+    <tr>
+        <th>Order</th><th>Key</th><th>Label</th><th>Default</th><th>Qualified pool</th>
+        <th>Triggers nurture</th><th>Won</th><th>Lost</th><th></th>
+    </tr>
+    {% for s in stages %}
+    <form id="stage-edit-{{ s.key }}" method="post" action="/stages/{{ s.key }}/edit"></form>
+    <tr>
+        <td>
+            <form method="post" action="/stages/{{ s.key }}/move" class="stage-move-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" name="direction" value="up" class="btn-secondary" {% if loop.first %}disabled{% endif %}>&uarr;</button>
+                <button type="submit" name="direction" value="down" class="btn-secondary" {% if loop.last %}disabled{% endif %}>&darr;</button>
+            </form>
+        </td>
+        <td><code>{{ s.key }}</code></td>
+        <td><input type="text" name="label" value="{{ s.label }}" form="stage-edit-{{ s.key }}"></td>
+        <td><input type="checkbox" name="is_default" form="stage-edit-{{ s.key }}" {% if s.is_default %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_qualified_pool" form="stage-edit-{{ s.key }}" {% if s.is_qualified_pool %}checked{% endif %}></td>
+        <td><input type="checkbox" name="triggers_nurture" form="stage-edit-{{ s.key }}" {% if s.triggers_nurture %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_won" form="stage-edit-{{ s.key }}" {% if s.is_won %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_lost" form="stage-edit-{{ s.key }}" {% if s.is_lost %}checked{% endif %}></td>
+        <td>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="stage-edit-{{ s.key }}">
+            <button type="submit" form="stage-edit-{{ s.key }}">Save</button>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<h2>Add a stage</h2>
+<form method="post" action="/stages/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="key">Key</label>
+        <input type="text" id="key" name="key" placeholder="e.g. in_review" required>
+    </div>
+    <div class="form-row">
+        <label for="label">Label</label>
+        <input type="text" id="label" name="label" placeholder="e.g. Demo scheduled" required>
+    </div>
+    <div class="form-row">
+        <label><input type="checkbox" name="is_default"> Default for new deals</label>
+        <label><input type="checkbox" name="is_qualified_pool"> Qualified pool (call queue)</label>
+        <label><input type="checkbox" name="triggers_nurture"> Triggers nurture enrollment</label>
+        <label><input type="checkbox" name="is_won"> Won (closes the deal)</label>
+        <label><input type="checkbox" name="is_lost"> Lost (closes the deal)</label>
+    </div>
+    <button type="submit">Add stage</button>
+</form>
+
+<h2>Delete a stage</h2>
+<p class="muted">Only a stage with no deals currently in it can be deleted.</p>
+{% for s in stages %}
+<form method="post" action="/stages/{{ s.key }}/delete" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn-secondary" onclick="return confirm('Delete this stage?')">Delete {{ s.label }}</button>
+</form>
+{% endfor %}
+{% endblock %}

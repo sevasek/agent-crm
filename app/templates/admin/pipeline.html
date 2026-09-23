@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
+{% block content %}
+<h1>Pipeline</h1>
+<p class="muted">
+    Columns follow the stage order set on the <a href="/stages">Stages</a> page.
+    Move a deal by picking a new stage on its card.
+</p>
+<div class="pipeline-board">
+    {% for col in columns %}
+    <div class="pipeline-column">
+        <h2>{{ col.stage.label }} <span class="muted">({{ col.deals|length }})</span></h2>
+        {% for d in col.deals %}
+        <div class="pipeline-card">
+            <a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>
+            <div class="muted">{{ d.service_name }}</div>
+            {% if d.value_estimate %}<div class="muted">${{ "%.0f"|format(d.value_estimate) }}</div>{% endif %}
+            {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
+            {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
+            <form method="post" action="/deals/{{ d.id }}/stage" class="stage-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="next" value="pipeline">
+                <select name="stage" onchange="this.form.submit()">
+                    {% for s in stages %}
+                    <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        {% else %}
+        <p class="muted">No deals.</p>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Offers — crm{% endblock %}
+{% block content %}
+<h1>Offers</h1>
+<p class="muted">
+    Priced packages (USD) attached to a service. A new deal starts on whichever offer is marked
+    <strong>Default</strong>; the call view can switch a deal to a different offer, or create a new
+    one on the spot. Bots use <code>create_offer</code> / <code>list_catalog</code> / <code>update_deal(offer_id)</code>.
+</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<div class="table-scroll">
+<table class="wide-form-table">
+    <tr>
+        <th>Name</th><th>Service</th><th>Price (USD)</th><th>Currency</th>
+        <th>Description</th><th>Pitch</th><th>Proof</th><th>Anchor</th>
+        <th>Default</th><th>Active</th><th></th>
+    </tr>
+    {% for o in offers %}
+    <form id="offer-edit-{{ o.id }}" method="post" action="/offers/{{ o.id }}/edit"></form>
+    <tr>
+        <td><input type="text" name="name" value="{{ o.name }}" form="offer-edit-{{ o.id }}"></td>
+        <td>
+            <select name="service_id" form="offer-edit-{{ o.id }}">
+                <option value="">— none —</option>
+                {% for s in services %}
+                <option value="{{ s.id }}" {% if o.service_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </td>
+        <td><input type="number" name="price" step="0.01" min="0" value="{% if o.price is not none %}{{ o.price }}{% endif %}" form="offer-edit-{{ o.id }}"></td>
+        <td><input type="text" name="currency" value="{{ o.currency or 'USD' }}" form="offer-edit-{{ o.id }}" size="4"></td>
+        <td><input type="text" name="description" value="{{ o.description or '' }}" form="offer-edit-{{ o.id }}"></td>
+        <td><input type="text" name="pitch" value="{{ o.pitch or '' }}" form="offer-edit-{{ o.id }}"></td>
+        <td><input type="text" name="proof_point" value="{{ o.proof_point or '' }}" form="offer-edit-{{ o.id }}"></td>
+        <td><input type="text" name="price_anchor" value="{{ o.price_anchor or '' }}" form="offer-edit-{{ o.id }}"></td>
+        <td><input type="checkbox" name="is_default" form="offer-edit-{{ o.id }}" {% if o.is_default %}checked{% endif %}></td>
+        <td><input type="checkbox" name="active" form="offer-edit-{{ o.id }}" {% if o.active %}checked{% endif %}></td>
+        <td>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="offer-edit-{{ o.id }}">
+            <button type="submit" form="offer-edit-{{ o.id }}">Save</button>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="11" class="muted">No offers yet — add one below.</td></tr>
+    {% endfor %}
+</table>
+</div>
+
+<h2>Add an offer</h2>
+<form method="post" action="/offers/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" placeholder="e.g. Discovery Session" required>
+    </div>
+    <div class="form-row">
+        <label for="service_id">Service</label>
+        <select id="service_id" name="service_id">
+            <option value="">— none —</option>
+            {% for s in services %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="price">Price (USD)</label>
+        <input type="number" id="price" name="price" step="0.01" min="0" placeholder="350">
+    </div>
+    <div class="form-row">
+        <label for="currency">Currency</label>
+        <input type="text" id="currency" name="currency" value="USD">
+    </div>
+    <div class="form-row">
+        <label for="description">Description</label>
+        <input type="text" id="description" name="description" placeholder="Discovery / deposit.">
+    </div>
+    <div class="form-row">
+        <label for="pitch">Pitch (your 30-second open)</label>
+        <input type="text" id="pitch" name="pitch" placeholder="e.g. A paid discovery session to map where time is leaking">
+    </div>
+    <div class="form-row">
+        <label for="proof_point">Proof point</label>
+        <input type="text" id="proof_point" name="proof_point" placeholder="e.g. Saved a childcare centre 10 hrs/week">
+    </div>
+    <div class="form-row">
+        <label for="price_anchor">Price anchor</label>
+        <input type="text" id="price_anchor" name="price_anchor" placeholder="e.g. $350 — filled from price if blank">
+    </div>
+    <div class="form-row">
+        <label><input type="checkbox" name="is_default"> Default for new deals</label>
+        <label><input type="checkbox" name="active" checked> Active</label>
+    </div>
+    <button type="submit">Add offer</button>
+</form>
+
+<h2>Delete an offer</h2>
+<p class="muted">Only an offer no deal currently uses can be deleted.</p>
+{% for o in offers %}
+<form method="post" action="/offers/{{ o.id }}/delete" style="display:inline;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn-secondary" onclick="return confirm('Delete this offer?')">Delete {{ o.name }}</button>
+</form>
+{% endfor %}
+{% endblock %}

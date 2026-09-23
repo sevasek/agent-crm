@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit deal" if deal else "New deal" }} — crm{% endblock %}
+{% block content %}
+<h1>{{ "Edit deal" if deal else "New deal" }}</h1>
+<form method="post" action="{{ '/deals/' ~ deal.id ~ '/edit' if deal else '/deals/new' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if deal %}
+    <p class="muted">{{ partner.name }} · {{ service.name }} · <span class="pill">{{ deal.stage }}</span>
+        — stage changes on the partner page.
+        {% if deal.parent_deal_id %}Parent deal #{{ deal.parent_deal_id }}.{% endif %}
+    </p>
+    {% else %}
+    <div class="form-row">
+        <label for="partner_id">Partner</label>
+        <select id="partner_id" name="partner_id" required>
+            <option value="">— select —</option>
+            {% for p in partners %}
+            <option value="{{ p.id }}" {% if preselect_partner_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="service_id">Service</label>
+        <select id="service_id" name="service_id" required>
+            <option value="">— select —</option>
+            {% for s in services %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+    <div class="form-row">
+        <label for="source">Source</label>
+        <input type="text" id="source" name="source" placeholder="referral, website, cold outreach..."
+               value="{{ deal.source if deal and deal.source else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="value_estimate">Estimated value ($)</label>
+        <input type="number" id="value_estimate" name="value_estimate" step="1"
+               value="{% if deal and deal.value_estimate is not none %}{{ deal.value_estimate|int }}{% endif %}">
+    </div>
+    <div class="form-row">
+        <label for="pain_points">Pain points</label>
+        <textarea id="pain_points" name="pain_points" placeholder="What problem are they trying to solve?">{{ deal.pain_points if deal and deal.pain_points else '' }}</textarea>
+    </div>
+    <div class="form-row">
+        <label for="goals">Goals</label>
+        <textarea id="goals" name="goals" placeholder="What does success look like for them?">{{ deal.goals if deal and deal.goals else '' }}</textarea>
+    </div>
+    <div class="form-row">
+        <label for="next_action">Next action</label>
+        <input type="text" id="next_action" name="next_action"
+               value="{{ deal.next_action if deal and deal.next_action else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="next_action_date">Next action date</label>
+        <input type="date" id="next_action_date" name="next_action_date"
+               value="{{ (deal.next_action_date or '')[:10] if deal else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="owner_key">Owner</label>
+        <input type="text" id="owner_key" name="owner_key" placeholder="alice, bob, sales-agent"
+               value="{{ deal.owner_key if deal and deal.owner_key else '' }}">
+    </div>
+    <div class="form-row">
+        <label for="external_ref">External ref</label>
+        <input type="text" id="external_ref" name="external_ref"
+               placeholder="e.g. acme-childcare-2026"
+               value="{{ deal.external_ref if deal and deal.external_ref else '' }}">
+    </div>
+    <button type="submit">{{ "Save" if deal else "Create deal" }}</button>
+    {% if deal %}
+    <a class="btn btn-secondary" href="/partners/{{ deal.partner_id }}">Cancel</a>
+    {% endif %}
+</form>
+{% endblock %}

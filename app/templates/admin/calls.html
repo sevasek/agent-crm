@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Today's calls — crm{% endblock %}
+{% block content %}
+<h1>Today's calls</h1>
+<p class="muted">
+    Top {{ limit }} <span class="pill">qualified</span> deals whose partner has a phone
+    number.
+</p>
+<table>
+    <tr>
+        <th>#</th>
+        <th>Partner</th>
+        <th>Phone</th>
+        <th>Service</th>
+        <th>Value</th>
+        <th>Score</th>
+        <th>Next</th>
+        <th></th>
+        <th>Log call</th>
+    </tr>
+    {% for d in calls %}
+    <tr>
+        <td>{{ d.rank }}</td>
+        <td><a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
+        <td>
+            <a href="{{ d.partner_phone|tel_href }}" class="btn-tel"
+               onclick="logCallTap('/deals/{{ d.id }}/call-tel', '{{ csrf_token }}')">{{ d.partner_phone }}</a>
+        </td>
+        <td>{{ d.service_name }}</td>
+        <td>{% if d.value_estimate %}${{ "%.0f"|format(d.value_estimate) }}{% endif %}</td>
+        <td class="score">{{ d.score }}/{{ score_max }}</td>
+        <td>{{ d.next_action or "" }}{% if d.next_action_date %} ({{ d.next_action_date }}){% endif %}</td>
+        <td><a class="btn btn-secondary" href="/deals/{{ d.id }}/call">Call view</a></td>
+        <td>
+            <form method="post" action="/deals/{{ d.id }}/call-outcome" class="call-outcome-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="text" name="note" placeholder="Note (optional)"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+                {% for key, label, _ in outcomes %}
+                <button type="submit" name="outcome" value="{{ key }}" class="btn-outcome btn-outcome-{{ key }}">{{ label }}</button>
+                {% endfor %}
+            </form>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="muted">No qualified deals with a phone number. A lead you can't call doesn't belong on this list.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

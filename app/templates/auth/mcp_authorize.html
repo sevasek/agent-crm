@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Authorize MCP — crm{% endblock %}
+{% block content %}
+<h1>Authorize a bot</h1>
+{% if not mcp_enabled %}
+<p class="error">MCP is disabled. Set <code>CRM_MCP_API_KEY</code> in the server environment and retry.</p>
+{% else %}
+<p>A bot ({{ client_name or "Grok" }}) wants to use this CRM over MCP. That lets it search partners, work the pipeline, and log activities — the same work an operator does, not pipeline-delete or user admin.</p>
+{% if form.redirect_uri %}
+<p>If you allow this, the authorization code is sent to:</p>
+<p><code>{{ form.redirect_uri }}</code></p>
+{% if form.client_id %}<p class="muted">Client id: <code>{{ form.client_id }}</code></p>{% endif %}
+{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if not error %}
+<form method="post" action="/oauth/authorize" style="max-width: 360px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="client_id" value="{{ form.client_id }}">
+    <input type="hidden" name="redirect_uri" value="{{ form.redirect_uri }}">
+    <input type="hidden" name="state" value="{{ form.state }}">
+    <input type="hidden" name="code_challenge" value="{{ form.code_challenge }}">
+    <input type="hidden" name="code_challenge_method" value="{{ form.code_challenge_method }}">
+    <input type="hidden" name="scope" value="{{ form.scope }}">
+    <input type="hidden" name="resource" value="{{ form.resource }}">
+    {% if logged_in %}
+    <p class="muted">You are logged in. Confirm to grant access.</p>
+    {% else %}
+    <div class="form-row">
+        <label for="api_key">MCP API key</label>
+        <input type="password" id="api_key" name="api_key" required autocomplete="off">
+        <p class="muted">The <code>CRM_MCP_API_KEY</code> value, not the lead-ingest key.</p>
+    </div>
+    {% endif %}
+    <button type="submit">Allow access</button>
+</form>
+{% endif %}
+{% endif %}
+{% endblock %}

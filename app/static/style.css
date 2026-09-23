@@ -1,0 +1,142 @@
+:root {
+    --border: #ddd;
+    --muted: #666;
+    --bg-alt: #f7f7f7;
+    --accent: #2c5aa0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    margin: 0;
+    color: #222;
+    background: #fff;
+}
+
+.topnav {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.topnav a { text-decoration: none; color: #222; }
+.topnav .brand { font-weight: 700; }
+.topnav .right { margin-left: auto; color: var(--muted); }
+
+.container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+/* Kanban needs the full window. The default 900px centre column is a form-page
+   width; seven stage columns cannot be read at a glance inside it. */
+.container-wide { max-width: none; }
+
+h1 { font-size: 1.4rem; }
+h2 { font-size: 1.1rem; margin-top: 2rem; }
+
+table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 0.85rem; text-transform: uppercase; }
+td.nowrap { white-space: nowrap; }
+
+.form-row { margin-bottom: 1rem; }
+.form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
+input[type=text], input[type=email], input[type=password], input[type=number], input[type=date],
+select, textarea {
+    width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; font-size: 1rem;
+}
+textarea { min-height: 5rem; }
+
+button, .btn {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    text-decoration: none;
+}
+.btn-secondary { background: #fff; color: var(--accent); }
+
+.error { color: #b00020; margin-bottom: 1rem; }
+.muted { color: var(--muted); }
+.pill {
+    display: inline-block; padding: 0.15rem 0.6rem; border-radius: 12px;
+    background: var(--bg-alt); font-size: 0.8rem; text-transform: capitalize;
+}
+.activity { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
+.activity .meta { color: var(--muted); font-size: 0.8rem; }
+.stage-form { display: inline; }
+.next-action-form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.5rem 0; }
+.next-action-form input[type=text] { width: auto; flex: 1; min-width: 12rem; }
+.next-action-form input[type=date] { width: auto; }
+.next-action-form button { padding: 0.35rem 0.75rem; }
+.deal-card { border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
+.pill-due { background: #fff3cd; color: #856404; }
+.pill-overdue { background: #fdecea; color: #b00020; }
+.score { font-variant-numeric: tabular-nums; font-weight: 600; }
+details { margin-top: 1.5rem; }
+details summary { cursor: pointer; }
+
+.pipeline-board {
+    display: flex;
+    gap: 1rem;
+    overflow-x: auto;
+    align-items: stretch;
+    min-height: calc(100vh - 12rem);
+    padding-bottom: 0.5rem;
+}
+.pipeline-column {
+    flex: 1 1 12rem;
+    min-width: 10rem;
+    background: var(--bg-alt);
+    border-radius: 6px;
+    padding: 0.75rem;
+}
+.pipeline-column h2 { margin-top: 0; font-size: 0.95rem; }
+.pipeline-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; }
+.pipeline-card select { margin-top: 0.4rem; }
+.stage-move-form { display: inline; }
+.stage-move-form button { padding: 0.15rem 0.5rem; }
+
+.call-outcome-form { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; min-width: 16rem; }
+.call-outcome-form input[type=text] { width: auto; flex: 1 1 8rem; min-width: 6rem; }
+.btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; }
+.btn-outcome-no_answer { background: #fff; color: var(--muted); border-color: var(--border); }
+.btn-outcome-not_interested { background: #fff; color: #b00020; border-color: #b00020; }
+.btn-outcome-won { background: #1e7e34; border-color: #1e7e34; }
+
+/* Tap-to-call: a real <a href="tel:..."> (the link shape mobile browsers
+   handle reliably), styled plain so it doesn't look like a random link. */
+.btn-tel { color: var(--accent); text-decoration: underline; }
+
+/* Focused mobile call view: one column, big tap targets, nothing else on
+   the page competing for attention while a rep is mid-call. */
+.call-view { max-width: 28rem; margin: 0 auto; }
+.call-view-back { margin-bottom: 0; }
+.call-view-dial { margin: 1rem 0; }
+.btn-tel-big {
+    display: block; width: 100%; padding: 1rem; font-size: 1.2rem; font-weight: 600;
+    text-decoration: none; border-radius: 8px; text-align: center; box-sizing: border-box;
+    background: var(--accent); color: #fff; border: 1px solid var(--accent);
+}
+.call-view-score { font-size: 0.85rem; }
+.call-view-talk-track {
+    background: var(--bg-alt); border-radius: 6px; padding: 0.75rem; margin: 1rem 0;
+}
+.call-view-talk-track p { margin: 0.4rem 0; }
+.call-view-new-offer { margin: 0.5rem 0 1rem; }
+.call-view-new-offer .form-row { margin-bottom: 0.5rem; }
+
+code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+.api-key-new { background: #f0f7f0; border: 1px solid #cde5cd; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.api-key-value { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
+.api-key-value code { flex: 1; word-break: break-all; padding: 0.4rem 0.6rem; }
+
+.table-scroll { overflow-x: auto; }
+.wide-form-table td input[type=text], .wide-form-table td select { min-width: 8rem; }
+.wide-form-table td input[type=number] { min-width: 4rem; }
+.call-view-outcome-form { flex-direction: column; align-items: stretch; }
+.call-view-outcome-form button, .call-view-outcome-form input[type=text] { width: 100%; }

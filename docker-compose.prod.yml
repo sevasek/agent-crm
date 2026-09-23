@@ -1,0 +1,34 @@
+# Production overrides.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# Needs Docker Compose 2.24+ (uses !reset / !override).
+#
+# The app listens on 127.0.0.1:8000 only. Put a TLS-terminating reverse proxy
+# (Caddy, nginx, Traefik) in front of it and forward everything, including
+# /mcp and /oauth/*, which are gated by their own keys rather than a session.
+
+services:
+  app:
+    # The dev file sets environment defaults, and Compose's `environment:`
+    # wins over `env_file:`. Reset it so your real .env is what the app sees.
+    environment: !reset []
+    # Dev bind-mounts ./app for live editing. In production the image is the
+    # source of truth; keep only the data volume.
+    volumes: !override
+      - ./data:/app/data
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    restart: unless-stopped
+    # Do not set `user:`. The image starts as root so docker-entrypoint.sh can
+    # chown ./data, then drops to APP_UID/APP_GID. Setting `user:` skips the
+    # chown and can leave sqlite read-only.
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+
+  # Daily follow-up check: logs each due follow-up on the contact's timeline.
+  staleness-cron:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: python -u scripts/staleness_cron.py
+    restart: unless-stopped

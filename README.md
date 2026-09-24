@@ -1,52 +1,90 @@
 # agent-crm
 
-A small CRM built to be operated by an AI agent. It exposes an MCP endpoint
-so an agent can search contacts, work the call queue, log calls and move deals,
-with guardrails: it cannot delete records or send email. A plain web app gives
-the human operator a view of everything the agent did.
+**A small CRM your AI agent can work.** It exposes an MCP endpoint so an agent
+can search contacts, run the call queue, log calls and move deals, without being
+able to delete anything or send email. A plain web app shows you everything it did.
 
-Built for one operator (a solo consultant or a small business that sells by
-conversation). FastAPI, raw sqlite3 (WAL), Jinja2, Docker. MIT licensed.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/sevasek/agent-crm/actions/workflows/ci.yml/badge.svg)](https://github.com/sevasek/agent-crm/actions/workflows/ci.yml)
 
-**Docs:** [`docs/SCOPE.md`](docs/SCOPE.md) (what's in and out, and why) ·
-[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md) (entities and schema) ·
-[`docs/MCP.md`](docs/MCP.md) (the agent interface)
+![Pipeline board with deals in New, Contacted, Qualified, Nurture and Proposal stages](docs/images/pipeline.png)
 
-## What it does
+FastAPI, sqlite, Jinja2, Docker. One container, one database file, no external services.
 
-- Contacts and companies in one table; people link to their company.
-- Deals with a pipeline you define: stages, order and roles are data, editable
-  in the app, over the stages API, or by nothing at all if you keep the defaults.
-- A next action and date on every deal, with due and overdue flags and a daily
-  check that records each due follow-up on the contact's timeline.
-- A daily call list ranked out of 100 by a fixed formula (value, source,
-  contact completeness, recency), a phone-first call view, and one-tap outcomes.
-- Configurable fit rules (weighted, deterministic), services and priced offers.
-- Lead ingest over an API or CLI, with duplicate matching that never overwrites
-  fields you edited.
-- An MCP endpoint (Streamable HTTP, static key or OAuth 2.1 + PKCE).
+> **Status: pre-1.0.** The MCP tool set and the schema may change between
+> releases. Back up `data/crm.db` before upgrading.
 
-It ships empty: services, offers, stages beyond the starter pipeline and fit
-rules are yours to define.
+## Who it's for
 
-## What it does not do
+**A good fit** if you are one person (a solo consultant, a small clinic, a
+tradie) who sells through calls and follow-ups, and you want an agent to do the
+CRM busywork while you keep a clear view of the pipeline.
 
-No email send/receive, no reports or dashboards, no roles or permissions, no
-native mobile app, no built-in AI scoring (judgement lives in your agent). See
-[`docs/SCOPE.md`](docs/SCOPE.md).
+**Not a fit** if you need multiple users with roles and permissions, email sent
+and received inside the CRM, reports and dashboards, or a native mobile app.
+These are left out on purpose; see [`docs/SCOPE.md`](docs/SCOPE.md).
 
 ## Quick start
 
+For trying it out. `docker-compose.yml` is a development setup with live reload;
+see [Production](#production) for a real deployment.
+
 ```bash
 git clone https://github.com/sevasek/agent-crm.git && cd agent-crm
-cp .env.example .env        # set a real SECRET_KEY; see the file for the rest
+cp .env.example .env
 docker compose up --build -d
 docker compose exec app python scripts/create_admin.py you@example.com "Your Name"
 docker compose exec app python scripts/seed_services.py   # optional example services
 ```
 
-Open http://localhost:8000 and log in. `docker-compose.yml` is a development
-setup (live reload, `./app` mounted).
+Open http://localhost:8000 and log in.
+
+## Connect an agent
+
+Generate a key, put it in `.env` as `CRM_MCP_API_KEY`, and recreate the container
+(a plain restart does not reload `.env`):
+
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+docker compose up -d
+```
+
+Then point any MCP client at `http://localhost:8000/mcp` (Streamable HTTP) with
+`Authorization: Bearer <key>`. Check it works:
+
+```bash
+curl -sS http://localhost:8000/mcp \
+  -H "Content-Type: application/json" -H "Accept: application/json" \
+  -H "Authorization: Bearer $CRM_MCP_API_KEY" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+An agent can search contacts (`search_partners`), pull today's queue
+(`get_call_queue`), log what happened (`record_call_outcome`, `log_activity`),
+and move deals (`set_deal_stage`). It cannot delete records, send email, manage
+users, or reshape the pipeline. Tools tell the agent to search before it creates,
+and updates fill empty fields instead of overwriting yours.
+
+Hosted connectors that need OAuth 2.1 with PKCE can use `/oauth/authorize`.
+Full tool list, auth and limits: [`docs/MCP.md`](docs/MCP.md).
+
+## What's inside
+
+- Companies and people in one table; people link to their company.
+- Deals on a pipeline you define: stage names, order and roles are data.
+- A next action and date on every deal, with due and overdue flags and a daily
+  check that logs each due follow-up on the contact's timeline.
+- A daily call list ranked out of 100 by a fixed formula you can read (deal
+  value, source, contact completeness, recency).
+- A phone-first call view with tap-to-call, the offer to pitch, and one-tap outcomes.
+- Weighted fit rules, a service catalogue and priced offers you configure.
+- Lead ingest over an API or CLI, with duplicate matching.
+- Delegated tasks to hand work to another agent or a person, with an optional webhook.
+- An optional webhook when a deal enters a nurture stage.
+
+It starts empty apart from a starter pipeline: services, offers and fit rules
+are yours to define. Judgement lives in your agent, not in the CRM; scores are
+plain formulas, not a model.
 
 ## Production
 
@@ -55,55 +93,58 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
 The app binds to `127.0.0.1:8000`. Put a TLS-terminating reverse proxy in front
-and forward everything, including `/mcp` and `/oauth/*`. Set in `.env`:
+and forward everything, including `/mcp` and `/oauth/*`. In `.env`:
 
-- `SECRET_KEY`: a real one (`python -c "import secrets; print(secrets.token_hex(32))"`).
+- `SECRET_KEY`: a real one, not the placeholder.
 - `SECURE_COOKIES=true` and `BASE_URL=https://your.domain`.
-- `TRUSTED_PROXIES`: your proxy's address, so rate limits key on the real client.
-- `TZ`: used for "today" in follow-up checks.
+- `TRUSTED_PROXIES`: your proxy's address, so rate limits use the real client IP.
+- `TZ`: decides what "today" means for follow-ups.
 
-To create the first admin without shell access, set `BOOTSTRAP_ADMIN_EMAIL` and
-`BOOTSTRAP_ADMIN_PASSWORD` once, start the app, log in, then remove the password
-from `.env` and recreate the container.
+Security defaults: login uses expiring session cookies with CSRF protection;
+login and API endpoints are rate limited; the lead-ingest, stages and MCP keys
+are separate, and each endpoint refuses all requests until its key is set. Set
+`BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` once to create the first
+admin without shell access, then remove the password and recreate the container.
 
 The `staleness-cron` service runs the follow-up check on start and daily at 08:00.
 
-## Connect an agent
-
-Set `CRM_MCP_API_KEY`, then point an MCP client at `https://your.domain/mcp`
-with `Authorization: Bearer <key>`. Hosted connectors that need OAuth can use
-`/oauth/authorize`. Tools, limits and auth are in [`docs/MCP.md`](docs/MCP.md).
-
 ## Ingest leads
 
-`POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only; fails closed
-when unset), or from the CLI:
+`POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only), or from the CLI:
 
 ```bash
-python scripts/inject_leads.py tests/fixtures/leads/example.json
 python scripts/inject_leads.py --dry-run tests/fixtures/leads/example.json
+python scripts/inject_leads.py tests/fixtures/leads/example.json
 ```
 
-Field meanings and ingest rules are in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
-`service_slug` must already exist in your catalog.
+`service_slug` must already exist in your catalogue. Field meanings and matching
+rules are in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). To load contacts from
+markdown files, see `scripts/import_clients.py`.
 
-## Import contacts from markdown
+## Docs
 
-`scripts/import_clients.py <dir>` reads markdown files with frontmatter
-(`company`, `name`, `email`, optional `service_slug`) and turns the body into a
-timeline note. Re-runs are safe. Use `--dry-run` to preview.
+[`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
+[`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
+[`MCP.md`](docs/MCP.md) the agent interface
 
-## Tests
+## Contributing
+
+The scope is deliberately narrow, so please open an issue to discuss a feature
+before sending a pull request. Bug fixes are welcome directly. Run the tests
+first:
 
 ```bash
 pip install -r requirements-dev.txt
 python -m pytest tests/ -q
 ```
 
-## Managed and supported
+## Support and security
 
-Prefer not to run it yourself? A managed and supported option is available on
-request: https://sevasek.com/crm
+Questions and bugs: open an issue. To report a vulnerability, email
+paul@sevasek.com rather than opening a public issue.
+
+Want it run for you? A managed and supported option is available on request:
+https://sevasek.com/crm
 
 ## License
 

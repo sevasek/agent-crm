@@ -31,4 +31,7 @@ services:
     volumes:
       - ./data:/app/data
     command: python -u scripts/staleness_cron.py
+    # Inherits the image's HEALTHCHECK, but this container serves no HTTP.
+    healthcheck:
+      disable: true
     restart: unless-stopped

@@ -108,6 +108,42 @@ admin without shell access, then remove the password and recreate the container.
 
 The `staleness-cron` service runs the follow-up check on start and daily at 08:00.
 
+### Backup, restore and upgrade
+
+All data is one sqlite file, `./data/crm.db`, in WAL mode. Do not `cp` it while
+the app runs: you can copy a torn database. Use sqlite's online backup, which is
+safe under load (the image has no `sqlite3` CLI, so this uses Python):
+
+```bash
+docker compose exec -T app python -c "import sqlite3,sys; s=sqlite3.connect('data/crm.db'); d=sqlite3.connect(sys.argv[1]); s.backup(d); d.close()" data/backup-$(date +%F).db
+```
+
+Daily at 03:00 from the host's crontab (adjust the path; keeps 14 days), then
+copy `./data/backup-*.db` off the machine:
+
+```cron
+0 3 * * * cd /path/to/agent-crm && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T app python -c "import sqlite3,sys; s=sqlite3.connect('data/crm.db'); d=sqlite3.connect(sys.argv[1]); s.backup(d); d.close()" data/backup-$(date +\%F).db && find data -name 'backup-*.db' -mtime +14 -delete
+```
+
+Restore:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+rm -f data/crm.db-wal data/crm.db-shm      # stale WAL files would corrupt the restore
+cp data/backup-YYYY-MM-DD.db data/crm.db
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+The entrypoint fixes ownership of `./data` on start. Check `docker compose ps`
+shows `healthy` and you can log in.
+
+Upgrade: take a backup, then `git pull` and re-run the `up -d --build` command
+above. There is no migration tool: schema changes are applied by `init_db()` on
+startup. Before jumping several versions, read `git log -p -- app/database.py`
+for the range, and test on a copy of the backup first. To roll back, `down`,
+`git checkout` the previous version, and restore the backup taken before the
+upgrade (a newer schema may not open cleanly on older code).
+
 ## Ingest leads
 
 `POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only), or from the CLI:

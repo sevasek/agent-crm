@@ -23,6 +23,12 @@ RUN useradd --system --uid 1000 --no-create-home --shell /usr/sbin/nologin crm \
 
 EXPOSE 8000
 
+# stdlib probe, so the image needs no curl. A non-2xx or connection error
+# raises and fails the check. Non-web services on this image (staleness-cron)
+# disable it in compose.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4)"]
+
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 # One worker: sqlite likes a single writer. Rate-limit hits live in sqlite so
 # a second worker would share buckets, but the rest of the app still serializes

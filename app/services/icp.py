@@ -14,7 +14,7 @@ queue's score. Order doesn't affect the result, since it's a plain sum.
 import difflib
 import math
 
-from app.database import get_db
+from app.database import get_db, row_to_dict
 from app.services.auth import sanitize_text
 from app.services.partners import primary_social_url
 
@@ -47,10 +47,6 @@ NUMERIC_OPERATORS = {"eq", "gt", "gte", "lt", "lte"}
 FUZZY_MATCH_THRESHOLD = 0.6
 
 
-def _row(r):
-    return dict(r) if r else None
-
-
 def list_criteria(active_only: bool = False):
     query = "SELECT * FROM icp_criteria"
     if active_only:
@@ -63,7 +59,7 @@ def list_criteria(active_only: bool = False):
 def get_criterion(criterion_id):
     with get_db() as db:
         row = db.execute("SELECT * FROM icp_criteria WHERE id = ?", (criterion_id,)).fetchone()
-        return _row(row)
+        return row_to_dict(row)
 
 
 def _validate(field, operator, value):

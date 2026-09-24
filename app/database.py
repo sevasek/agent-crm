@@ -26,6 +26,10 @@ DB_PATH = DATABASE_URL.replace("sqlite:///", "")
 logger = logging.getLogger(__name__)
 
 
+def row_to_dict(row):
+    return dict(row) if row else None
+
+
 def get_db_path():
     os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
     return DB_PATH

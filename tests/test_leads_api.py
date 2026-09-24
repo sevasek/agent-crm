@@ -1,4 +1,3 @@
-import os
 
 from app.services.catalog import create_service
 from app.services.partners import get_partner_by_email

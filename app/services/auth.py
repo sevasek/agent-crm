@@ -34,12 +34,6 @@ def get_user_by_email(email: str):
         return dict(row) if row else None
 
 
-def get_user_by_id(user_id: int):
-    with get_db() as db:
-        row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-        return dict(row) if row else None
-
-
 def create_user(email: str, name: str, password: str) -> int:
     password_hash = hash_password(password)
     clean_name = sanitize_text(name, max_len=120) if name else None

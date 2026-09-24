@@ -465,7 +465,7 @@ async def new_deal_submit(
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/deals/new", status_code=303)
-    deal_id = create_deal(
+    create_deal(
         partner_id, service_id, source=source,
         value_estimate=float(value_estimate) if value_estimate else None,
         pain_points=pain_points, goals=goals,

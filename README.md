@@ -144,8 +144,9 @@ Questions and bugs: open an issue. To report a vulnerability, use the
 [private security report form](https://github.com/sevasek/agent-crm/security/advisories/new)
 rather than a public issue (see [`SECURITY.md`](SECURITY.md)).
 
-Want it run for you? A managed and supported option is $60 AUD per month for
-secure hosting: https://sevasek.com/crm
+Want it run for you? Managed hosting is $60 AUD per month and includes secure
+hosting, backups, 99.9% uptime, new features deployed frequently, and responsive
+support for feature requests: https://sevasek.com/crm
 
 ## License
 

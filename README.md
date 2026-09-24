@@ -140,11 +140,12 @@ python -m pytest tests/ -q
 
 ## Support and security
 
-Questions and bugs: open an issue. To report a vulnerability, email
-paul@sevasek.com rather than opening a public issue.
+Questions and bugs: open an issue. To report a vulnerability, use the
+[private security report form](https://github.com/sevasek/agent-crm/security/advisories/new)
+rather than a public issue (see [`SECURITY.md`](SECURITY.md)).
 
-Want it run for you? A managed and supported option is available on request:
-https://sevasek.com/crm
+Want it run for you? A managed and supported option is $60 AUD per month for
+secure hosting: https://sevasek.com/crm
 
 ## License
 

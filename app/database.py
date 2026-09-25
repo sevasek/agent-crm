@@ -347,23 +347,44 @@ _SCHEMA_V1 = """
 """
 
 
-def migrate_001(db) -> None:
-    """Bring a version-0 (unversioned) database up to the current schema.
+def _apply_additive_columns(db) -> None:
+    """ADD COLUMN for anything an older table might be missing.
 
-    CREATE TABLE IF NOT EXISTS is a no-op on tables that already exist;
-    guarded ALTER TABLE ADD COLUMN covers DBs that shipped before a column.
-    Additive only — no DROP / RENAME.
+    CREATE TABLE IF NOT EXISTS does not add columns to an existing table, so
+    indexes that follow (parent_id, owner_key, …) would fail on a v0 file
+    that predates those columns. Additive only — no DROP / RENAME.
     """
-    _run_sql(db, _SCHEMA_V1)
+    for col, ddl in (
+        ("is_company", "is_company INTEGER NOT NULL DEFAULT 0"),
+        ("parent_id", "parent_id INTEGER REFERENCES partners(id)"),
+        ("email", "email TEXT"),
+        ("phone", "phone TEXT"),
+        ("website", "website TEXT"),
+        ("title", "title TEXT"),
+        ("address", "address TEXT"),
+        ("social_url", "social_url TEXT"),
+        ("preferred_channel", "preferred_channel TEXT"),
+        ("industry", "industry TEXT"),
+        ("team_size", "team_size INTEGER"),
+        ("linkedin_url", "linkedin_url TEXT"),
+        ("x_url", "x_url TEXT"),
+        ("instagram_url", "instagram_url TEXT"),
+        ("facebook_url", "facebook_url TEXT"),
+        ("youtube_url", "youtube_url TEXT"),
+        ("owner_key", "owner_key TEXT"),
+        # CURRENT_TIMESTAMP is not a constant default; SQLite rejects it on ALTER.
+        ("created_at", "created_at TEXT"),
+        ("updated_at", "updated_at TEXT"),
+    ):
+        _add_column_if_missing(db, "partners", col, ddl)
 
-    # deals.offer_id was added after the initial deals table shipped —
-    # SQLite has no "ADD COLUMN IF NOT EXISTS", so guard with PRAGMA
-    # table_info the same way any later ALTER on this table should.
-    _add_column_if_missing(db, "deals", "offer_id", "offer_id INTEGER REFERENCES offers(id)")
-
-    for col in ("linkedin_url", "x_url", "instagram_url", "facebook_url", "youtube_url"):
-        _add_column_if_missing(db, "partners", col, f"{col} TEXT")
-    _backfill_partner_social_urls(db)
+    for col, ddl in (
+        ("offer_id", "offer_id INTEGER REFERENCES offers(id)"),
+        ("owner_key", "owner_key TEXT"),
+        ("external_ref", "external_ref TEXT"),
+        ("parent_deal_id", "parent_deal_id INTEGER REFERENCES deals(id)"),
+    ):
+        _add_column_if_missing(db, "deals", col, ddl)
 
     for col, ddl in (
         ("service_id", "service_id INTEGER REFERENCES services(id)"),
@@ -373,16 +394,6 @@ def migrate_001(db) -> None:
     ):
         _add_column_if_missing(db, "offers", col, ddl)
 
-    _add_column_if_missing(db, "deals", "owner_key", "owner_key TEXT")
-    _add_column_if_missing(db, "deals", "external_ref", "external_ref TEXT")
-    _add_column_if_missing(
-        db, "deals", "parent_deal_id", "parent_deal_id INTEGER REFERENCES deals(id)"
-    )
-    db.execute("CREATE INDEX IF NOT EXISTS idx_deals_owner ON deals(owner_key)")
-    db.execute("CREATE INDEX IF NOT EXISTS idx_deals_parent ON deals(parent_deal_id)")
-
-    _add_column_if_missing(db, "partners", "owner_key", "owner_key TEXT")
-
     if _table_columns(db, "delegated_tasks"):
         _add_column_if_missing(
             db, "delegated_tasks", "webhook_last_attempt_at", "webhook_last_attempt_at TEXT"
@@ -390,6 +401,33 @@ def migrate_001(db) -> None:
         _add_column_if_missing(
             db, "delegated_tasks", "webhook_last_error", "webhook_last_error TEXT"
         )
+
+
+def migrate_001(db) -> None:
+    """Bring a version-0 (unversioned) database up to the current schema.
+
+    CREATE TABLE IF NOT EXISTS is a no-op on tables that already exist;
+    guarded ALTER TABLE ADD COLUMN covers DBs that shipped before a column.
+    Indexes run after ALTERs so a stripped legacy table cannot break startup.
+    Additive only — no DROP / RENAME.
+    """
+    table_stmts = []
+    index_stmts = []
+    for stmt in _split_sql(_SCHEMA_V1):
+        if stmt.upper().startswith("CREATE INDEX"):
+            index_stmts.append(stmt)
+        else:
+            table_stmts.append(stmt)
+    for stmt in table_stmts:
+        db.execute(stmt)
+
+    _apply_additive_columns(db)
+    _backfill_partner_social_urls(db)
+
+    for stmt in index_stmts:
+        db.execute(stmt)
+    db.execute("CREATE INDEX IF NOT EXISTS idx_deals_owner ON deals(owner_key)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_deals_parent ON deals(parent_deal_id)")
 
 
 # version number -> migration applied when moving *to* that version

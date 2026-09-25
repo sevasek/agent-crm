@@ -141,7 +141,7 @@ CRM_MCP_API_KEY={keys["CRM_MCP_API_KEY"]}
 TRUSTED_PROXIES={trusted_proxies}
 
 # First admin is created via scripts/create_admin.py (one-time password
-# printed to the terminal). Do not put BOOTSTRAP_ADMIN_PASSWORD here.
+# printed to the terminal). Do not leave a bootstrap password in this file.
 BOOTSTRAP_ADMIN_EMAIL={email}
 BOOTSTRAP_ADMIN_NAME=Admin
 """

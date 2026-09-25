@@ -64,7 +64,7 @@ def test_write_env_is_mode_600_with_fresh_secrets(tmp_path):
     assert "COMPOSE_PROJECT_NAME=crm-acme" in body
     assert "TZ=Australia/Sydney" in body
     assert "BOOTSTRAP_ADMIN_EMAIL=ops@example.com" in body
-    assert "BOOTSTRAP_ADMIN_PASSWORD" not in body
+    assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert "TRUSTED_PROXIES=172.16.0.0/12" in body
     secret = re.search(r"^SECRET_KEY=([0-9a-f]+)$", body, re.M).group(1)
     assert len(secret) == 64
@@ -110,7 +110,7 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert "CRM_PORT=8000" in body
     assert "COMPOSE_PROJECT_NAME=crm-acme" in body
     assert "TZ=Australia/Sydney" in body
-    assert "BOOTSTRAP_ADMIN_PASSWORD" not in body
+    assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert (tmp_path / "ports.tsv").read_text().startswith("acme\t8000")
     assert "reverse_proxy 127.0.0.1:8000" in proc.stdout
     assert "Dry-run" in proc.stdout

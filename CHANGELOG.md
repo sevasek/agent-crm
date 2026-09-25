@@ -33,6 +33,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
   MCP / ingest / UI filter and write support. Schema v2.
 
+### Removed
+
+- Unused `rate_limit_hits` sqlite table (schema v3). Rate limiting stays
+  in-memory (`app.services.auth`). Existing v2 databases drop the table on
+  startup; new databases never create it.
+- Unused helpers `get_user_by_id` and `list_clients` (no app callers).
+
 ### Changed
 
 - Production port bind is `127.0.0.1:${CRM_PORT:-8000}:8000` so a second

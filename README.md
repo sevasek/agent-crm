@@ -97,14 +97,17 @@ and forward everything, including `/mcp` and `/oauth/*`. In `.env`:
 
 - `SECRET_KEY`: a real one, not the placeholder.
 - `SECURE_COOKIES=true` and `BASE_URL=https://your.domain`.
-- `TRUSTED_PROXIES`: your proxy's address, so rate limits use the real client IP.
+- `TRUSTED_PROXIES`: your proxy's IP, a CIDR (e.g. the compose network `172.18.0.0/16`), or a hostname, so rate limits use the real client IP.
 - `TZ`: decides what "today" means for follow-ups.
 
 Security defaults: login uses expiring session cookies with CSRF protection;
-login and API endpoints are rate limited; the lead-ingest, stages and MCP keys
-are separate, and each endpoint refuses all requests until its key is set. Set
-`BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD` once to create the first
-admin without shell access, then remove the password and recreate the container.
+login and API endpoints are rate limited (failed auth is counted per IP;
+authenticated MCP/API traffic has a larger per-key bucket); the lead-ingest,
+stages and MCP keys are separate, and each endpoint refuses all requests until
+its key is set. Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_FILE`
+(preferred; wins over `BOOTSTRAP_ADMIN_PASSWORD`) once to create the first
+admin without shell access — the file is not visible in `docker inspect`.
+`/health` checks that sqlite is writable and returns 503 if it is not.
 
 The `staleness-cron` service runs the follow-up check on start and daily at 08:00.
 

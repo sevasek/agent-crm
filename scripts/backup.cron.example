@@ -1,0 +1,9 @@
+# Install: crontab -e  and paste the line, or:
+#   sudo cp scripts/backup.cron.example /etc/cron.d/agent-crm-backup
+# Adjust REPO and the user. umask 077 is set inside backup.sh.
+#
+# Daily 03:00 — keeps 14 days locally, then the off-host hook if configured.
+# Off-host: export BACKUP_REMOTE_CMD / BACKUP_RCLONE_DEST / BACKUP_S3_URI
+# in the crontab environment or a file sourced by the script.
+
+0 3 * * * root /bin/bash -lc 'umask 077; cd /opt/agent-crm && /opt/agent-crm/scripts/backup.sh >> /var/log/agent-crm-backup.log 2>&1'

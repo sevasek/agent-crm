@@ -7,6 +7,15 @@
     Columns follow the stage order set on the <a href="/stages">Stages</a> page.
     Move a deal by picking a new stage on its card.
 </p>
+{% if tags_in_use or current_tag %}
+<div class="tag-filters">
+    {% if current_tag %}<a class="pill pill-tag" href="/pipeline">All tags</a>{% endif %}
+    {% for t in tags_in_use %}
+    <a href="/pipeline?tag={{ t.tag }}" class="pill pill-tag{% if current_tag == t.tag %} pill-tag-on{% endif %}">{{ t.tag }} ({{ t.count }})</a>
+    {% endfor %}
+</div>
+{% endif %}
+{% if tag_error %}<p class="error">{{ tag_error }}</p>{% endif %}
 <div class="pipeline-board">
     {% for col in columns %}
     <div class="pipeline-column">
@@ -15,6 +24,13 @@
         <div class="pipeline-card">
             <a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>
             <div class="muted">{{ d.service_name }}</div>
+            {% if d.tags %}
+            <div class="tag-filters">
+                {% for tag in d.tags %}
+                <a class="pill pill-tag" href="/deals?tag={{ tag }}">{{ tag }}</a>
+                {% endfor %}
+            </div>
+            {% endif %}
             {% if d.value_estimate %}<div class="muted">${{ "%.0f"|format(d.value_estimate) }}</div>{% endif %}
             {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
             {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}

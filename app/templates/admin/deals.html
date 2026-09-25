@@ -3,21 +3,37 @@
 {% block content %}
 <h1>Deals</h1>
 <div style="margin-bottom:1rem;">
-    <a href="/deals" class="{{ 'btn' if not current_stage and not current_due else 'btn-secondary' }}">All</a>
-    <a href="/deals?due=1" class="{{ 'btn' if current_due else 'btn-secondary' }}">Due</a>
+    <a href="/deals{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_stage and not current_due else 'btn-secondary' }}">All</a>
+    <a href="/deals?due=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_due else 'btn-secondary' }}">Due</a>
     {% for s in stages %}
-    <a href="/deals?stage={{ s.key }}" class="{{ 'btn' if current_stage == s.key else 'btn-secondary' }}">{{ s.label }}</a>
+    <a href="/deals?stage={{ s.key }}{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_stage == s.key else 'btn-secondary' }}">{{ s.label }}</a>
     {% endfor %}
     <a class="btn" href="/deals/new">+ New deal</a>
-    <a class="btn-secondary btn" href="/pipeline">Pipeline view</a>
+    <a class="btn-secondary btn" href="/pipeline{% if current_tag %}?tag={{ current_tag }}{% endif %}">Pipeline view</a>
 </div>
+{% if tags_in_use or current_tag %}
+<div class="tag-filters">
+    {% if current_tag %}
+    <a class="pill pill-tag" href="/deals{% if current_stage %}?stage={{ current_stage }}{% endif %}{% if current_due %}{{ '&' if current_stage else '?' }}due=1{% endif %}">All tags</a>
+    {% endif %}
+    {% for t in tags_in_use %}
+    <a href="/deals?tag={{ t.tag }}{% if current_stage %}&stage={{ current_stage }}{% endif %}{% if current_due %}&due=1{% endif %}" class="pill pill-tag{% if current_tag == t.tag %} pill-tag-on{% endif %}">{{ t.tag }} ({{ t.count }})</a>
+    {% endfor %}
+</div>
+{% endif %}
+{% if tag_error %}<p class="error">{{ tag_error }}</p>{% endif %}
 <table>
-    <tr><th>Partner</th><th>Service</th><th>Stage</th><th>Value</th><th>Next action</th><th></th></tr>
+    <tr><th>Partner</th><th>Service</th><th>Stage</th><th>Tags</th><th>Value</th><th>Next action</th><th></th></tr>
     {% for d in deals %}
     <tr>
         <td><a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
         <td>{{ d.service_name }}</td>
         <td><span class="pill">{{ d.stage }}</span></td>
+        <td>
+            {% for tag in d.tags %}
+            <a class="pill pill-tag{% if current_tag == tag %} pill-tag-on{% endif %}" href="/deals?tag={{ tag }}{% if current_stage %}&stage={{ current_stage }}{% endif %}">{{ tag }}</a>
+            {% endfor %}
+        </td>
         <td>{% if d.value_estimate %}${{ "%.0f"|format(d.value_estimate) }}{% endif %}</td>
         <td>
             {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
@@ -27,7 +43,7 @@
         <td><a href="/deals/{{ d.id }}/edit">Edit</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">{% if current_due %}No deals due or overdue.{% else %}No deals yet.{% endif %}</td></tr>
+    <tr><td colspan="7" class="muted">{% if tag_error %}No deals match that tag.{% elif current_tag %}No deals with that tag.{% elif current_due %}No deals due or overdue.{% else %}No deals yet.{% endif %}</td></tr>
     {% endfor %}
 </table>
 {% endblock %}

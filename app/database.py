@@ -15,7 +15,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class SchemaVersionError(RuntimeError):
@@ -350,6 +350,17 @@ _SCHEMA_V1 = """
         );
         CREATE INDEX IF NOT EXISTS idx_delegated_tasks_deal ON delegated_tasks(deal_id);
         CREATE INDEX IF NOT EXISTS idx_delegated_tasks_owner_status ON delegated_tasks(owner, status);
+
+        -- Labels on a deal (campaigns and other slugs). Not a column: a deal
+        -- has many tags and a tag covers many deals. Primary key is the pair
+        -- so the same tag cannot be stored twice; idx_deal_tags_tag serves
+        -- "every deal with this tag".
+        CREATE TABLE IF NOT EXISTS deal_tags (
+            deal_id INTEGER NOT NULL REFERENCES deals(id),
+            tag TEXT NOT NULL,
+            PRIMARY KEY (deal_id, tag)
+        );
+        CREATE INDEX IF NOT EXISTS idx_deal_tags_tag ON deal_tags(tag);
 """
 
 
@@ -436,9 +447,32 @@ def migrate_001(db) -> None:
     db.execute("CREATE INDEX IF NOT EXISTS idx_deals_parent ON deals(parent_deal_id)")
 
 
+def migrate_002(db) -> None:
+    """Add deal_tags and copy campaign: external_refs onto tags once.
+
+    CREATE TABLE IF NOT EXISTS is a no-op when migrate_001 already created
+    the table from _SCHEMA_V1 (v0 → current). On a live v1 database this
+    is the add. Backfill does not commit; init_db() owns the transaction.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deal_tags (
+            deal_id INTEGER NOT NULL REFERENCES deals(id),
+            tag TEXT NOT NULL,
+            PRIMARY KEY (deal_id, tag)
+        )
+        """
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_deal_tags_tag ON deal_tags(tag)")
+    from app.services.deal_tags import backfill_campaign_tags
+
+    backfill_campaign_tags(db)
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
+    2: migrate_002,
 }
 
 

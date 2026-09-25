@@ -25,6 +25,8 @@ must not live inside `app/` or run automatically at startup.
 - **Contacts**: one `partners` table for companies and people.
 - **Interaction tracking**: an `activities` timeline per contact and deal.
 - **Lead and pipeline management**: `deals` and the stage pipeline. This is the core.
+  Tags on a deal (a campaign slug or any other label) are part of that, and
+  the deals list filters by them.
 - **Follow-ups**: next action and date on every deal, due and overdue flags, a
   daily check that logs each due follow-up.
 - **Calling**: a ranked call queue (fixed formula) and a phone-first call view.

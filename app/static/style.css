@@ -66,6 +66,16 @@ button, .btn {
     display: inline-block; padding: 0.15rem 0.6rem; border-radius: 12px;
     background: var(--bg-alt); font-size: 0.8rem; text-transform: capitalize;
 }
+.pill-tag {
+    text-transform: none;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.75rem;
+    margin: 0.1rem 0.2rem 0.1rem 0;
+    text-decoration: none;
+    color: #222;
+}
+a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
+.tag-filters { margin: 0.25rem 0 0.75rem; }
 .activity { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
 .activity .meta { color: var(--muted); font-size: 0.8rem; }
 .stage-form { display: inline; }

@@ -11,6 +11,7 @@ from app.services.partners import (
     SOCIAL_PLATFORMS, listed_social_links, primary_social_url,
 )
 from app.services.catalog import create_service, get_service, update_service, list_services
+from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
     create_deal, get_deal, list_deals, set_deal_stage, update_deal_fields,
     record_call_outcome, CALL_OUTCOMES,
@@ -430,17 +431,45 @@ async def partner_call_tel(
 
 
 # ==================== Deals ====================
+def _tag_query(raw: str):
+    """A single tag from the deals/pipeline query string.
+
+    Returns (slug or "", error). An empty query is no filter. An invalid
+    slug matches nothing and is reported so the page does not show every deal.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return "", ""
+    slug = normalize_tag(text)
+    if not slug:
+        return "", "That tag is not a valid slug."
+    return slug, ""
+
+
+def _deals_for_board(stage: str, due: bool, tag: str):
+    tag_filter = [tag] if tag else None
+    if due:
+        return list_due_deals(stage=stage or None, tags=tag_filter)
+    return annotate_deals(list_deals(stage=stage or None, tags=tag_filter))
+
+
 @router.get("/deals", response_class=HTMLResponse)
-async def deals_list(request: Request, stage: str = "", due: str = "", user=Depends(require_login)):
+async def deals_list(
+    request: Request, stage: str = "", due: str = "", tag: str = "",
+    user=Depends(require_login),
+):
     due_filter = due.strip().lower() in {"1", "true", "yes", "due"}
-    if due_filter:
-        deals = list_due_deals(stage=stage or None)
+    current_tag, tag_error = _tag_query(tag)
+    if tag_error:
+        deals = []
     else:
-        deals = annotate_deals(list_deals(stage=stage or None))
+        deals = _deals_for_board(stage, due_filter, current_tag)
     return templates.TemplateResponse("admin/deals.html", {
         "request": request, "user": user,
         "deals": deals, "stages": pipeline_stages.list_stages(),
         "current_stage": stage, "current_due": due_filter,
+        "current_tag": current_tag, "tag_error": tag_error,
+        "tags_in_use": list_tags(),
     })
 
 
@@ -451,6 +480,7 @@ async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(requ
         "services": list_services(active_only=True), "preselect_partner_id": partner_id,
         "deal": None, "partner": None, "service": None,
         "csrf_token": generate_csrf_token(),
+        "form_tags": None, "error": None,
     })
 
 
@@ -461,16 +491,27 @@ async def new_deal_submit(
     value_estimate: str = Form(""), pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
+    tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/deals/new", status_code=303)
-    deal_id = create_deal(
+    parsed_tags, tag_error = parse_tag_list(tags)
+    if tag_error:
+        return templates.TemplateResponse("admin/deal_form.html", {
+            "request": request, "user": user, "partners": list_partners(),
+            "services": list_services(active_only=True), "preselect_partner_id": partner_id,
+            "deal": None, "partner": None, "service": None,
+            "csrf_token": generate_csrf_token(),
+            "form_tags": tags, "error": tag_error,
+        }, status_code=400)
+    create_deal(
         partner_id, service_id, source=source,
         value_estimate=float(value_estimate) if value_estimate else None,
         pain_points=pain_points, goals=goals,
         next_action=next_action, next_action_date=next_action_date or None,
         owner_key=owner_key, external_ref=external_ref,
+        tags=parsed_tags or None,
     )
     return RedirectResponse(f"/partners/{partner_id}", status_code=303)
 
@@ -488,6 +529,7 @@ async def edit_deal_page(request: Request, deal_id: int, user=Depends(require_lo
         "request": request, "user": user, "deal": deal,
         "partner": partner, "service": service,
         "csrf_token": generate_csrf_token(),
+        "form_tags": None, "error": None,
     })
 
 
@@ -498,33 +540,46 @@ async def edit_deal_submit(
     pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
+    tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
     if not deal:
         return RedirectResponse("/deals", status_code=303)
-    if not get_partner(deal["partner_id"]) or not get_service(deal["service_id"]):
+    partner = get_partner(deal["partner_id"])
+    service = get_service(deal["service_id"])
+    if not partner or not service:
         return RedirectResponse("/deals", status_code=303)
-    if validate_csrf_token(csrf_token):
-        raw_value = value_estimate.strip()
-        if not raw_value:
-            value = None
-        else:
-            try:
-                value = float(raw_value)
-            except ValueError:
-                value = deal["value_estimate"]
-        update_deal_fields(
-            deal_id,
-            source=source,
-            value_estimate=value,
-            pain_points=pain_points,
-            goals=goals,
-            next_action=next_action,
-            next_action_date=(next_action_date or "").strip()[:10] or None,
-            owner_key=owner_key,
-            external_ref=external_ref,
-        )
+    if not validate_csrf_token(csrf_token):
+        return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
+    parsed_tags, tag_error = parse_tag_list(tags)
+    if tag_error:
+        return templates.TemplateResponse("admin/deal_form.html", {
+            "request": request, "user": user, "deal": deal,
+            "partner": partner, "service": service,
+            "csrf_token": generate_csrf_token(),
+            "form_tags": tags, "error": tag_error,
+        }, status_code=400)
+    raw_value = value_estimate.strip()
+    if not raw_value:
+        value = None
+    else:
+        try:
+            value = float(raw_value)
+        except ValueError:
+            value = deal["value_estimate"]
+    update_deal_fields(
+        deal_id,
+        source=source,
+        value_estimate=value,
+        pain_points=pain_points,
+        goals=goals,
+        next_action=next_action,
+        next_action_date=(next_action_date or "").strip()[:10] or None,
+        owner_key=owner_key,
+        external_ref=external_ref,
+    )
+    apply_deal_tags(deal_id, replace=parsed_tags or [])
     return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
 
 
@@ -565,16 +620,20 @@ async def change_deal_stage(
 
 # ==================== Pipeline (Kanban board) ====================
 @router.get("/pipeline", response_class=HTMLResponse)
-async def pipeline_board(request: Request, user=Depends(require_login)):
+async def pipeline_board(request: Request, tag: str = "", user=Depends(require_login)):
     stages = pipeline_stages.list_stages()
+    current_tag, tag_error = _tag_query(tag)
+    tag_filter = [current_tag] if current_tag else None
     columns = [
-        {"stage": s, "deals": annotate_deals(list_deals(stage=s["key"]))}
+        {"stage": s, "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter))}
         for s in stages
     ]
     return templates.TemplateResponse("admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,
         "csrf_token": generate_csrf_token(),
+        "current_tag": current_tag, "tag_error": tag_error,
+        "tags_in_use": list_tags(),
     })
 
 

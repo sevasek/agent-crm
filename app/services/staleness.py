@@ -115,16 +115,19 @@ def annotate_deals(deals, today=None):
     return [annotate_deal(d, today=today, closed_stage_keys=closed_stage_keys) for d in deals]
 
 
-def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None):
+def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None, tags=None):
     """Open deals whose `next_action_date` is today or earlier, oldest date first.
 
     `stage` is applied in SQL via list_deals, so `?due=1&stage=qualified`
-    stays qualified-only. `owner_key` / `service_slug` likewise.
+    stays qualified-only. `owner_key` / `service_slug` / `tags` likewise.
+    `tags` matches deals that carry every listed tag.
     """
     today = today or operator_today()
     closed_stage_keys = pipeline_stages.closed_stage_keys()
     due = []
-    for deal in list_deals(stage=stage or None, owner_key=owner_key, service_slug=service_slug):
+    for deal in list_deals(
+        stage=stage or None, owner_key=owner_key, service_slug=service_slug, tags=tags,
+    ):
         annotated = annotate_deal(deal, today=today, closed_stage_keys=closed_stage_keys)
         if annotated["due_status"]:
             due.append(annotated)

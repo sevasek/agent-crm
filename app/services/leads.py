@@ -12,6 +12,7 @@ a non-closed deal for the same service.
 import math
 
 from app.services.catalog import get_service_by_slug
+from app.services.deal_tags import add_deal_tags, tags_from_lead
 from app.services.deals import create_deal, get_open_deal_for_partner_service, update_deal_fields
 from app.services.offers import get_offer
 from app.services.partners import (
@@ -101,7 +102,7 @@ ALLOWED_LEAD_KEYS = (
     "facebook_url", "youtube_url", "preferred_channel", "industry",
     "team_size", "source", "value_estimate", "pain_points", "goals",
     "next_action", "next_action_date", "is_company",
-    "owner_key", "offer_id", "external_ref",
+    "owner_key", "offer_id", "external_ref", "tags",
 )
 
 _TRUTHY_STRINGS = {"true", "1", "yes", "y"}
@@ -201,6 +202,10 @@ def sanitize_lead_payload(lead) -> dict:
             cleaned[key] = _as_number(raw, integer=True)
         elif key == "is_company":
             cleaned[key] = _as_bool(raw)
+        elif key == "tags":
+            # None when omitted or not a list: a re-run leaves existing tags alone.
+            # A list is merged; invalid entries are dropped, never a traceback.
+            cleaned[key] = tags_from_lead(raw) if "tags" in lead else None
         else:
             cleaned[key] = _as_text(raw)
     return cleaned
@@ -333,6 +338,9 @@ def ingest_lead(lead: dict) -> dict:
         existing_deal = get_open_deal_for_partner_service(partner_id, service["id"])
         if existing_deal:
             _fill_empty_deal_fields(existing_deal, deal_fields)
+            # tags omitted (None) leaves the set alone. A list merges.
+            if lead.get("tags"):
+                add_deal_tags(existing_deal["id"], lead["tags"])
             return {
                 "email": email,
                 "status": "duplicate_open_deal",
@@ -352,6 +360,7 @@ def ingest_lead(lead: dict) -> dict:
         offer_id=deal_fields["offer_id"],
         owner_key=deal_fields["owner_key"],
         external_ref=deal_fields["external_ref"],
+        tags=lead.get("tags") or None,
     )
     return {
         "email": email,

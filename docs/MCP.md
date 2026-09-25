@@ -84,22 +84,23 @@ only `text/event-stream`). It is stateless, so no session is required.
 | --- | --- |
 | `search_partners` | Search name, email, phone, website. Returns nested people and the parent `company`. |
 | `get_partner` | Full record: profile, parent company, people, deals and recent activities. |
-| `list_deals` | Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`. |
-| `get_deal` | One deal, including a `child_deals` summary (`id`, service slug, stage, offer). |
+| `list_deals` | Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`, and `tags` (one or more; the deal must carry every tag). `tag` is a single-tag alias, combined with `tags` the same way. Each deal includes `tags` (`[]` when none). |
+| `list_tags` | Tags in use, each with a `count` of deals. |
+| `get_deal` | One deal, including `tags` and a `child_deals` summary (`id`, service slug, stage, offer). |
 | `list_activities` | The timeline for a partner or a deal, newest first. |
 | `get_call_queue` | Qualified-pool deals with a dialable phone, ranked by the call score. Filters: `stage`, `service_slug`, `source_prefix`, `include_new=true`, `owner`. `limit` up to 50. |
 | `list_due_followups` | Open deals whose `next_action_date` is today or earlier, oldest first. Filter `owner` / `owner_key`, `service_slug`. |
 | `list_catalog` | Services, pipeline stages (with role flags), offers (`service_id`, `price`, `currency`, `description`), call-outcome keys and allowed activity types. Read it before `set_deal_stage` or `record_call_outcome`. |
-| `ingest_leads` | Bulk lead ingest. Email is optional. Matching order: email, then phone + name, then website + name, then name within the parent. Rows with a company and phone create a company partner and a deal. |
+| `ingest_leads` | Bulk lead ingest. Email is optional. Matching order: email, then phone + name, then website + name, then name within the parent. Rows with a company and phone create a company partner and a deal. Optional `tags` on a lead are merged; omitting `tags` leaves the existing set alone. |
 | `create_partner` / `update_partner` | `update_partner` fills empty fields by default. |
-| `create_deal` / `update_deal` | `offer_id`, `owner_key` / `owner`, `external_ref`, and `parent_deal_id` (same partner, cycles rejected). |
+| `create_deal` / `update_deal` | `offer_id`, `owner_key` / `owner`, `external_ref`, `parent_deal_id` (same partner, cycles rejected), and tags. `create_deal` takes `tags`. `update_deal` takes `tags` (replace; `[]` clears) or `add_tags` / `remove_tags` (merge; remove wins if a tag is in both). A duplicate open deal from `create_deal` is returned unchanged — use `add_tags` or `ingest_leads` to merge. |
 | `set_deal_stage` | Move a deal to any configured stage. Entering a `triggers_nurture` stage fires the nurture webhook. |
 | `record_call_outcome` | One of `no_answer`, `interested`, `meeting_scheduled`, `won`, `not_interested`, with an optional note. Targets resolve by stage role, not by name; `no_answer` leaves the stage so the deal stays in today's queue. |
 | `log_activity` | Add a `call`, `email`, `meeting` or `note` to the timeline. |
 | `create_service` / `update_service` | Add or change a catalogue service (`slug` is idempotent on create; `active=false` hides it without deleting; `nurture_list_slug`). |
 | `create_offer` / `update_offer` | Priced offers (`name`, `service_id` or `service_slug`, `price`, `currency`, `description`, `active`). Idempotent on name + service. Currency defaults to USD. |
 | `set_deal_owner` | Assign an owner slug such as `alice`, `bob` or `sales-agent`. |
-| `bulk_update_deals` | Set `set_stage` and/or `next_action` + `next_action_date` for up to 50 `deal_ids`, or for a `service_slug` (optionally filtered by `stage`). |
+| `bulk_update_deals` | Set `set_stage` and/or `next_action` + `next_action_date`, and/or `add_tags` / `remove_tags`, for up to 50 `deal_ids`, or for a `service_slug` (optionally filtered by `stage`). |
 | `create_delegated_task` | Deal-scoped work for another agent or a person. Needs `deal_id` and `title`. Owner defaults to the default owner and status to `delegated`. Idempotent on deal + title + owner while open. |
 | `list_delegated_tasks` | Filter `owner`, `status`, `deal_id`, `due_only`. Rows include webhook delivery fields. |
 | `get_delegated_task` | Full task row plus partner and deal, with webhook `notified` / `notified_at` / `last_attempt_at` / `last_error`. |
@@ -183,6 +184,27 @@ email is logged as a system activity and the stage change still succeeds.
 {"name": "set_deal_stage", "arguments": {"deal_id": 28, "stage": "proposal"}}
 
 {"name": "list_deals", "arguments": {"parent_deal_id": 28}}
+
+{"name": "ingest_leads", "arguments": {"leads": [
+  {"name": "Ada North", "email": "ada@example.com", "service_slug": "consulting",
+   "tags": ["campaign:icp-hc-illawarra-2026-09", "illawarra"]}
+]}}
+
+{"name": "update_deal", "arguments": {
+  "deal_id": 28, "add_tags": ["church"]
+}}
+
+{"name": "bulk_update_deals", "arguments": {
+  "deal_ids": [28, 29],
+  "add_tags": ["campaign:icp-hc-illawarra-2026-09"]
+}}
+
+{"name": "list_deals", "arguments": {
+  "tags": ["campaign:icp-hc-illawarra-2026-09", "illawarra"],
+  "stage": "new"
+}}
+
+{"name": "list_tags", "arguments": {}}
 ```
 
 ## Follow-on deals
@@ -190,3 +212,16 @@ email is logged as a system activity and the stage change still succeeds.
 `parent_deal_id` links a follow-on deal to its parent. The child must share the
 parent's `partner_id`, and cycles are rejected. It appears on `get_deal`
 (`child_deals`), as a `list_deals` filter, and on `create_deal` / `update_deal`.
+
+## Deal tags
+
+A tag is a lowercase slug of letters, digits, hyphens and colons, such as
+`campaign:icp-hc-illawarra-2026-09` or `church`. Deals return `tags` (`[]`
+when none). `list_deals` with `tags` (or a single `tag`) returns only deals
+that carry every listed tag, and that filter combines with the others.
+`list_tags` is the set of tags in use and how many deals have each one.
+
+`ingest_leads` merges `tags` onto a new or already-open deal. Leaving `tags`
+out of the lead leaves the set alone. `update_deal`'s `tags` replaces;
+`add_tags` and `remove_tags` merge. `bulk_update_deals` merges across the
+deals you already select with `deal_ids` or `service_slug`.

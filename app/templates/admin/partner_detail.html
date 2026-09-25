@@ -38,6 +38,9 @@
 <div class="deal-card">
     <strong>{{ d.service_name }}</strong> — <span class="pill">{{ d.stage }}</span>
     {% if d.value_estimate %}· ${{ "%.0f"|format(d.value_estimate) }}{% endif %}
+    {% for tag in d.tags %}
+    <a class="pill pill-tag" href="/deals?tag={{ tag }}">{{ tag }}</a>
+    {% endfor %}
     {% if d.parent_deal_id %}<span class="muted"> · follow-on of deal #{{ d.parent_deal_id }}</span>{% endif %}
     {% set kids = deals | selectattr("parent_deal_id", "equalto", d.id) | list %}
     {% if kids %}

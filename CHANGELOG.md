@@ -30,6 +30,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   for `linux/amd64` and `linux/arm64`.
 - Production reverse-proxy + TLS examples (Caddy and nginx) in
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
+- Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
+  MCP / ingest / UI filter and write support. Schema v2.
 
 ### Changed
 

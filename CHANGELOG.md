@@ -23,8 +23,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   (directories 0700, files 0600). Clear startup error if the database path is
   not writable.
 - Dependabot for pip, Docker, and GitHub Actions.
-- `pip-audit` (report-only until FastAPI/Starlette can pass) and a Trivy
-  image scan (HIGH/CRITICAL, report-only) in CI.
+- `pip-audit` (gating) and a Trivy image scan (HIGH/CRITICAL, report-only)
+  in CI.
 - Release workflow: pushing a `v*` tag builds and pushes
   `ghcr.io/sevasek/agent-crm:<tag>` and, for non-prerelease tags, `:latest`
   for `linux/amd64` and `linux/arm64`.
@@ -40,7 +40,18 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Base image is `python:3.12-slim` pinned by its multi-arch index digest.
   Dependabot can bump the digest; a floating `3.12-slim` tag is no longer used.
 - `python-multipart` 0.0.20 → 0.0.31 and `python-dotenv` 1.0.1 → 1.2.2 (safe
-  pin bumps for known CVEs). FastAPI/uvicorn/Starlette are unchanged; Dependabot
-  can propose those later.
+  pin bumps for known CVEs).
+- FastAPI 0.115.0 → 0.133.0 so pip can resolve Starlette 1.3.1+ (0.115.0
+  requires `starlette<0.39`; even 0.115.12 only allows `<0.47`). uvicorn
+  stays 0.30.6.
+
+### Security
+
+- CI `pip-audit` is now gating (leftover from #22). The FastAPI bump clears
+  Starlette findings that blocked the job: PYSEC-2026-1943 (multipart DoS,
+  0.40.0), PYSEC-2026-1941 (large multipart files, 0.47.2), PYSEC-2026-161
+  (Host header / `request.url.path`, 1.0.1), PYSEC-2026-2280 / 2281
+  (HTTPEndpoint method dispatch, 1.1.0), PYSEC-2026-248 (path in authority,
+  1.3.0), and PYSEC-2026-249 (urlencoded `request.form()` limits, 1.3.1).
 
 [Unreleased]: https://github.com/sevasek/agent-crm/compare/main...HEAD

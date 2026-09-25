@@ -10,6 +10,8 @@
 data/
 *.db
 *.db-*
+backups/
+instances/
 
 # VCS
 .git

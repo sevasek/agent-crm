@@ -23,10 +23,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   (directories 0700, files 0600). Clear startup error if the database path is
   not writable.
 - Dependabot for pip, Docker, and GitHub Actions.
-- `pip-audit` and a Trivy image scan (HIGH/CRITICAL) in CI.
+- `pip-audit` (report-only until FastAPI/Starlette can pass) and a Trivy
+  image scan (HIGH/CRITICAL, report-only) in CI.
 - Release workflow: pushing a `v*` tag builds and pushes
-  `ghcr.io/sevasek/agent-crm:<tag>` and `:latest` for `linux/amd64` and
-  `linux/arm64`.
+  `ghcr.io/sevasek/agent-crm:<tag>` and, for non-prerelease tags, `:latest`
+  for `linux/amd64` and `linux/arm64`.
 - Production reverse-proxy + TLS examples (Caddy and nginx) in
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 

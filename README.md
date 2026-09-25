@@ -122,9 +122,20 @@ Once a `v*` tag exists, you can run a published multi-arch image instead of
 building from the working copy (`build: .` stays the default):
 
 ```yaml
-# in a compose override, on both app and staleness-cron
-image: ghcr.io/sevasek/agent-crm:vX.Y.Z
+# compose override (a third -f file, or docker-compose.override.yml)
+services:
+  app:
+    image: ghcr.io/sevasek/agent-crm:vX.Y.Z
+    build: !reset
+    pull_policy: always
+  staleness-cron:
+    image: ghcr.io/sevasek/agent-crm:vX.Y.Z
+    build: !reset
+    pull_policy: always
 ```
+
+Then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+(no `--build`) so Compose pulls the published image instead of building locally.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what changed between tags.
 

@@ -23,6 +23,10 @@ docker run --rm --entrypoint sh "$IMAGE" -c '
     echo "ERROR: /app/.env is in the image" >&2
     exit 1
   fi
+  if [ -e /app/.git ]; then
+    echo "ERROR: /app/.git is in the image" >&2
+    exit 1
+  fi
   if ls /app/data/*.db >/dev/null 2>&1; then
     echo "ERROR: /app/data/*.db is in the image" >&2
     ls -la /app/data >&2

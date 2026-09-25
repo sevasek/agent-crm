@@ -40,11 +40,10 @@ TRUSTED_PROXIES=172.18.0.1
 If Caddy or nginx runs as a container on the same compose network and proxies
 to `app:8000`, use that proxy container's IP instead of the gateway.
 
-**CIDR (once that lands):** Agent 1 is adding CIDR support so you can name the
-whole compose network instead of a single gateway that changes per project,
-for example `TRUSTED_PROXIES=172.18.0.0/16`. Until that ships, use a literal
-IP — a hostname or CIDR will not match the TCP peer and headers will be
-ignored (the app logs a warning at startup when an entry is not an IP).
+**CIDR or hostname (preferred for Docker):** name the whole compose network
+instead of a single gateway IP that changes when the project is recreated,
+for example `TRUSTED_PROXIES=172.18.0.0/16`. Hostnames are resolved once at
+startup. A literal IP still works.
 
 Only list addresses you control. A client that can connect from a listed
 address can spoof the forwarding headers.

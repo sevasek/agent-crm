@@ -43,6 +43,11 @@ done
 
 [[ -n "$NAME" && -n "$TZ_NAME" && -n "$EMAIL" ]] || usage
 
+if [[ ! "$NAME" =~ ^[a-z0-9]([a-z0-9-]{0,46}[a-z0-9])?$ ]]; then
+  echo "NAME must be lowercase alphanumeric plus internal hyphens, e.g. acme or clinic-west" >&2
+  exit 1
+fi
+
 INSTANCE_ROOT="${INSTANCE_ROOT:-$REPO_ROOT/instances}"
 REGISTRY="${INSTANCE_REGISTRY:-$INSTANCE_ROOT/ports.tsv}"
 INSTANCE_DIR="$INSTANCE_ROOT/$NAME"
@@ -54,51 +59,51 @@ if [[ -e "$ENV_FILE" ]]; then
   exit 1
 fi
 
-PORT=$(python3 -c "
-import sys
-sys.path.insert(0, '${SCRIPT_DIR}')
-from instance_lib import allocate_port
-print(allocate_port('${REGISTRY}', '${NAME}'))
-")
+export INSTANCE_SCRIPT_DIR="$SCRIPT_DIR"
+export INSTANCE_REGISTRY="$REGISTRY"
+export INSTANCE_NAME="$NAME"
+export INSTANCE_TZ="$TZ_NAME"
+export INSTANCE_EMAIL="$EMAIL"
 
-# Default CIDR: all Docker-ish private bridges. Sibling PR adds CIDR matching.
+PORT=$(python3 -c '
+import os, sys
+sys.path.insert(0, os.environ["INSTANCE_SCRIPT_DIR"])
+from instance_lib import allocate_port
+print(allocate_port(os.environ["INSTANCE_REGISTRY"], os.environ["INSTANCE_NAME"]))
+')
+
+# Default CIDR: all Docker-ish private bridges. CIDR matching is shipped.
 TRUSTED_PROXIES="${TRUSTED_PROXIES:-172.16.0.0/12}"
 BASE_HINT="${BASE_URL_HINT:-https://${NAME}.example.com}"
 PROJECT="crm-${NAME}"
 
-python3 -c "
-import sys
-sys.path.insert(0, '${SCRIPT_DIR}')
+export INSTANCE_PORT="$PORT"
+export INSTANCE_TRUSTED_PROXIES="$TRUSTED_PROXIES"
+export INSTANCE_BASE_URL="$BASE_HINT"
+export INSTANCE_ENV_FILE="$ENV_FILE"
+
+python3 -c '
+import os, sys
+sys.path.insert(0, os.environ["INSTANCE_SCRIPT_DIR"])
 from instance_lib import render_env, write_env_file
 text = render_env(
-    name='${NAME}',
-    tz='${TZ_NAME}',
-    email='${EMAIL}',
-    port=int('${PORT}'),
-    trusted_proxies='${TRUSTED_PROXIES}',
-    base_url='${BASE_HINT}',
+    name=os.environ["INSTANCE_NAME"],
+    tz=os.environ["INSTANCE_TZ"],
+    email=os.environ["INSTANCE_EMAIL"],
+    port=int(os.environ["INSTANCE_PORT"]),
+    trusted_proxies=os.environ["INSTANCE_TRUSTED_PROXIES"],
+    base_url=os.environ["INSTANCE_BASE_URL"],
 )
-write_env_file('${ENV_FILE}', text)
-"
+write_env_file(os.environ["INSTANCE_ENV_FILE"], text)
+'
 chmod 600 "$ENV_FILE"
 mkdir -p "$DATA_DIR"
 chmod 700 "$INSTANCE_DIR" "$DATA_DIR" 2>/dev/null || true
 
-# Paths inside the env file assume instances live under the repo. When
-# INSTANCE_ROOT is overridden (CI), rewrite the compose interpolation paths.
-if [[ "$INSTANCE_ROOT" != "$REPO_ROOT/instances" ]]; then
-  # Keep CRM_PORT / secrets; only fix host bind-mount paths.
-  :
-fi
-
 # Relative paths from repo root for compose interpolation
 REL_ENV="instances/${NAME}/.env"
 REL_DATA="instances/${NAME}/data"
-if [[ "$INSTANCE_ROOT" == "$REPO_ROOT/instances" ]]; then
-  # rewrite CRM_* paths to the repo-relative ones (already the default)
-  :
-else
-  # dry-run / tests: leave as-is; compose will not be started
+if [[ "$INSTANCE_ROOT" != "$REPO_ROOT/instances" ]]; then
   REL_ENV="$ENV_FILE"
   REL_DATA="$DATA_DIR"
 fi
@@ -164,25 +169,12 @@ if [[ "$ok" -ne 1 ]]; then
   exit 1
 fi
 
-# Resolve the compose-network gateway so TRUSTED_PROXIES works with today's
-# IP-only matcher. CIDR support is landing in a sibling PR; the CIDR we
-# wrote first stays valid once that lands.
-GATEWAY=$(docker network inspect "${PROJECT}_default" \
-  --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null || true)
-if [[ -n "$GATEWAY" ]]; then
-  if grep -q '^TRUSTED_PROXIES=' "$ENV_FILE"; then
-    # rewrite in place; keep mode 600
-    tmp=$(mktemp)
-    umask 077
-    sed "s|^TRUSTED_PROXIES=.*|TRUSTED_PROXIES=${GATEWAY}|" "$ENV_FILE" > "$tmp"
-    chmod 600 "$tmp"
-    mv "$tmp" "$ENV_FILE"
-  fi
-  echo "Set TRUSTED_PROXIES=$GATEWAY (compose network gateway)"
-  compose_cmd up -d
-fi
-
-OTP=$(PYTHONPATH="$SCRIPT_DIR" python3 -c "from instance_lib import generate_password; print(generate_password())")
+OTP=$(INSTANCE_SCRIPT_DIR="$SCRIPT_DIR" python3 -c '
+import os, sys
+sys.path.insert(0, os.environ["INSTANCE_SCRIPT_DIR"])
+from instance_lib import generate_password
+print(generate_password())
+')
 
 CREATE_ADMIN_PASSWORD="$OTP" compose_cmd exec -T -e CREATE_ADMIN_PASSWORD="$OTP" app \
   python scripts/create_admin.py "$EMAIL" "Admin"

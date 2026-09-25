@@ -114,3 +114,29 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert (tmp_path / "ports.tsv").read_text().startswith("acme\t8000")
     assert "reverse_proxy 127.0.0.1:8000" in proc.stdout
     assert "Dry-run" in proc.stdout
+
+
+def test_new_instance_sh_rejects_unsafe_name(tmp_path):
+    env = {
+        **os.environ,
+        "INSTANCE_ROOT": str(tmp_path),
+        "INSTANCE_REGISTRY": str(tmp_path / "ports.tsv"),
+    }
+    proc = subprocess.run(
+        [
+            "bash",
+            str(REPO_ROOT / "scripts" / "new-instance.sh"),
+            "--dry-run",
+            "../etc",
+            "UTC",
+            "ops@example.com",
+        ],
+        cwd=str(REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert "lowercase" in proc.stderr
+    assert not (tmp_path / "etc").exists()

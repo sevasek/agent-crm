@@ -197,8 +197,8 @@ is taken automatically before any migration of an existing database
 (`backups/pre-migrate-vN-to-vM-*.db`).
 
 To roll back: `down`, check out the previous version (or previous image),
-and restore the pre-migrate backup. Serving a published GHCR image (when
-that lands) shrinks the outage to a container swap instead of a rebuild.
+and restore the pre-migrate backup. Serving a published GHCR image shrinks
+the outage to a container swap instead of a rebuild.
 
 ### Multiple instances on one host
 
@@ -214,9 +214,21 @@ prints a Caddy site block.
 `CRM_PORT` is interpolated as `127.0.0.1:${CRM_PORT:-8000}:8000`.
 `COMPOSE_PROJECT_NAME` keeps container and network names from colliding
 when two instances share a host. `TRUSTED_PROXIES` is set to the compose
-network CIDR (`172.16.0.0/12`) and rewritten to the resolved gateway IP
-after first start; CIDR matching for that setting is landing in a sibling
-PR. Use `--dry-run` to generate the env without Docker.
+network CIDR (`172.16.0.0/12`). Use `--dry-run` to generate the env
+without Docker.
+
+Backup and restore default to `./data/crm.db` and the default compose
+project. For an instance, point them at that instance or they will copy
+or `down` the wrong stack:
+
+```bash
+export CRM_DB_PATH=instances/acme/data/crm.db
+export COMPOSE_PROJECT_NAME=crm-acme
+export CRM_ENV_FILE=instances/acme/.env
+export BACKUP_DIR=instances/acme/backups
+./scripts/backup.sh
+./scripts/restore.sh instances/acme/backups/crm-YYYY-MM-DDTHHMMSSZ.db
+```
 
 ## Ingest leads
 

@@ -36,11 +36,14 @@ compose_cmd() {
   if [[ -f docker-compose.prod.yml ]]; then
     files+=(-f docker-compose.prod.yml)
   fi
-  if [[ -f docker-compose.port.yml ]]; then
-    files+=(-f docker-compose.port.yml)
-  fi
-  if [[ -f docker-compose.instance.yml ]]; then
-    files+=(-f docker-compose.instance.yml)
+  # Instance overlays only when targeting a named project.
+  if [[ -n "${COMPOSE_PROJECT_NAME:-}${CRM_ENV_FILE:-}" ]]; then
+    if [[ -f docker-compose.port.yml ]]; then
+      files+=(-f docker-compose.port.yml)
+    fi
+    if [[ -f docker-compose.instance.yml ]]; then
+      files+=(-f docker-compose.instance.yml)
+    fi
   fi
   local args=(docker compose)
   if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then

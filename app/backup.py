@@ -130,7 +130,7 @@ def backup_now(
 def prune_backups(
     backup_dir: str,
     keep_days: int = 14,
-    prefixes: tuple[str, ...] = ("crm-",),
+    prefixes: tuple[str, ...] = ("crm-", "pre-migrate-"),
 ) -> list[str]:
     """Delete backup files older than keep_days. Returns removed paths."""
     if keep_days < 0:
@@ -154,21 +154,51 @@ def prune_backups(
     return removed
 
 
+def assert_sqlite_snapshot(path: str) -> None:
+    """Refuse a non-sqlite or corrupt file before it can replace a live DB."""
+    if not os.path.isfile(path):
+        raise BackupError(f"snapshot not found: {path}")
+    with open(path, "rb") as fh:
+        header = fh.read(16)
+    if header != b"SQLite format 3\x00":
+        raise BackupError(f"snapshot is not a sqlite database: {path}")
+    check = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        result = check.execute("PRAGMA integrity_check").fetchone()[0]
+    except sqlite3.Error as exc:
+        raise BackupError(f"snapshot integrity_check failed: {exc}") from exc
+    finally:
+        check.close()
+    if result != "ok":
+        raise BackupError(f"snapshot integrity_check failed: {result}")
+
+
 def restore_snapshot(snapshot_path: str, dest_path: str) -> str:
     """Replace dest_path with snapshot_path and drop WAL/SHM sidecars.
 
     Callers must stop writers (compose down) first. A leftover WAL next to
     dest would replay against the restored file and corrupt it.
+
+    The snapshot is checked (sqlite header + PRAGMA integrity_check) before
+    dest is touched. If dest already exists it is copied aside as
+    dest.pre-restore-<stamp>.db so a bad restore is not the only copy.
     """
     import shutil
 
     snapshot_path = os.path.abspath(snapshot_path)
     dest_path = os.path.abspath(dest_path)
-    if not os.path.isfile(snapshot_path):
-        raise BackupError(f"snapshot not found: {snapshot_path}")
+    assert_sqlite_snapshot(snapshot_path)
 
     dest_dir = os.path.dirname(dest_path) or "."
     os.makedirs(dest_dir, exist_ok=True)
+    if os.path.isfile(dest_path):
+        stamp = time.strftime("%Y-%m-%dT%H%M%SZ", time.gmtime())
+        aside = f"{dest_path}.pre-restore-{stamp}.db"
+        shutil.copy2(dest_path, aside)
+        try:
+            os.chmod(aside, 0o600)
+        except OSError:
+            pass
     for suffix in ("-wal", "-shm"):
         sidecar = dest_path + suffix
         if os.path.exists(sidecar):

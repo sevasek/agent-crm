@@ -7,8 +7,14 @@ import logging
 
 IntegrityConflict = sqlite3.IntegrityError
 
-# Bump when adding a numbered migration. Existing DBs with no user_version
-# (PRAGMA returns 0) are treated as version 0 and migrated, not rejected.
+# Bump SCHEMA_VERSION only when adding a numbered function to MIGRATIONS.
+# Existing DBs with no user_version (PRAGMA returns 0) are treated as
+# version 0 and migrated, not rejected.
+#
+# After a live database is at version N, editing _SCHEMA_V1 or
+# _apply_additive_columns will NOT update it. For deployed DBs add
+# migrate_00N and bump this constant. Never add columns to an already
+# shipped version in place.
 SCHEMA_VERSION = 1
 
 

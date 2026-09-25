@@ -56,17 +56,14 @@ def port_in_use(port: int, host: str = "127.0.0.1") -> bool:
     return False
 
 
-def allocate_port(
-    registry_path: str | Path,
+def _allocate_port_unlocked(
+    path: Path,
     name: str,
-    start: int = DEFAULT_START_PORT,
+    start: int,
     *,
-    persist: bool = True,
-    check_bind: bool = True,
+    persist: bool,
+    check_bind: bool,
 ) -> int:
-    """Return the port for name, allocating the next free one if new."""
-    name = validate_name(name)
-    path = Path(registry_path)
     mapping = _parse_registry(path)
     if name in mapping:
         return mapping[name]
@@ -83,6 +80,37 @@ def allocate_port(
             existing += "\n"
         path.write_text(existing + f"{name}\t{port}\n")
     return port
+
+
+def allocate_port(
+    registry_path: str | Path,
+    name: str,
+    start: int = DEFAULT_START_PORT,
+    *,
+    persist: bool = True,
+    check_bind: bool = True,
+) -> int:
+    """Return the port for name, allocating the next free one if new."""
+    name = validate_name(name)
+    path = Path(registry_path)
+    if not persist:
+        return _allocate_port_unlocked(
+            path, name, start, persist=False, check_bind=check_bind
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fd = os.open(str(path) + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        import fcntl
+
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        return _allocate_port_unlocked(
+            path, name, start, persist=True, check_bind=check_bind
+        )
+    finally:
+        import fcntl
+
+        fcntl.flock(lock_fd, fcntl.LOCK_UN)
+        os.close(lock_fd)
 
 
 def generate_secret() -> str:
@@ -135,9 +163,8 @@ CRM_API_KEY={keys["CRM_API_KEY"]}
 CRM_STAGES_API_KEY={keys["CRM_STAGES_API_KEY"]}
 CRM_MCP_API_KEY={keys["CRM_MCP_API_KEY"]}
 
-# Compose-network CIDR covers default Docker bridges. CIDR matching is
-# landing in a sibling PR; new-instance.sh rewrites this to the resolved
-# gateway IP after first start so today's IP-only matcher still works.
+# Compose-network CIDR covers default Docker bridges (prefer CIDR over a
+# single gateway IP that changes when the project is recreated).
 TRUSTED_PROXIES={trusted_proxies}
 
 # First admin is created via scripts/create_admin.py (one-time password

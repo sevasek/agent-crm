@@ -54,7 +54,9 @@ if [[ ! -f "$SNAPSHOT" ]]; then
 fi
 
 if [[ "$YES" -ne 1 ]]; then
-  echo "This will stop the stack (if running) and replace $DEST with $SNAPSHOT"
+  echo "This will stop the stack (if running) and replace $DEST with $SNAPSHOT."
+  echo "The current file is copied aside as ${DEST}.pre-restore-<stamp>.db first."
+  echo "There is no other undo."
   read -r -p "Type 'restore' to continue: " reply
   if [[ "$reply" != "restore" ]]; then
     echo "Aborted."
@@ -67,11 +69,15 @@ compose_cmd() {
   if [[ -f docker-compose.prod.yml ]]; then
     files+=(-f docker-compose.prod.yml)
   fi
-  if [[ -f docker-compose.port.yml ]]; then
-    files+=(-f docker-compose.port.yml)
-  fi
-  if [[ -f docker-compose.instance.yml ]]; then
-    files+=(-f docker-compose.instance.yml)
+  # Instance overlays only when targeting a named project; attaching them
+  # to the default stack can down the wrong compose project.
+  if [[ -n "${COMPOSE_PROJECT_NAME:-}${CRM_ENV_FILE:-}" ]]; then
+    if [[ -f docker-compose.port.yml ]]; then
+      files+=(-f docker-compose.port.yml)
+    fi
+    if [[ -f docker-compose.instance.yml ]]; then
+      files+=(-f docker-compose.instance.yml)
+    fi
   fi
   local args=(docker compose)
   if [[ -n "${COMPOSE_PROJECT_NAME:-}" ]]; then

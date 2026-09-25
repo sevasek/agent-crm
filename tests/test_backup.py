@@ -58,6 +58,9 @@ def test_online_backup_roundtrip_row_counts(tmp_path):
     assert not (tmp_path / "scratch" / "crm.db-wal").exists()
     assert not (tmp_path / "scratch" / "crm.db-shm").exists()
     assert restored.stat().st_mode & 0o777 == 0o600
+    asides = list((tmp_path / "scratch").glob("crm.db.pre-restore-*.db"))
+    assert len(asides) == 1
+    assert asides[0].read_bytes() == b"stale"
 
 
 def test_online_backup_rejects_missing_source(tmp_path):
@@ -155,6 +158,39 @@ def test_restore_sh_no_docker(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert _count(dest) == 4
     assert not (tmp_path / "restored.db-wal").exists()
+
+
+def test_restore_refuses_non_sqlite(tmp_path):
+    dest = tmp_path / "live.db"
+    _make_db(dest, rows=2)
+    junk = tmp_path / "not-sqlite.db"
+    junk.write_bytes(b"this is not a database")
+    with pytest.raises(BackupError, match="not a sqlite database"):
+        restore_snapshot(str(junk), str(dest))
+    assert _count(dest) == 2
+
+
+def test_restore_refuses_corrupt_sqlite(tmp_path):
+    dest = tmp_path / "live.db"
+    _make_db(dest, rows=2)
+    snap = tmp_path / "corrupt.db"
+    _make_db(snap, rows=1)
+    # Keep the sqlite magic, truncate the first page so integrity_check fails.
+    snap.write_bytes(snap.read_bytes()[:64])
+    with pytest.raises(BackupError, match="integrity_check"):
+        restore_snapshot(str(snap), str(dest))
+    assert _count(dest) == 2
+
+
+def test_prune_includes_pre_migrate_prefix(tmp_path):
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    old = backups / "pre-migrate-v0-to-v1-old.db"
+    old.write_bytes(b"x")
+    os.utime(old, (0, 0))
+    removed = prune_backups(str(backups), keep_days=14)
+    assert str(old) in removed
+    assert not old.exists()
 
 
 def test_python_m_backup_cli(tmp_path):

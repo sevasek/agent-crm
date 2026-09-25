@@ -4,12 +4,14 @@ import threading
 import pytest
 
 from app.database import (
+    MIGRATIONS,
     SCHEMA_VERSION,
     SchemaVersionError,
     db_timeout,
     get_db,
     get_user_version,
     init_db,
+    migrate_001,
 )
 
 
@@ -64,6 +66,13 @@ def test_get_db_explicit_timeout_overrides_context(db, monkeypatch):
 def test_init_db_sets_user_version(db):
     with get_db() as conn:
         assert get_user_version(conn) == SCHEMA_VERSION
+
+
+def test_schema_version_1_is_only_applied_via_numbered_migration():
+    """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
+    assert SCHEMA_VERSION == 1
+    assert set(MIGRATIONS) == {1}
+    assert MIGRATIONS[1] is migrate_001
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):

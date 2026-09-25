@@ -775,7 +775,7 @@ async def offers_settings(request: Request, user=Depends(require_login)):
 @router.post("/offers/new")
 async def create_offer_submit(
     request: Request,
-    name: str = Form(...), pitch: str = Form(""), proof_point: str = Form(""),
+    name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
     price_anchor: str = Form(""), is_default: str = Form(""), active: str = Form(""),
     service_id: str = Form(""), price: str = Form(""), currency: str = Form("USD"),
     description: str = Form(""),
@@ -805,7 +805,7 @@ async def create_offer_submit(
 @router.post("/offers/{offer_id}/edit")
 async def edit_offer_submit(
     request: Request, offer_id: int,
-    name: str = Form(...), pitch: str = Form(""), proof_point: str = Form(""),
+    name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
     price_anchor: str = Form(""), is_default: str = Form(""), active: str = Form(""),
     service_id: str = Form(""), price: str = Form(""), currency: str = Form("USD"),
     description: str = Form(""),

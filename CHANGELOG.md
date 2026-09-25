@@ -45,7 +45,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   clears current pip-audit; 0.115.0 requires `starlette<0.39`, and even
   0.115.12 only allows `<0.47`). uvicorn stays 0.30.6. Jinja2
   `TemplateResponse` calls use the Starlette 1.x `(request, name, context)`
-  order.
+  order. Offer name fields use `Form("")` so an empty HTML input still
+  reaches handler validation (Starlette 1.x treats `name=` as missing).
 
 ### Security
 

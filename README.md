@@ -92,8 +92,10 @@ plain formulas, not a model.
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-The app binds to `127.0.0.1:8000`. Put a TLS-terminating reverse proxy in front
-and forward everything, including `/mcp` and `/oauth/*`. In `.env`:
+The app binds to `127.0.0.1:${CRM_PORT:-8000}` (default 8000). Put a
+TLS-terminating reverse proxy in front and forward everything, including
+`/mcp` and `/oauth/*`. Working Caddy and nginx configs, header forwarding, and
+`TRUSTED_PROXIES` notes are in [`docs/DEPLOY.md`](docs/DEPLOY.md). In `.env`:
 
 - `SECRET_KEY`: a real one, not the placeholder.
 - `SECURE_COOKIES=true` and `BASE_URL=https://your.domain`.
@@ -110,6 +112,21 @@ admin without shell access — the file is not visible in `docker inspect`.
 `/health` checks that sqlite is writable and returns 503 if it is not.
 
 The `staleness-cron` service runs the follow-up check on start and daily at 08:00.
+
+Production compose rotates json-file logs at 10 MB × 5 files and caps the app
+at 256 MB RAM. `docker stop` / `docker kill` leave the container stopped under
+`restart: unless-stopped` — a maintenance stop is not a crash, so start it
+again with `docker compose ... up -d` when you are done.
+
+Once a `v*` tag exists, you can run a published multi-arch image instead of
+building from the working copy (`build: .` stays the default):
+
+```yaml
+# in a compose override, on both app and staleness-cron
+image: ghcr.io/sevasek/agent-crm:vX.Y.Z
+```
+
+See [`CHANGELOG.md`](CHANGELOG.md) for what changed between tags.
 
 ### Backup, restore and upgrade
 
@@ -164,7 +181,8 @@ markdown files, see `scripts/import_clients.py`.
 
 [`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
-[`MCP.md`](docs/MCP.md) the agent interface
+[`MCP.md`](docs/MCP.md) the agent interface ·
+[`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS
 
 ## Contributing
 

@@ -13,7 +13,13 @@ from fastapi.responses import JSONResponse, Response
 
 from app.mcp.protocol import handle_message
 from app.mcp.util import MAX_BODY_BYTES
-from app.services.auth import check_rate_limit_retry, get_rate_limit_key
+from app.services.auth import (
+    check_env_api_key,
+    check_rate_limit_retry,
+    env_key_rate_limit_identity,
+    get_rate_limit_key,
+    oauth_rate_limit_identity,
+)
 from app.services.client_ip import get_client_ip
 from app.services import mcp_oauth
 
@@ -64,6 +70,30 @@ def _accepts_sse(accept: str) -> bool:
     return "text/event-stream" in (accept or "").lower()
 
 
+def _mcp_rate_limit_identity(secret: str) -> str | None:
+    """Key/token id for the authenticated MCP bucket, or None if unauthorized."""
+    if not mcp_oauth.mcp_enabled():
+        return None
+    if check_env_api_key(secret, "CRM_MCP_API_KEY"):
+        return env_key_rate_limit_identity("CRM_MCP_API_KEY")
+    data = mcp_oauth.load_access_token(secret)
+    if data:
+        return oauth_rate_limit_identity(data.get("cid") or "")
+    return None
+
+
+def _mcp_rate_limited(ip_or_identity: str, *, authenticated: bool):
+    allowed, retry_after = check_rate_limit_retry(
+        ip_or_identity, action="mcp_api", authenticated=authenticated,
+    )
+    if allowed:
+        return None
+    return _error(
+        "rate_limited", 429, close=True,
+        extra_headers={"Retry-After": str(retry_after)},
+    )
+
+
 def _mcp_response(payload: dict, accept: str):
     headers = _cors_headers()
     if _accepts_json(accept) or not _accepts_sse(accept):
@@ -94,17 +124,17 @@ async def mcp_delete():
 
 @router.post("/mcp")
 async def mcp_post(request: Request, x_api_key: str = Header(default="")):
-    ip = get_client_ip(request)
-    allowed, retry_after = check_rate_limit_retry(get_rate_limit_key(ip), action="mcp_api")
-    if not allowed:
-        return _error(
-            "rate_limited", 429, close=True,
-            extra_headers={"Retry-After": str(retry_after)},
-        )
-
     secret = mcp_oauth.presented_secret(request, x_api_key)
-    if not mcp_oauth.mcp_request_authorized(secret):
+    identity = _mcp_rate_limit_identity(secret)
+    if identity is None:
+        limited = _mcp_rate_limited(get_rate_limit_key(get_client_ip(request)), authenticated=False)
+        if limited:
+            return limited
         return _unauthenticated(request)
+
+    limited = _mcp_rate_limited(identity, authenticated=True)
+    if limited:
+        return limited
 
     content_length = request.headers.get("content-length")
     if content_length is not None:

@@ -170,7 +170,6 @@ async def oauth_authorize_submit(
     scope: str = Form("crm"),
     resource: str = Form(""),
 ):
-    limited = _rate_limited(request, "oauth_authorize")
     form = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -180,16 +179,6 @@ async def oauth_authorize_submit(
         "scope": scope,
         "resource": resource,
     }
-    if limited:
-        return templates.TemplateResponse("auth/mcp_authorize.html", {
-            "request": request,
-            "error": "Too many attempts. Wait a minute and try again.",
-            "csrf_token": generate_csrf_token(),
-            "form": form,
-            "client_name": "",
-            "mcp_enabled": mcp_oauth.mcp_enabled(),
-            "logged_in": bool(get_current_user(request)),
-        }, status_code=429)
 
     if not validate_csrf_token(csrf_token):
         return templates.TemplateResponse("auth/mcp_authorize.html", {
@@ -216,6 +205,19 @@ async def oauth_authorize_submit(
 
     user = get_current_user(request)
     if not mcp_oauth.operator_may_authorize(api_key, user):
+        # Count only failed authorize attempts so a correct key after
+        # guesses still works (same rule as login).
+        limited = _rate_limited(request, "oauth_authorize")
+        if limited:
+            return templates.TemplateResponse("auth/mcp_authorize.html", {
+                "request": request,
+                "error": "Too many attempts. Wait a minute and try again.",
+                "csrf_token": generate_csrf_token(),
+                "form": form,
+                "client_name": client_name,
+                "mcp_enabled": mcp_oauth.mcp_enabled(),
+                "logged_in": bool(user),
+            }, status_code=429)
         return templates.TemplateResponse("auth/mcp_authorize.html", {
             "request": request,
             "error": (

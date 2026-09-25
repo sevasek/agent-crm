@@ -171,11 +171,15 @@ def test_read_instructions_resource(client, db, monkeypatch):
 
 def test_mcp_429_includes_retry_after(client, monkeypatch):
     monkeypatch.setenv("CRM_MCP_API_KEY", "test-mcp-key")
-    from app.services.auth import check_rate_limit
+    from app.services.auth import (
+        RATE_LIMIT_MAX_AUTH_BY_ACTION,
+        check_rate_limit,
+        env_key_rate_limit_identity,
+    )
 
-    ip = "testclient"
-    for _ in range(120):
-        assert check_rate_limit(ip, action="mcp_api") is True
+    identity = env_key_rate_limit_identity("CRM_MCP_API_KEY")
+    for _ in range(RATE_LIMIT_MAX_AUTH_BY_ACTION["mcp_api"]):
+        assert check_rate_limit(identity, action="mcp_api", authenticated=True) is True
     resp = client.post(
         "/mcp",
         json={"jsonrpc": "2.0", "id": 1, "method": "ping"},

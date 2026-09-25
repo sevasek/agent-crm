@@ -9,6 +9,7 @@ os.environ.pop("BASE_URL", None)
 # Bootstrap admin must not leak from a sourced production .env into every test DB.
 os.environ.pop("BOOTSTRAP_ADMIN_EMAIL", None)
 os.environ.pop("BOOTSTRAP_ADMIN_PASSWORD", None)
+os.environ.pop("BOOTSTRAP_ADMIN_PASSWORD_FILE", None)
 os.environ.pop("BOOTSTRAP_ADMIN_NAME", None)
 # Bot MCP is fail-closed unless a test sets CRM_MCP_API_KEY.
 os.environ.pop("CRM_MCP_API_KEY", None)
@@ -28,6 +29,7 @@ def db(tmp_path, monkeypatch):
     monkeypatch.delenv("BASE_URL", raising=False)
     monkeypatch.delenv("BOOTSTRAP_ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD", raising=False)
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD_FILE", raising=False)
     monkeypatch.delenv("BOOTSTRAP_ADMIN_NAME", raising=False)
     monkeypatch.delenv("CRM_MCP_API_KEY", raising=False)
     monkeypatch.delenv("TASK_WEBHOOK_URL", raising=False)
@@ -45,7 +47,9 @@ def client(db, monkeypatch):
     created under a leftover BASE_URL / SECURE_COOKIES.
     """
     from app.services import auth as auth_service
+    from app.services.client_ip import reset_trusted_proxies_cache
     auth_service.clear_rate_limits()
+    reset_trusted_proxies_cache()
     from app.main import create_app
     with TestClient(create_app()) as c:
         yield c

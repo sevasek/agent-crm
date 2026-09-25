@@ -66,13 +66,6 @@ async def login_page(request: Request):
 
 @router.post("/login")
 async def login_submit(request: Request, email: str = Form(...), password: str = Form(...), csrf_token: str = Form(...)):
-    ip = get_client_ip(request)
-    if not check_rate_limit(get_rate_limit_key(ip, email), action="login"):
-        return templates.TemplateResponse("auth/login.html", {
-            "request": request, "error": "Too many attempts. Please wait a minute and try again.",
-            "csrf_token": generate_csrf_token(),
-        }, status_code=429)
-
     if not validate_csrf_token(csrf_token):
         return templates.TemplateResponse("auth/login.html", {
             "request": request, "error": "Invalid form submission. Please try again.",
@@ -80,16 +73,25 @@ async def login_submit(request: Request, email: str = Form(...), password: str =
         }, status_code=400)
 
     user = authenticate_user(email, password)
-    if not user:
-        return templates.TemplateResponse("auth/login.html", {
-            "request": request, "error": "Invalid email or password",
-            "csrf_token": generate_csrf_token(),
-        }, status_code=400)
+    if user:
+        response = RedirectResponse("/partners", status_code=303)
+        response.delete_cookie("session")
+        set_session_cookie(response, user["id"])
+        return response
 
-    response = RedirectResponse("/partners", status_code=303)
-    response.delete_cookie("session")
-    set_session_cookie(response, user["id"])
-    return response
+    # Count only failed passwords. A correct password after failures still
+    # succeeds; the sixth failure in a minute is 429.
+    ip = get_client_ip(request)
+    if not check_rate_limit(get_rate_limit_key(ip, email), action="login"):
+        return templates.TemplateResponse("auth/login.html", {
+            "request": request, "error": "Too many attempts. Please wait a minute and try again.",
+            "csrf_token": generate_csrf_token(),
+        }, status_code=429)
+
+    return templates.TemplateResponse("auth/login.html", {
+        "request": request, "error": "Invalid email or password",
+        "csrf_token": generate_csrf_token(),
+    }, status_code=400)
 
 
 @router.get("/logout")

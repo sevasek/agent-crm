@@ -5,7 +5,13 @@ from fastapi import APIRouter, Request, Header
 from fastapi.responses import JSONResponse, Response
 
 from app.services.api_keys import verify_api_key
-from app.services.auth import check_env_api_key, check_rate_limit_retry, get_rate_limit_key
+from app.services.auth import (
+    check_env_api_key,
+    check_rate_limit_retry,
+    env_key_rate_limit_identity,
+    get_rate_limit_key,
+    user_key_rate_limit_identity,
+)
 from app.services.client_ip import get_client_ip
 from app.services.leads import ingest_lead
 from app.services import pipeline_stages
@@ -23,23 +29,65 @@ def _json_error(error: str, status_code: int, *, close: bool = False):
     return JSONResponse({"error": error}, status_code=status_code, headers=headers)
 
 
-def _check_api_key(x_api_key: str) -> bool:
+def _leads_api_identity(x_api_key: str) -> str | None:
     # Per-user keys created in Account Settings are checked first (the
     # intended path going forward); CRM_API_KEY stays as a legacy shared
     # fallback for bots already configured with it. Settings keys do not
     # authorize /mcp or /api/v1/stages.
-    if x_api_key and verify_api_key(x_api_key):
-        return True
-    return check_env_api_key(x_api_key, "CRM_API_KEY")
+    if x_api_key:
+        row = verify_api_key(x_api_key)
+        if row:
+            return user_key_rate_limit_identity(row["id"])
+    if check_env_api_key(x_api_key, "CRM_API_KEY"):
+        return env_key_rate_limit_identity("CRM_API_KEY")
+    return None
 
 
-def _check_stages_api_key(x_api_key: str) -> bool:
+def _stages_api_identity(x_api_key: str) -> str | None:
     # Deliberately a separate secret from CRM_API_KEY. That key is the
     # lead-ingest credential — proxy-allowlisted for "post a lead",
     # nothing more. Pipeline config (stage roles, reorder, delete) is a much
     # bigger blast radius than ingest, so it gets its own key rather than
     # inheriting whatever trust CRM_API_KEY already carries elsewhere.
-    return check_env_api_key(x_api_key, "CRM_STAGES_API_KEY")
+    if check_env_api_key(x_api_key, "CRM_STAGES_API_KEY"):
+        return env_key_rate_limit_identity("CRM_STAGES_API_KEY")
+    return None
+
+
+def _check_api_key(x_api_key: str) -> bool:
+    return _leads_api_identity(x_api_key) is not None
+
+
+def _check_stages_api_key(x_api_key: str) -> bool:
+    return _stages_api_identity(x_api_key) is not None
+
+
+def _api_rate_limited(request: Request, x_api_key: str, action: str, identity_fn):
+    """Auth first. Failed auth counts toward the IP bucket; success uses key id."""
+    identity = identity_fn(x_api_key)
+    if identity is None:
+        ip = get_client_ip(request)
+        allowed, retry_after = check_rate_limit_retry(
+            get_rate_limit_key(ip), action=action,
+        )
+        if not allowed:
+            return JSONResponse(
+                {"error": "rate_limited"},
+                status_code=429,
+                headers={"Retry-After": str(retry_after), "Connection": "close"},
+            )
+        return _json_error("invalid_api_key", 401, close=True)
+
+    allowed, retry_after = check_rate_limit_retry(
+        identity, action=action, authenticated=True,
+    )
+    if not allowed:
+        return JSONResponse(
+            {"error": "rate_limited"},
+            status_code=429,
+            headers={"Retry-After": str(retry_after), "Connection": "close"},
+        )
+    return None
 
 
 def _content_length_exceeds_cap(request: Request) -> bool:
@@ -82,23 +130,15 @@ async def _read_body_capped(request: Request):
 
 @router.post("/leads")
 async def create_leads(request: Request, x_api_key: str = Header(default="")):
-    ip = get_client_ip(request)
-    allowed, retry_after = check_rate_limit_retry(get_rate_limit_key(ip), action="leads_api")
-    if not allowed:
-        # Body is still unread here, so close the keep-alive connection.
-        return JSONResponse(
-            {"error": "rate_limited"},
-            status_code=429,
-            headers={"Retry-After": str(retry_after), "Connection": "close"},
-        )
+    # Only the X-API-Key header authenticates. Query-string values (api_key,
+    # apikey, x-api-key, …) are ignored and never compared. Failed auth is
+    # what fills the unauthenticated IP bucket; a valid key uses its own.
+    gated = _api_rate_limited(request, x_api_key, "leads_api", _leads_api_identity)
+    if gated:
+        return gated
 
     if _content_length_exceeds_cap(request):
         return _json_error("payload_too_large", 413, close=True)
-
-    # Only the X-API-Key header authenticates. Query-string values (api_key,
-    # apikey, x-api-key, …) are ignored and never compared.
-    if not _check_api_key(x_api_key):
-        return _json_error("invalid_api_key", 401, close=True)
 
     if _body_is_present(request) and not _is_json_content_type(
         request.headers.get("content-type") or ""
@@ -192,22 +232,15 @@ def _safe_int(value):
 
 
 async def _authenticated_json_body(request: Request, x_api_key: str, action: str):
-    """Common preamble for the mutating stage endpoints: rate limit, size cap,
-    API key, content-type, then a parsed JSON object. Returns (body, None) on
+    """Common preamble for the mutating stage endpoints: auth + rate limit,
+    size cap, content-type, then a parsed JSON object. Returns (body, None) on
     success, or (None, error_response) to return immediately."""
-    ip = get_client_ip(request)
-    allowed, retry_after = check_rate_limit_retry(get_rate_limit_key(ip), action=action)
-    if not allowed:
-        return None, JSONResponse(
-            {"error": "rate_limited"}, status_code=429,
-            headers={"Retry-After": str(retry_after), "Connection": "close"},
-        )
+    gated = _api_rate_limited(request, x_api_key, action, _stages_api_identity)
+    if gated:
+        return None, gated
 
     if _content_length_exceeds_cap(request):
         return None, _json_error("payload_too_large", 413, close=True)
-
-    if not _check_stages_api_key(x_api_key):
-        return None, _json_error("invalid_api_key", 401, close=True)
 
     if _body_is_present(request) and not _is_json_content_type(
         request.headers.get("content-type") or ""
@@ -232,17 +265,8 @@ async def _authenticated_json_body(request: Request, x_api_key: str, action: str
 
 
 def _authenticate_get(request: Request, x_api_key: str, action: str = "stages_api"):
-    """Rate limit + API key check for read-only (no body) GET endpoints."""
-    ip = get_client_ip(request)
-    allowed, retry_after = check_rate_limit_retry(get_rate_limit_key(ip), action=action)
-    if not allowed:
-        return JSONResponse(
-            {"error": "rate_limited"}, status_code=429,
-            headers={"Retry-After": str(retry_after), "Connection": "close"},
-        )
-    if not _check_stages_api_key(x_api_key):
-        return _json_error("invalid_api_key", 401, close=True)
-    return None
+    """Auth + rate limit for read-only (no body) GET endpoints."""
+    return _api_rate_limited(request, x_api_key, action, _stages_api_identity)
 
 
 @router.get("/stages")

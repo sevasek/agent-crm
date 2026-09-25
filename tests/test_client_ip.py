@@ -5,15 +5,27 @@ so a client cannot spoof their bucket. When the immediate peer is listed,
 Traefik's X-Real-IP (or the right-most untrusted X-Forwarded-For hop) is
 what get_rate_limit_key sees.
 """
+import pytest
 from starlette.requests import Request
 
 from app.services import auth as auth_service
 from app.services.auth import get_rate_limit_key
-from app.services.client_ip import get_client_ip, warn_if_non_ip_trusted_proxies
+from app.services.client_ip import (
+    get_client_ip,
+    reset_trusted_proxies_cache,
+    warn_if_non_ip_trusted_proxies,
+)
+
+
+@pytest.fixture(autouse=True)
+def _reset_trusted_proxies_cache():
+    reset_trusted_proxies_cache()
+    yield
+    reset_trusted_proxies_cache()
 
 
 def _leads_api_limit():
-    """Use the per-action cap when present (#11) so these tests survive merge."""
+    """Unauthenticated (failed-auth) cap — that is the IP bucket these tests fill."""
     by_action = getattr(auth_service, "RATE_LIMIT_MAX_BY_ACTION", None)
     if isinstance(by_action, dict) and "leads_api" in by_action:
         return by_action["leads_api"]
@@ -130,20 +142,18 @@ def test_trusted_proxies_whitespace_and_commas(monkeypatch):
 
 def test_leads_api_spoofed_xff_shares_one_bucket_when_untrusted(client, monkeypatch):
     monkeypatch.delenv("TRUSTED_PROXIES", raising=False)
-    monkeypatch.setenv("CRM_API_KEY", "test-crm-api-key")
     payload = {"leads": [{"name": "X", "email": "x@example.com", "service_slug": "none"}]}
-    headers_base = {"X-API-Key": "test-crm-api-key"}
 
     for i in range(_leads_api_limit()):
         resp = client.post(
             "/api/v1/leads", json=payload,
-            headers={**headers_base, "X-Forwarded-For": f"203.0.113.{i}"},
+            headers={"X-API-Key": "wrong", "X-Forwarded-For": f"203.0.113.{i}"},
         )
-        assert resp.status_code != 429, resp.text
+        assert resp.status_code == 401, resp.text
 
     resp = client.post(
         "/api/v1/leads", json=payload,
-        headers={**headers_base, "X-Forwarded-For": "198.51.100.1"},
+        headers={"X-API-Key": "wrong", "X-Forwarded-For": "198.51.100.1"},
     )
     assert resp.status_code == 429
     assert resp.json() == {"error": "rate_limited"}
@@ -151,28 +161,28 @@ def test_leads_api_spoofed_xff_shares_one_bucket_when_untrusted(client, monkeypa
 
 def test_leads_api_forwarded_ip_is_rate_limit_key_when_trusted(client, monkeypatch):
     # Starlette 0.38 TestClient hardcodes scope["client"] as ("testclient", 50000).
+    # Failed auth is what fills the IP bucket; a valid key uses the key-id bucket.
     monkeypatch.setenv("TRUSTED_PROXIES", "testclient")
-    monkeypatch.setenv("CRM_API_KEY", "test-crm-api-key")
     payload = {"leads": [{"name": "X", "email": "x@example.com", "service_slug": "none"}]}
 
     for _ in range(_leads_api_limit()):
         resp = client.post(
             "/api/v1/leads", json=payload,
-            headers={"X-API-Key": "test-crm-api-key", "X-Real-IP": "203.0.113.9"},
+            headers={"X-API-Key": "wrong", "X-Real-IP": "203.0.113.9"},
         )
-        assert resp.status_code != 429, resp.text
+        assert resp.status_code == 401, resp.text
 
     blocked = client.post(
         "/api/v1/leads", json=payload,
-        headers={"X-API-Key": "test-crm-api-key", "X-Real-IP": "203.0.113.9"},
+        headers={"X-API-Key": "wrong", "X-Real-IP": "203.0.113.9"},
     )
     assert blocked.status_code == 429
 
     other = client.post(
         "/api/v1/leads", json=payload,
-        headers={"X-API-Key": "test-crm-api-key", "X-Real-IP": "198.51.100.7"},
+        headers={"X-API-Key": "wrong", "X-Real-IP": "198.51.100.7"},
     )
-    assert other.status_code != 429
+    assert other.status_code == 401
 
 
 def test_xff_all_trusted_hops_falls_back_to_peer(monkeypatch):
@@ -196,22 +206,70 @@ def test_x_real_ip_that_is_a_trusted_hop_is_ignored(monkeypatch):
     assert get_client_ip(req) == "203.0.113.9"
 
 
-def test_hostname_trusted_proxy_entry_is_logged(monkeypatch, caplog):
+def test_unresolved_hostname_trusted_proxy_is_logged(monkeypatch, caplog):
     import logging
+    import socket
 
-    monkeypatch.setenv("TRUSTED_PROXIES", "traefik")
+    def fail_resolve(host, *args, **kwargs):
+        raise socket.gaierror("no such host")
+
+    monkeypatch.setenv("TRUSTED_PROXIES", "no-such-proxy.invalid")
+    monkeypatch.setattr("app.services.client_ip.socket.getaddrinfo", fail_resolve)
+    reset_trusted_proxies_cache()
     with caplog.at_level(logging.WARNING, logger="app.services.client_ip"):
         warn_if_non_ip_trusted_proxies()
-    assert "not IP addresses" in caplog.text
-    assert "traefik" in caplog.text
+    assert "did not resolve" in caplog.text
+    assert "no-such-proxy.invalid" in caplog.text
     req = _request("10.0.0.2", {"x-real-ip": "203.0.113.9"})
     assert get_client_ip(req) == "10.0.0.2"
+
+
+def test_resolved_hostname_is_trusted(monkeypatch):
+    import socket
+
+    def resolve(host, *args, **kwargs):
+        if host == "traefik":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.2", 0))]
+        raise socket.gaierror("no such host")
+
+    monkeypatch.setenv("TRUSTED_PROXIES", "traefik")
+    monkeypatch.setattr("app.services.client_ip.socket.getaddrinfo", resolve)
+    reset_trusted_proxies_cache()
+    req = _request("10.0.0.2", {"x-real-ip": "203.0.113.9"})
+    assert get_client_ip(req) == "203.0.113.9"
+
+
+def test_cidr_trusted_proxy_matches_peer(monkeypatch):
+    monkeypatch.setenv("TRUSTED_PROXIES", "10.0.0.0/16")
+    reset_trusted_proxies_cache()
+    req = _request("10.0.0.2", {"x-real-ip": "203.0.113.9"})
+    assert get_client_ip(req) == "203.0.113.9"
+    outside = _request("192.0.2.1", {"x-real-ip": "203.0.113.9"})
+    assert get_client_ip(outside) == "192.0.2.1"
+
+
+def test_cidr_skips_trusted_xff_hops(monkeypatch):
+    monkeypatch.setenv("TRUSTED_PROXIES", "10.0.0.0/16")
+    reset_trusted_proxies_cache()
+    req = _request("10.0.0.2", {"x-forwarded-for": "1.2.3.4, 203.0.113.50, 10.0.0.3"})
+    assert get_client_ip(req) == "203.0.113.50"
 
 
 def test_ip_trusted_proxy_entry_does_not_warn(monkeypatch, caplog):
     import logging
 
     monkeypatch.setenv("TRUSTED_PROXIES", "10.0.0.2")
+    reset_trusted_proxies_cache()
+    with caplog.at_level(logging.WARNING, logger="app.services.client_ip"):
+        warn_if_non_ip_trusted_proxies()
+    assert caplog.text == ""
+
+
+def test_cidr_trusted_proxy_entry_does_not_warn(monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setenv("TRUSTED_PROXIES", "172.18.0.0/16")
+    reset_trusted_proxies_cache()
     with caplog.at_level(logging.WARNING, logger="app.services.client_ip"):
         warn_if_non_ip_trusted_proxies()
     assert caplog.text == ""

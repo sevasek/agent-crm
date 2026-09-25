@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    # requirements.txt pins FastAPI/uvicorn from 2024; Dependabot can
+    # propose bumps. Do not mass-upgrade those in this repo without a PR review.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

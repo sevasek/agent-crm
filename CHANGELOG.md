@@ -1,0 +1,44 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+The project is pre-1.0. Tagged releases publish a multi-arch image to
+[`ghcr.io/sevasek/agent-crm`](https://github.com/sevasek/agent-crm/pkgs/container/agent-crm)
+as `vX.Y.Z` and `latest`. Until the first tag, install from source with
+`docker compose ... --build` as documented in the README.
+
+## [Unreleased]
+
+### Added
+
+- `.dockerignore` so `.env`, `.git`, and `./data` (including sqlite files) are
+  not copied into the image. CI builds a dirty context and fails if those paths
+  exist in `/app`.
+- Production compose log rotation (`json-file`, 10m × 5 files), `mem_limit`,
+  and `pids_limit` on `app` and `staleness-cron`.
+- Entrypoint `umask 077` plus ownership and mode-bit repair on `/app/data`
+  (directories 0700, files 0600). Clear startup error if the database path is
+  not writable.
+- Dependabot for pip, Docker, and GitHub Actions.
+- `pip-audit` (report-only until FastAPI/Starlette can pass) and a Trivy
+  image scan (HIGH/CRITICAL, report-only) in CI.
+- Release workflow: pushing a `v*` tag builds and pushes
+  `ghcr.io/sevasek/agent-crm:<tag>` and, for non-prerelease tags, `:latest`
+  for `linux/amd64` and `linux/arm64`.
+- Production reverse-proxy + TLS examples (Caddy and nginx) in
+  [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+### Changed
+
+- Production port bind is `127.0.0.1:${CRM_PORT:-8000}:8000` so a second
+  instance on the same host can set `CRM_PORT` instead of a third compose file.
+- Base image is `python:3.12-slim` pinned by its multi-arch index digest.
+  Dependabot can bump the digest; a floating `3.12-slim` tag is no longer used.
+- `python-multipart` 0.0.20 → 0.0.31 and `python-dotenv` 1.0.1 → 1.2.2 (safe
+  pin bumps for known CVEs). FastAPI/uvicorn/Starlette are unchanged; Dependabot
+  can propose those later.
+
+[Unreleased]: https://github.com/sevasek/agent-crm/compare/main...HEAD

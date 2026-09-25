@@ -2,9 +2,10 @@
 # Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 # Needs Docker Compose 2.24+ (uses !reset / !override).
 #
-# The app listens on 127.0.0.1:8000 only. Put a TLS-terminating reverse proxy
-# (Caddy, nginx, Traefik) in front of it and forward everything, including
-# /mcp and /oauth/*, which are gated by their own keys rather than a session.
+# The app listens on 127.0.0.1:${CRM_PORT:-8000} only. Put a TLS-terminating
+# reverse proxy (Caddy, nginx, Traefik) in front of it and forward everything,
+# including /mcp and /oauth/*, which are gated by their own keys rather than a
+# session. See docs/DEPLOY.md.
 
 services:
   app:
@@ -16,8 +17,15 @@ services:
     volumes: !override
       - ./data:/app/data
     ports: !override
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:${CRM_PORT:-8000}:8000"
     restart: unless-stopped
+    mem_limit: 256m
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
     # Do not set `user:`. The image starts as root so docker-entrypoint.sh can
     # chown ./data, then drops to APP_UID/APP_GID. Setting `user:` skips the
     # chown and can leave sqlite read-only.
@@ -35,3 +43,10 @@ services:
     healthcheck:
       disable: true
     restart: unless-stopped
+    mem_limit: 128m
+    pids_limit: 64
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"

@@ -181,6 +181,20 @@ def test_unreadable_password_file_does_not_fall_back_to_env(db, monkeypatch, tmp
     assert "BOOTSTRAP_ADMIN_PASSWORD_FILE" in caplog.text
 
 
+def test_empty_password_file_does_not_fall_back_to_env(db, monkeypatch, tmp_path, caplog):
+    secret = tmp_path / "empty.secret"
+    secret.write_text("\n", encoding="utf-8")
+    _set_bootstrap(
+        monkeypatch,
+        password="env-fallback",
+        password_file=str(secret),
+    )
+    with caplog.at_level(logging.ERROR, logger="app.services.auth"):
+        maybe_bootstrap_admin()
+    assert count_users() == 0
+    assert "empty" in caplog.text
+
+
 def test_bootstrapped_user_can_log_in_over_http(db, monkeypatch):
     _set_bootstrap(monkeypatch)
     from app.main import create_app

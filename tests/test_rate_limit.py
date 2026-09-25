@@ -1,3 +1,4 @@
+import time
 from collections import deque
 
 from app.services.auth import (
@@ -94,6 +95,16 @@ def test_client_fixture_clears_rate_limit_state(client):
     with auth_service._rate_limit_lock:
         assert len(auth_service._rate_limit_hits) == 0
     assert check_rate_limit("10.0.0.1", action="leads_api") is True
+
+
+def test_idle_rate_limit_buckets_are_dropped(client):
+    from app.services import auth as auth_service
+
+    old = time.time() - auth_service.RATE_LIMIT_WINDOW - 1
+    _insert_hits("leads_api:10.0.0.99", [old])
+    assert check_rate_limit("10.0.0.1", action="leads_api") is True
+    with auth_service._rate_limit_lock:
+        assert "leads_api:10.0.0.99" not in auth_service._rate_limit_hits
 
 
 def test_leads_api_429_includes_retry_after(client, monkeypatch):

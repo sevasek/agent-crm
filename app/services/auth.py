@@ -66,8 +66,8 @@ def _read_bootstrap_admin_password() -> tuple[str, str]:
     password is not copied into the process environment. Trailing newlines
     from the file are stripped (secret files usually end with one). If the
     file is set, readable and non-empty it wins over BOOTSTRAP_ADMIN_PASSWORD.
-    An unreadable file is a misconfiguration: we do not fall back to the
-    env password. An empty/unset file falls back to the env var.
+    An unreadable or empty file is a misconfiguration: we do not fall back
+    to the env password.
     """
     path = (os.getenv("BOOTSTRAP_ADMIN_PASSWORD_FILE") or "").strip()
     env_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD") or ""
@@ -92,7 +92,7 @@ def _read_bootstrap_admin_password() -> tuple[str, str]:
         "bootstrap admin: BOOTSTRAP_ADMIN_PASSWORD_FILE (%s) is empty",
         path,
     )
-    return env_password, "env" if env_password else "file"
+    return "", "file"
 
 
 def maybe_bootstrap_admin() -> None:
@@ -258,9 +258,18 @@ def _rate_limit_bucket(key: str, action: str, authenticated: bool) -> str:
 
 def _prune_rate_limit_bucket(bucket: str, now: float) -> deque:
     cutoff = now - RATE_LIMIT_WINDOW
+    idle = [
+        name
+        for name, times in _rate_limit_hits.items()
+        if name != bucket and (not times or times[-1] < cutoff)
+    ]
+    for name in idle:
+        del _rate_limit_hits[name]
     hits = _rate_limit_hits[bucket]
     while hits and hits[0] < cutoff:
         hits.popleft()
+    if not hits:
+        del _rate_limit_hits[bucket]
     return hits
 
 
@@ -286,6 +295,7 @@ def check_rate_limit_retry(key: str, action: str = "default", *, authenticated: 
             remaining = max(1, math.ceil(RATE_LIMIT_WINDOW - (now - oldest)))
             return False, remaining
         hits.append(now)
+        _rate_limit_hits[bucket] = hits
     return True, 0
 
 

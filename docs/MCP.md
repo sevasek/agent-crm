@@ -49,10 +49,13 @@ and `/.well-known/*` through your reverse proxy.
 
 ## Rate limit
 
-`mcp_api` allows 120 requests per 60 seconds per client IP, independent of the
-login, leads and stages limits. Over the limit returns `429`
-`{"error":"rate_limited"}` with `Retry-After`. Set `TRUSTED_PROXIES` behind a
-proxy so the limit keys on the real client.
+Failed MCP auth is capped at 120 requests per 60 seconds per client IP (the
+guessing bucket). A valid MCP key or OAuth token uses a larger bucket of 600
+requests per 60 seconds, keyed on the token id (`env:CRM_MCP_API_KEY` or
+`oauth:{client_id}`), not the client IP — so a flood of bad keys cannot lock
+out the real agent. Over the limit returns `429` `{"error":"rate_limited"}`
+with `Retry-After`. Set `TRUSTED_PROXIES` behind a proxy so the unauthenticated
+cap keys on the real client.
 
 ## Handshake (for debugging)
 

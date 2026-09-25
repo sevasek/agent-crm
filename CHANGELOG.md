@@ -36,5 +36,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   instance on the same host can set `CRM_PORT` instead of a third compose file.
 - Base image is `python:3.12-slim` pinned by its multi-arch index digest.
   Dependabot can bump the digest; a floating `3.12-slim` tag is no longer used.
+- `python-multipart` 0.0.20 → 0.0.31 and `python-dotenv` 1.0.1 → 1.2.2 (safe
+  pin bumps for known CVEs). FastAPI/uvicorn/Starlette are unchanged; Dependabot
+  can propose those later.
 
 [Unreleased]: https://github.com/sevasek/agent-crm/compare/main...HEAD

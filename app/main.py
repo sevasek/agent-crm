@@ -7,11 +7,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.database import init_db
+from app.database import get_db, init_db
 from app.routers import admin, auth, api, mcp, oauth
 from app.routers.auth import get_current_user
 from app.services.auth import maybe_bootstrap_admin, should_use_secure_cookies
 from app.services.client_ip import warn_if_non_ip_trusted_proxies
+
+_health_db_warned = False
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -124,6 +126,20 @@ def create_app() -> FastAPI:
 
     @application.get("/health")
     async def health():
+        # Cheap write-lock probe: proves the sqlite file is writable and not
+        # stuck. A full or read-only volume is a total outage; do not report
+        # healthy. Exempt from the rate limiter (this handler never calls it).
+        global _health_db_warned
+        try:
+            with get_db() as conn:
+                conn.execute("BEGIN IMMEDIATE")
+                conn.rollback()
+        except Exception as exc:
+            if not _health_db_warned:
+                logger.warning("health: database check failed: %s", exc)
+                _health_db_warned = True
+            return JSONResponse({"status": "unavailable"}, status_code=503)
+        _health_db_warned = False
         return {"status": "ok"}
 
     # Compat redirects: every page used to live under /admin/*. Old bookmarks

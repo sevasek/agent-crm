@@ -1,0 +1,23 @@
+# Overlay used by scripts/new-instance.sh so each instance gets its own
+# data directory and env file without editing docker-compose.prod.yml.
+# Requires Docker Compose 2.24+ (!override / !reset).
+#
+#   docker compose --env-file instances/acme/.env \
+#     -f docker-compose.yml -f docker-compose.prod.yml \
+#     -f docker-compose.port.yml -f docker-compose.instance.yml up -d
+
+services:
+  app:
+    environment: !reset []
+    env_file: !override
+      - ${CRM_ENV_FILE:-.env}
+    volumes: !override
+      - ${CRM_DATA_DIR:-./data}:/app/data
+    ports: !override
+      - "127.0.0.1:${CRM_PORT:-8000}:8000"
+
+  staleness-cron:
+    env_file: !override
+      - ${CRM_ENV_FILE:-.env}
+    volumes: !override
+      - ${CRM_DATA_DIR:-./data}:/app/data

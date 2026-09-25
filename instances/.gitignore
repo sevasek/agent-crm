@@ -1,0 +1,3 @@
+# Per-instance .env files hold live secrets. The port registry is host-local.
+*
+!.gitignore

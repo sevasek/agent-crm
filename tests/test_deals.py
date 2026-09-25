@@ -1,6 +1,9 @@
 from app.services.partners import create_partner
 from app.services.catalog import create_service
-from app.services.deals import create_deal, get_deal, set_deal_stage, update_deal_fields
+from app.services.deals import (
+    create_deal, get_deal, list_parent_candidates, set_deal_stage,
+    update_deal_fields, validate_parent_link,
+)
 from app.services.activities import list_activities_for_partner
 
 
@@ -83,6 +86,31 @@ def test_non_nurture_transition_does_not_call_enrollment(db, monkeypatch):
     set_deal_stage(deal_id, "contacted")
 
     assert called == []
+
+
+def test_parent_link_same_partner_and_rejects_mismatch_and_cycle(db):
+    pid = create_partner("Jane Doe", email="jane@acme.example")
+    other = create_partner("Other Co", email="other@acme.example")
+    sid = create_service("Consulting", "consulting")
+    support = create_service("Support", "support")
+    parent_id = create_deal(pid, sid)
+    child_id = create_deal(pid, support)
+    stranger_id = create_deal(other, sid)
+
+    cleaned, error = validate_parent_link(child_id, parent_id, pid)
+    assert error is None
+    assert cleaned == parent_id
+
+    _cleaned, error = validate_parent_link(child_id, stranger_id, pid)
+    assert error == "parent_partner_mismatch"
+
+    assert update_deal_fields(child_id, parent_deal_id=parent_id)
+    _cleaned, error = validate_parent_link(parent_id, child_id, pid)
+    assert error == "parent_cycle"
+
+    candidates = list_parent_candidates(pid, exclude_deal_id=child_id)
+    assert [c["id"] for c in candidates] == [parent_id]
+    assert list_parent_candidates(pid, exclude_deal_id=parent_id) == []
 
 
 def test_enrollment_failure_is_logged_not_raised(db, monkeypatch):

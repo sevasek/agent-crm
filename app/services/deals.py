@@ -240,6 +240,24 @@ def validate_parent_link(deal_id, parent_deal_id, partner_id):
     return parent_id, None
 
 
+def list_parent_candidates(partner_id, exclude_deal_id=None):
+    """This partner's other deals that would be a valid parent.
+
+    Used by the admin deal form picker. Self-parent, partner mismatch, and
+    cycles are already rejected by validate_parent_link.
+    """
+    if not partner_id:
+        return []
+    rows = list_deals(partner_id=partner_id)
+    out = []
+    for row in rows:
+        _cleaned, error = validate_parent_link(exclude_deal_id, row["id"], partner_id)
+        if error:
+            continue
+        out.append(row)
+    return out
+
+
 def update_deal_fields(deal_id: int, **fields):
     allowed = {
         "source", "value_estimate", "pain_points", "goals", "next_action", "next_action_date",

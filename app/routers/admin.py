@@ -13,8 +13,8 @@ from app.services.partners import (
 from app.services.catalog import create_service, get_service, update_service, list_services
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
-    create_deal, get_deal, list_deals, set_deal_stage, update_deal_fields,
-    record_call_outcome, CALL_OUTCOMES,
+    create_deal, get_deal, list_deals, list_parent_candidates, set_deal_stage,
+    update_deal_fields, record_call_outcome, validate_parent_link, CALL_OUTCOMES,
 )
 from app.services import pipeline_stages
 from app.services.call_queue import (
@@ -473,15 +473,71 @@ async def deals_list(
     })
 
 
-@router.get("/deals/new", response_class=HTMLResponse)
-async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/deal_form.html", {
+_PARENT_FORM_ERRORS = {
+    "invalid_parent": "Pick a parent deal, or leave it unset.",
+    "parent_not_found": "That parent deal does not exist.",
+    "parent_partner_mismatch": "Parent deal must belong to the same partner.",
+    "parent_cycle": "That parent would create a cycle.",
+}
+
+
+def _parent_form_error(code):
+    return _PARENT_FORM_ERRORS.get(code, "Invalid parent deal.")
+
+
+def _deal_parent_context(deal=None):
+    if deal:
+        return {
+            "parent_candidates": list_parent_candidates(
+                deal["partner_id"], exclude_deal_id=deal["id"],
+            ),
+            "child_deals": list_deals(parent_deal_id=deal["id"]),
+        }
+    return {"parent_candidates": list_deals(), "child_deals": []}
+
+
+def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal_id=None,
+                   error=None, status_code=200):
+    ctx = {
         "request": request, "user": user, "partners": list_partners(),
         "services": list_services(active_only=True), "preselect_partner_id": partner_id,
         "deal": None, "partner": None, "service": None,
         "csrf_token": generate_csrf_token(),
-        "form_tags": None, "error": None,
-    })
+        "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
+        "error": error,
+    }
+    ctx.update(_deal_parent_context())
+    return templates.TemplateResponse("admin/deal_form.html", ctx, status_code=status_code)
+
+
+def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
+                    form_parent_deal_id=None, error=None, status_code=200):
+    ctx = {
+        "request": request, "user": user, "deal": deal,
+        "partner": partner, "service": service,
+        "csrf_token": generate_csrf_token(),
+        "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
+        "error": error,
+    }
+    ctx.update(_deal_parent_context(deal))
+    return templates.TemplateResponse("admin/deal_form.html", ctx, status_code=status_code)
+
+
+def _annotate_child_counts(columns):
+    visible = [d for col in columns for d in col["deals"]]
+    counts = {}
+    for d in visible:
+        parent = d.get("parent_deal_id")
+        if parent:
+            counts[parent] = counts.get(parent, 0) + 1
+    for d in visible:
+        d["child_count"] = counts.get(d["id"], 0)
+    return columns
+
+
+@router.get("/deals/new", response_class=HTMLResponse)
+async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(require_login)):
+    return _new_deal_form(request, user, partner_id=partner_id)
 
 
 @router.post("/deals/new")
@@ -491,6 +547,7 @@ async def new_deal_submit(
     value_estimate: str = Form(""), pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
+    parent_deal_id: str = Form(""),
     tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
@@ -498,19 +555,24 @@ async def new_deal_submit(
         return RedirectResponse("/deals/new", status_code=303)
     parsed_tags, tag_error = parse_tag_list(tags)
     if tag_error:
-        return templates.TemplateResponse("admin/deal_form.html", {
-            "request": request, "user": user, "partners": list_partners(),
-            "services": list_services(active_only=True), "preselect_partner_id": partner_id,
-            "deal": None, "partner": None, "service": None,
-            "csrf_token": generate_csrf_token(),
-            "form_tags": tags, "error": tag_error,
-        }, status_code=400)
+        return _new_deal_form(
+            request, user, partner_id=partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=tag_error, status_code=400,
+        )
+    cleaned_parent, parent_error = validate_parent_link(None, parent_deal_id, partner_id)
+    if parent_error:
+        return _new_deal_form(
+            request, user, partner_id=partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=_parent_form_error(parent_error),
+            status_code=400,
+        )
     create_deal(
         partner_id, service_id, source=source,
         value_estimate=float(value_estimate) if value_estimate else None,
         pain_points=pain_points, goals=goals,
         next_action=next_action, next_action_date=next_action_date or None,
         owner_key=owner_key, external_ref=external_ref,
+        parent_deal_id=cleaned_parent,
         tags=parsed_tags or None,
     )
     return RedirectResponse(f"/partners/{partner_id}", status_code=303)
@@ -525,12 +587,7 @@ async def edit_deal_page(request: Request, deal_id: int, user=Depends(require_lo
     service = get_service(deal["service_id"])
     if not partner or not service:
         return RedirectResponse("/deals", status_code=303)
-    return templates.TemplateResponse("admin/deal_form.html", {
-        "request": request, "user": user, "deal": deal,
-        "partner": partner, "service": service,
-        "csrf_token": generate_csrf_token(),
-        "form_tags": None, "error": None,
-    })
+    return _edit_deal_form(request, user, deal, partner, service)
 
 
 @router.post("/deals/{deal_id}/edit")
@@ -540,6 +597,7 @@ async def edit_deal_submit(
     pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
+    parent_deal_id: str = Form(""),
     tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
@@ -554,12 +612,19 @@ async def edit_deal_submit(
         return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
     parsed_tags, tag_error = parse_tag_list(tags)
     if tag_error:
-        return templates.TemplateResponse("admin/deal_form.html", {
-            "request": request, "user": user, "deal": deal,
-            "partner": partner, "service": service,
-            "csrf_token": generate_csrf_token(),
-            "form_tags": tags, "error": tag_error,
-        }, status_code=400)
+        return _edit_deal_form(
+            request, user, deal, partner, service, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=tag_error, status_code=400,
+        )
+    cleaned_parent, parent_error = validate_parent_link(
+        deal_id, parent_deal_id, deal["partner_id"],
+    )
+    if parent_error:
+        return _edit_deal_form(
+            request, user, deal, partner, service, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=_parent_form_error(parent_error),
+            status_code=400,
+        )
     raw_value = value_estimate.strip()
     if not raw_value:
         value = None
@@ -578,6 +643,7 @@ async def edit_deal_submit(
         next_action_date=(next_action_date or "").strip()[:10] or None,
         owner_key=owner_key,
         external_ref=external_ref,
+        parent_deal_id=cleaned_parent,
     )
     apply_deal_tags(deal_id, replace=parsed_tags or [])
     return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
@@ -628,6 +694,7 @@ async def pipeline_board(request: Request, tag: str = "", user=Depends(require_l
         {"stage": s, "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter))}
         for s in stages
     ]
+    _annotate_child_counts(columns)
     return templates.TemplateResponse("admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,

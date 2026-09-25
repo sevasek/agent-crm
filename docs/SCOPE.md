@@ -29,6 +29,8 @@ must not live inside `app/` or run automatically at startup.
   the deals list filters by them.
 - **Follow-ups**: next action and date on every deal, due and overdue flags, a
   daily check that logs each due follow-up.
+- **Post-sale**: a follow-on is another deal (`parent_deal_id`) plus delegated
+  tasks. Not a second CRM, a fulfilment pipeline, or invoice / delivery status.
 - **Calling**: a ranked call queue (fixed formula) and a phone-first call view.
 - **Agent interface**: `POST /mcp`, with a separate key per capability.
 - **Optional outbound webhooks**: nurture enrollment on a stage change, and

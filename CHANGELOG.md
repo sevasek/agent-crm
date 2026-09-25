@@ -32,6 +32,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
   MCP / ingest / UI filter and write support. Schema v2.
+- Admin deal form can set or clear a parent deal and lists children on edit.
+  Pipeline cards show follow-on linkage. Post-sale work is child deals plus
+  delegated tasks (closes #10; no fulfilment module).
 
 ### Changed
 

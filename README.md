@@ -81,6 +81,7 @@ Full tool list, auth and limits: [`docs/MCP.md`](docs/MCP.md).
 - Lead ingest over an API or CLI, with duplicate matching.
 - Tags on deals (a campaign, a region, anything else you want to filter by),
   set from the deals page or from the agent.
+- Follow-on (post-sale) work is another deal linked with `parent_deal_id`, plus delegated tasks — not a separate fulfilment module.
 - Delegated tasks to hand work to another agent or a person, with an optional webhook.
 - An optional webhook when a deal enters a nurture stage.
 

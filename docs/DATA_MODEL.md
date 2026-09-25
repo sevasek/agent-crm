@@ -89,7 +89,7 @@ The catalogue. Operator-defined and empty on a fresh install.
 | `offer_id` | INTEGER | FK to `offers(id)`. Defaults to the default offer on create. |
 | `owner_key` | TEXT | Owner slug. |
 | `external_ref` | TEXT | Caller's own id, for example from a source system. A value that is a `campaign:` tag slug is copied onto a tag the first time `deal_tags` is created; the ref itself is left unchanged. |
-| `parent_deal_id` | INTEGER | FK to `deals(id)`. Links a follow-on deal to its parent. Same partner required; cycles rejected at the service layer. |
+| `parent_deal_id` | INTEGER | FK to `deals(id)`. Links a follow-on deal to its parent. Same partner required; cycles rejected at the service layer. This is the post-sale primitive (issue #10): not `delivery_status`, invoice state, or a second pipeline. |
 
 ### `deal_tags`
 
@@ -220,6 +220,16 @@ project manager: a title, a brief, an owner and a status tied to a deal.
 | `created_at`, `updated_at` | TEXT | |
 
 See [`MCP.md`](MCP.md) for the webhook behaviour.
+
+### Post-sale / follow-on deals
+
+Issue #10 asked whether the CRM should grow a fulfilment module (invoice
+status, `delivery_status`, a second pipeline). It does not. A won sale that
+still needs work is another deal whose `parent_deal_id` points at the original,
+plus `delegated_tasks` for hand-offs. Same partner; cycles are rejected. The
+admin deal form sets or clears the link and lists children; pipeline cards
+show "follow-on of #N" and a child count; `get_deal` returns `child_deals`.
+That is the post-sale model.
 
 ### Indexes
 

@@ -32,6 +32,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
   MCP / ingest / UI filter and write support. Schema v2.
+- Online sqlite backup and restore (`./scripts/backup.sh`,
+  `./scripts/restore.sh`): backup API (safe under load), `PRAGMA
+  integrity_check`, mode-0600 files in `./backups/`, `BACKUP_KEEP_DAYS`
+  pruning, and an optional restic/rclone/S3 hook. Cron and systemd
+  examples ship beside the scripts.
+- Operator notes for cutting the first `v*` tag and what the GHCR
+  workflow publishes, in [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ### Changed
 
@@ -42,5 +49,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - `python-multipart` 0.0.20 → 0.0.31 and `python-dotenv` 1.0.1 → 1.2.2 (safe
   pin bumps for known CVEs). FastAPI/uvicorn/Starlette are unchanged; Dependabot
   can propose those later.
+- Rate limits: failed login, lead/stages ingest, MCP, and OAuth
+  register/token/authorize-POST count toward a per-IP guessing bucket. A
+  valid key or OAuth client uses a larger bucket keyed on the key/token
+  id (`env:CRM_*`, `userkey:{id}`, `oauth:{client_id}`), so a flood of
+  bad keys cannot lock out the agent. Authorize GET (the form) and
+  well-known metadata are not counted.
 
 [Unreleased]: https://github.com/sevasek/agent-crm/compare/main...HEAD

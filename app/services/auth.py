@@ -235,6 +235,10 @@ RATE_LIMIT_MAX_AUTH_BY_ACTION = {
     "leads_api": 120,
     "stages_api": 120,
     "mcp_api": 600,
+    # Successful OAuth register/token, keyed on oauth:{client_id}.
+    # Guess caps stay in RATE_LIMIT_MAX_BY_ACTION (register 10, token 20).
+    "oauth_register": 40,
+    "oauth_token": 80,
 }
 
 _rate_limit_hits: dict[str, deque[float]] = defaultdict(deque)

@@ -83,6 +83,7 @@ Full tool list, auth and limits: [`docs/MCP.md`](docs/MCP.md).
   set from the deals page or from the agent.
 - Delegated tasks to hand work to another agent or a person, with an optional webhook.
 - An optional webhook when a deal enters a nurture stage.
+- An optional webhook when a deal is won, for invoice hand-off.
 
 It starts empty apart from a starter pipeline: services, offers and fit rules
 are yours to define. Judgement lives in your agent, not in the CRM; scores are

@@ -1,10 +1,19 @@
 import sqlite3
 import os
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 import logging
 
 IntegrityConflict = sqlite3.IntegrityError
+
+# Bump when adding a numbered migration. Existing DBs with no user_version
+# (PRAGMA returns 0) are treated as version 0 and migrated, not rejected.
+SCHEMA_VERSION = 1
+
+
+class SchemaVersionError(RuntimeError):
+    """The on-disk schema is newer than this code; refuse to start."""
 
 # sqlite3.connect default. Request handlers stay here so a locked write fails
 # in ~5s instead of holding a worker thread. Seed CLI uses db_timeout(30).
@@ -56,9 +65,96 @@ def get_db(timeout=None):
         conn.close()
 
 
-def init_db():
-    with get_db() as db:
-        db.executescript("""
+def get_user_version(conn) -> int:
+    """PRAGMA user_version; 0 means a legacy DB that has never been versioned."""
+    return int(conn.execute("PRAGMA user_version").fetchone()[0])
+
+
+def _schema_too_new_message(current: int) -> str:
+    return (
+        f"Database schema version {current} is newer than this code "
+        f"(supports up to {SCHEMA_VERSION}). Refusing to start so an older "
+        f"container cannot mutate a newer schema. Deploy a matching image, "
+        f"or restore the backup taken automatically before the upgrade."
+    )
+
+
+@contextmanager
+def _migrate_lock(db_path: str):
+    """Exclusive file lock so app and staleness-cron do not race on migrate.
+
+    Compose is not used for start-order (a sibling change owns those files).
+    BEGIN IMMEDIATE on the sqlite file is a second layer inside init_db().
+    """
+    import fcntl
+
+    lock_path = f"{os.path.abspath(db_path)}.migrate.lock"
+    os.makedirs(os.path.dirname(os.path.abspath(db_path)) or ".", exist_ok=True)
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def _has_user_tables(conn) -> bool:
+    row = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master "
+        "WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    ).fetchone()
+    return row[0] > 0
+
+
+def _backup_before_migrate(from_ver: int, to_ver: int) -> str:
+    from app.backup import default_backup_dir, online_backup
+
+    src = get_db_path()
+    dest_dir = default_backup_dir(src)
+    stamp = time.strftime("%Y-%m-%dT%H%M%SZ", time.gmtime())
+    dest = os.path.join(dest_dir, f"pre-migrate-v{from_ver}-to-v{to_ver}-{stamp}.db")
+    logger.info(
+        "Backing up %s to %s before migrating v%s -> v%s",
+        src,
+        dest,
+        from_ver,
+        to_ver,
+    )
+    return online_backup(src, dest)
+
+
+def _table_columns(db, table: str) -> set:
+    return {row["name"] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _add_column_if_missing(db, table: str, name: str, ddl: str) -> bool:
+    if name in _table_columns(db, table):
+        return False
+    db.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+    return True
+
+
+def _split_sql(script: str):
+    """Split DDL on ';' without the implicit COMMIT executescript() issues."""
+    buf = []
+    for line in script.splitlines():
+        stripped = line.split("--", 1)[0]
+        buf.append(stripped)
+    text = "\n".join(buf)
+    for part in text.split(";"):
+        stmt = part.strip()
+        if stmt:
+            yield stmt
+
+
+def _run_sql(db, script: str) -> None:
+    for stmt in _split_sql(script):
+        db.execute(stmt)
+
+
+# Additive-only. Do not DROP or RENAME columns in this series.
+_SCHEMA_V1 = """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
@@ -248,89 +344,137 @@ def init_db():
         );
         CREATE INDEX IF NOT EXISTS idx_delegated_tasks_deal ON delegated_tasks(deal_id);
         CREATE INDEX IF NOT EXISTS idx_delegated_tasks_owner_status ON delegated_tasks(owner, status);
-        """)
-        db.commit()
+"""
 
-        # deals.offer_id was added after the initial deals table shipped —
-        # SQLite has no "ADD COLUMN IF NOT EXISTS", so guard with PRAGMA
-        # table_info the same way any later ALTER on this table should.
-        existing_deal_cols = {row["name"] for row in db.execute("PRAGMA table_info(deals)").fetchall()}
-        if "offer_id" not in existing_deal_cols:
-            db.execute("ALTER TABLE deals ADD COLUMN offer_id INTEGER REFERENCES offers(id)")
-            db.commit()
 
-        # Per-platform social URLs were added after partners.social_url shipped.
-        existing_partner_cols = {row["name"] for row in db.execute("PRAGMA table_info(partners)").fetchall()}
-        added_social = False
-        for col in ("linkedin_url", "x_url", "instagram_url", "facebook_url", "youtube_url"):
-            if col not in existing_partner_cols:
-                db.execute(f"ALTER TABLE partners ADD COLUMN {col} TEXT")
-                added_social = True
-        if added_social:
-            db.commit()
-        _backfill_partner_social_urls(db)
+def migrate_001(db) -> None:
+    """Bring a version-0 (unversioned) database up to the current schema.
 
-        existing_offer_cols = {row["name"] for row in db.execute("PRAGMA table_info(offers)").fetchall()}
-        for col, ddl in (
-            ("service_id", "service_id INTEGER REFERENCES services(id)"),
-            ("price", "price REAL"),
-            ("currency", "currency TEXT"),
-            ("description", "description TEXT"),
-        ):
-            if col not in existing_offer_cols:
-                db.execute(f"ALTER TABLE offers ADD COLUMN {ddl}")
-        db.commit()
+    CREATE TABLE IF NOT EXISTS is a no-op on tables that already exist;
+    guarded ALTER TABLE ADD COLUMN covers DBs that shipped before a column.
+    Additive only — no DROP / RENAME.
+    """
+    _run_sql(db, _SCHEMA_V1)
 
-        existing_deal_cols = {row["name"] for row in db.execute("PRAGMA table_info(deals)").fetchall()}
-        if "owner_key" not in existing_deal_cols:
-            db.execute("ALTER TABLE deals ADD COLUMN owner_key TEXT")
-        if "external_ref" not in existing_deal_cols:
-            db.execute("ALTER TABLE deals ADD COLUMN external_ref TEXT")
-        if "parent_deal_id" not in existing_deal_cols:
-            db.execute("ALTER TABLE deals ADD COLUMN parent_deal_id INTEGER REFERENCES deals(id)")
-        db.commit()
-        db.execute("CREATE INDEX IF NOT EXISTS idx_deals_owner ON deals(owner_key)")
-        db.execute("CREATE INDEX IF NOT EXISTS idx_deals_parent ON deals(parent_deal_id)")
-        db.commit()
+    # deals.offer_id was added after the initial deals table shipped —
+    # SQLite has no "ADD COLUMN IF NOT EXISTS", so guard with PRAGMA
+    # table_info the same way any later ALTER on this table should.
+    _add_column_if_missing(db, "deals", "offer_id", "offer_id INTEGER REFERENCES offers(id)")
 
-        existing_partner_cols = {row["name"] for row in db.execute("PRAGMA table_info(partners)").fetchall()}
-        if "owner_key" not in existing_partner_cols:
-            db.execute("ALTER TABLE partners ADD COLUMN owner_key TEXT")
-            db.commit()
+    for col in ("linkedin_url", "x_url", "instagram_url", "facebook_url", "youtube_url"):
+        _add_column_if_missing(db, "partners", col, f"{col} TEXT")
+    _backfill_partner_social_urls(db)
 
-        existing_task_cols = {
-            row["name"] for row in db.execute("PRAGMA table_info(delegated_tasks)").fetchall()
-        }
-        if existing_task_cols:
-            if "webhook_last_attempt_at" not in existing_task_cols:
-                db.execute("ALTER TABLE delegated_tasks ADD COLUMN webhook_last_attempt_at TEXT")
-            if "webhook_last_error" not in existing_task_cols:
-                db.execute("ALTER TABLE delegated_tasks ADD COLUMN webhook_last_error TEXT")
-            db.commit()
+    for col, ddl in (
+        ("service_id", "service_id INTEGER REFERENCES services(id)"),
+        ("price", "price REAL"),
+        ("currency", "currency TEXT"),
+        ("description", "description TEXT"),
+    ):
+        _add_column_if_missing(db, "offers", col, ddl)
 
-        from app.services.offers import seed_starter_offers
-        seed_starter_offers()
+    _add_column_if_missing(db, "deals", "owner_key", "owner_key TEXT")
+    _add_column_if_missing(db, "deals", "external_ref", "external_ref TEXT")
+    _add_column_if_missing(
+        db, "deals", "parent_deal_id", "parent_deal_id INTEGER REFERENCES deals(id)"
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_deals_owner ON deals(owner_key)")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_deals_parent ON deals(parent_deal_id)")
 
-        # Seed the default pipeline once. Existing behavior (new -> contacted ->
-        # qualified -> nurture -> proposal -> won/lost) becomes the starting
-        # configuration rather than a hardcoded constant; every field below is
-        # editable afterwards through /admin/stages or /api/v1/stages.
+    _add_column_if_missing(db, "partners", "owner_key", "owner_key TEXT")
+
+    if _table_columns(db, "delegated_tasks"):
+        _add_column_if_missing(
+            db, "delegated_tasks", "webhook_last_attempt_at", "webhook_last_attempt_at TEXT"
+        )
+        _add_column_if_missing(
+            db, "delegated_tasks", "webhook_last_error", "webhook_last_error TEXT"
+        )
+
+
+# version number -> migration applied when moving *to* that version
+MIGRATIONS = {
+    1: migrate_001,
+}
+
+
+def _seed_runtime_data() -> None:
+    from app.services.offers import seed_starter_offers
+
+    seed_starter_offers()
+
+    # Seed the default pipeline once. Existing behavior (new -> contacted ->
+    # qualified -> nurture -> proposal -> won/lost) becomes the starting
+    # configuration rather than a hardcoded constant; every field below is
+    # editable afterwards through /admin/stages or /api/v1/stages.
+    with get_db() as db:
         seeded = db.execute("SELECT COUNT(*) AS n FROM pipeline_stages").fetchone()["n"]
         if not seeded:
-            db.executemany("""
+            db.executemany(
+                """
                 INSERT INTO pipeline_stages
                     (key, label, position, is_default, is_qualified_pool, triggers_nurture, is_won, is_lost)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, [
-                ("new", "New", 0, 1, 0, 0, 0, 0),
-                ("contacted", "Contacted", 1, 0, 0, 0, 0, 0),
-                ("qualified", "Qualified", 2, 0, 1, 0, 0, 0),
-                ("nurture", "Nurture", 3, 0, 0, 1, 0, 0),
-                ("proposal", "Proposal", 4, 0, 0, 0, 0, 0),
-                ("won", "Won", 5, 0, 0, 0, 1, 0),
-                ("lost", "Lost", 6, 0, 0, 0, 0, 1),
-            ])
+                """,
+                [
+                    ("new", "New", 0, 1, 0, 0, 0, 0),
+                    ("contacted", "Contacted", 1, 0, 0, 0, 0, 0),
+                    ("qualified", "Qualified", 2, 0, 1, 0, 0, 0),
+                    ("nurture", "Nurture", 3, 0, 0, 1, 0, 0),
+                    ("proposal", "Proposal", 4, 0, 0, 0, 0, 0),
+                    ("won", "Won", 5, 0, 0, 0, 1, 0),
+                    ("lost", "Lost", 6, 0, 0, 0, 0, 1),
+                ],
+            )
             db.commit()
+
+
+def init_db():
+    """Create or migrate the schema. Safe for app and staleness-cron together.
+
+    * PRAGMA user_version is the source of truth (legacy files are version 0).
+    * A DB newer than SCHEMA_VERSION refuses to start.
+    * Numbered migrations run inside BEGIN IMMEDIATE.
+    * An online backup is taken before migrating a database that already
+      has application tables. Fresh empty files skip the backup.
+    * A file lock plus the sqlite write lock serializes concurrent callers.
+    """
+    db_path = get_db_path()
+    with _migrate_lock(db_path):
+        with get_db() as db:
+            current = get_user_version(db)
+            if current > SCHEMA_VERSION:
+                raise SchemaVersionError(_schema_too_new_message(current))
+            needs_backup = current < SCHEMA_VERSION and _has_user_tables(db)
+        if needs_backup:
+            _backup_before_migrate(current, SCHEMA_VERSION)
+        with get_db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                current = get_user_version(db)
+                if current > SCHEMA_VERSION:
+                    db.execute("ROLLBACK")
+                    raise SchemaVersionError(_schema_too_new_message(current))
+                if current < SCHEMA_VERSION:
+                    for ver in range(current + 1, SCHEMA_VERSION + 1):
+                        migrate = MIGRATIONS.get(ver)
+                        if migrate is None:
+                            raise SchemaVersionError(
+                                f"No migration defined for schema version {ver}"
+                            )
+                        logger.info("Applying schema migration %s", ver)
+                        migrate(db)
+                    db.execute(f"PRAGMA user_version = {int(SCHEMA_VERSION)}")
+                db.commit()
+            except SchemaVersionError:
+                raise
+            except Exception:
+                try:
+                    db.rollback()
+                except sqlite3.Error:
+                    pass
+                raise
+        _seed_runtime_data()
 
 
 def _backfill_partner_social_urls(db):
@@ -368,5 +512,4 @@ def _backfill_partner_social_urls(db):
             ),
         )
         changed = True
-    if changed:
-        db.commit()
+    return changed

@@ -41,9 +41,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   Dependabot can bump the digest; a floating `3.12-slim` tag is no longer used.
 - `python-multipart` 0.0.20 → 0.0.31 and `python-dotenv` 1.0.1 → 1.2.2 (safe
   pin bumps for known CVEs).
-- FastAPI 0.115.0 → 0.133.0 so pip can resolve Starlette 1.3.1+ (0.115.0
-  requires `starlette<0.39`; even 0.115.12 only allows `<0.47`). uvicorn
-  stays 0.30.6.
+- FastAPI 0.115.0 → 0.133.0 and pin Starlette 1.3.1 (smallest release that
+  clears current pip-audit; 0.115.0 requires `starlette<0.39`, and even
+  0.115.12 only allows `<0.47`). uvicorn stays 0.30.6. Jinja2
+  `TemplateResponse` calls use the Starlette 1.x `(request, name, context)`
+  order.
 
 ### Security
 

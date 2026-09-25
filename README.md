@@ -165,7 +165,9 @@ markdown files, see `scripts/import_clients.py`.
 
 ## Contributing
 
-The scope is deliberately narrow, so please open an issue to discuss a feature
+Planned work, known gaps and deferred ideas are tracked in
+[GitHub Issues](https://github.com/sevasek/agent-crm/issues); there is no separate
+TODO file. The scope is deliberately narrow, so please open an issue to discuss a feature
 before sending a pull request. Bug fixes are welcome directly. Run the tests
 first:
 

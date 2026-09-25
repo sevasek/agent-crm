@@ -1,0 +1,39 @@
+# Do not COPY secrets, git history, or live sqlite into the image.
+# The Dockerfile does `COPY . .`; anything not listed here becomes a layer.
+
+# Secrets (keep the example so operators can see it in the image)
+.env
+.env.*
+!.env.example
+
+# Runtime data and sqlite files (bind-mounted at /app/data)
+data/
+*.db
+*.db-*
+
+# VCS
+.git
+.gitignore
+
+# Python caches / virtualenvs
+__pycache__/
+.pytest_cache/
+*.py[cod]
+.venv/
+venv/
+
+# Not needed at runtime
+tests/
+docs/
+.github/
+*.md
+.gitleaks.toml
+
+# IDE / OS / local overrides
+.idea/
+.vscode/
+*.swp
+.DS_Store
+*.log
+docker-compose.override.yml
+.claude/

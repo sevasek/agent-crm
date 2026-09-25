@@ -79,6 +79,8 @@ Full tool list, auth and limits: [`docs/MCP.md`](docs/MCP.md).
 - A phone-first call view with tap-to-call, the offer to pitch, and one-tap outcomes.
 - Weighted fit rules, a service catalogue and priced offers you configure.
 - Lead ingest over an API or CLI, with duplicate matching.
+- Tags on deals (a campaign, a region, anything else you want to filter by),
+  set from the deals page or from the agent.
 - Delegated tasks to hand work to another agent or a person, with an optional webhook.
 - An optional webhook when a deal enters a nurture stage.
 
@@ -194,7 +196,9 @@ only one that migrates, so `app` and `staleness-cron` cannot race. If the
 on-disk version is *newer* than this code, startup refuses with a clear
 error — an older container will not mutate a newer schema. An online backup
 is taken automatically before any migration of an existing database
-(`backups/pre-migrate-vN-to-vM-*.db`).
+(`backups/pre-migrate-vN-to-vM-*.db`). Schema v2 adds `deal_tags` and, once,
+copies any `external_ref` that is a `campaign:` slug onto a tag (the ref is
+left unchanged; later startups do not restore a removed tag).
 
 To roll back: `down`, check out the previous version (or previous image),
 and restore the pre-migrate backup. Serving a published GHCR image shrinks

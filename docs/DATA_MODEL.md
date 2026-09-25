@@ -13,6 +13,7 @@ A database newer than the running code refuses to start. No ORM.
 - `partners`: people and companies.
 - `services`: what you sell (the catalogue).
 - `deals`: one pursuit of a service by a partner. Carries pipeline state.
+- `deal_tags`: labels on a deal (a campaign slug, a region, anything else).
 - `activities`: the timeline.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
@@ -87,8 +88,28 @@ The catalogue. Operator-defined and empty on a fresh install.
 | `closed_at` | TEXT | Set when the stage enters a won or lost stage. |
 | `offer_id` | INTEGER | FK to `offers(id)`. Defaults to the default offer on create. |
 | `owner_key` | TEXT | Owner slug. |
-| `external_ref` | TEXT | Caller's own id, for example from a source system. |
+| `external_ref` | TEXT | Caller's own id, for example from a source system. A value that is a `campaign:` tag slug is copied onto a tag the first time `deal_tags` is created; the ref itself is left unchanged. |
 | `parent_deal_id` | INTEGER | FK to `deals(id)`. Links a follow-on deal to its parent. Same partner required; cycles rejected at the service layer. |
+
+### `deal_tags`
+
+Labels on a deal. A campaign is a tag, not a separate table. A deal has many tags and a tag covers many deals.
+
+| Column | Type | Notes |
+|---|---|---|
+| `deal_id` | INTEGER NOT NULL | FK to `deals(id)`. With `tag`, the primary key. |
+| `tag` | TEXT NOT NULL | Lowercase slug of letters, digits, hyphens and colons. Examples: `campaign:icp-hc-illawarra-2026-09`, `church`, `illawarra`. At most 80 characters. |
+
+`get_deal` and `list_deals` always include `tags`, an empty list when the deal has none. `list_deals` accepts `tags` (one or more). A deal must carry every listed tag, and the filter combines with stage, owner, service and parent. `list_tags` returns each tag in use with a `count` of deals.
+
+Writes:
+
+- `create_deal` takes `tags` and sets them on the new row.
+- `update_deal` takes `tags` to replace the set (`[]` clears it). `add_tags` and `remove_tags` merge, and run after a replace when both are sent (`remove_tags` wins on overlap). Omitting all three leaves the set alone.
+- `bulk_update_deals` takes `add_tags` / `remove_tags` for the same selection it already uses (`deal_ids`, or `service_slug` plus optional stage and owner).
+- Lead ingest (`POST /api/v1/leads` and MCP `ingest_leads`) takes an optional `tags` array. A re-run merges those tags onto the open deal. Leaving `tags` off the payload leaves the existing set alone. Entries that are not valid slugs are dropped so one bad label cannot fail the lead.
+
+Schema v2 (`migrate_002`) creates `deal_tags` and copies any `external_ref` whose lowercased form is a `campaign:` slug onto a tag. Later startups do not repeat that copy, so removing a tag sticks. `external_ref` is not rewritten.
 
 ### `activities`
 
@@ -205,8 +226,9 @@ See [`MCP.md`](MCP.md) for the webhook behaviour.
 `partners.parent_id`, `deals.partner_id`, `deals.stage`, `deals.owner_key`,
 `deals.parent_deal_id`, `activities.partner_id`, `activities.deal_id`,
 `pipeline_stages.position`, `api_keys.user_id`, `delegated_tasks.deal_id`,
-`delegated_tasks(owner, status)`. `offers` and `icp_criteria` are small and
-scanned in full.
+`delegated_tasks(owner, status)`, `deal_tags(tag)` (the primary key on
+`(deal_id, tag)` covers lookups by deal). `offers` and `icp_criteria` are
+small and scanned in full.
 
 ## Scoring
 
@@ -279,7 +301,10 @@ operator edited. Only these keys are read; everything else is dropped:
 `address`, `social_url`, `linkedin_url`, `x_url`, `instagram_url`,
 `facebook_url`, `youtube_url`, `preferred_channel`, `industry`, `team_size`,
 `source`, `value_estimate`, `pain_points`, `goals`, `next_action`,
-`next_action_date`, `is_company`, `owner_key`, `offer_id`, `external_ref`.
+`next_action_date`, `is_company`, `owner_key`, `offer_id`, `external_ref`,
+`tags`. `tags`, when present, is an array of slugs merged onto the deal.
+Omitting it leaves any tags the deal already has. Invalid slugs in the array
+are dropped.
 Numbers are coerced and bad types become `invalid` or null, never a traceback.
 
 The CLI exits 0 only when every lead is `created`, `duplicate_open_deal` or

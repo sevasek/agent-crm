@@ -2,6 +2,9 @@ from datetime import datetime
 
 from app.database import get_db
 from app.services.auth import clean_owner_key, sanitize_text
+from app.services.deal_tags import (
+    apply_deal_tags, attach_tags, coerce_tag_filter, parse_tag_list, tags_for_deal,
+)
 from app.services.activities import log_activity
 from app.services.catalog import get_service
 from app.services.partners import get_partner
@@ -70,7 +73,7 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
                  next_action: str = "", next_action_date: str = "", pain_points: str = "", goals: str = "",
                  created_note: str = "Deal created", stage: str = None, offer_id: int = None,
                  owner_key: str = "", external_ref: str = "", parent_deal_id=None,
-                 attach_default_offer: bool = True):
+                 attach_default_offer: bool = True, tags=None):
     if not stage or not pipeline_stages.get_stage(stage):
         stage = pipeline_stages.default_stage_key()
     if offer_id and get_offer(offer_id):
@@ -103,6 +106,9 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
         ))
         db.commit()
         deal_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    cleaned_tags, _tag_error = parse_tag_list(tags) if tags else (None, None)
+    if cleaned_tags:
+        apply_deal_tags(deal_id, replace=cleaned_tags)
     log_activity(partner_id, "system", created_note, deal_id=deal_id)
     return deal_id
 
@@ -110,7 +116,11 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
 def get_deal(deal_id: int):
     with get_db() as db:
         row = db.execute("SELECT * FROM deals WHERE id = ?", (deal_id,)).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        deal = dict(row)
+    deal["tags"] = tags_for_deal(deal_id)
+    return deal
 
 
 def get_open_deal_for_partner_service(partner_id: int, service_id: int):
@@ -131,12 +141,19 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
                 ORDER BY created_at DESC LIMIT 1"""
             params = (partner_id, service_id)
         row = db.execute(query, params).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        deal = dict(row)
+    deal["tags"] = tags_for_deal(deal["id"])
+    return deal
 
 
 def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
                service_id: int = None, service_slug: str = None, deal_ids=None,
-               parent_deal_id: int = None):
+               parent_deal_id: int = None, tags=None):
+    wanted_tags, impossible = coerce_tag_filter(tags)
+    if impossible:
+        return []
     query = """
         SELECT deals.*, partners.name AS partner_name, services.name AS service_name,
                services.slug AS service_slug
@@ -146,6 +163,12 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
         WHERE 1=1
     """
     params = []
+    for tag in wanted_tags:
+        query += (
+            " AND EXISTS (SELECT 1 FROM deal_tags"
+            " WHERE deal_tags.deal_id = deals.id AND deal_tags.tag = ?)"
+        )
+        params.append(tag)
     if stage:
         query += " AND deals.stage = ?"
         params.append(stage)
@@ -177,7 +200,8 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
     query += " ORDER BY deals.updated_at DESC"
     with get_db() as db:
         rows = db.execute(query, params).fetchall()
-        return [dict(r) for r in rows]
+        deals = [dict(r) for r in rows]
+    return attach_tags(deals)
 
 
 def validate_parent_link(deal_id, parent_deal_id, partner_id):

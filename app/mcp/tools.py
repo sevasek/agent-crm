@@ -41,6 +41,7 @@ from app.services.catalog import (
     slug_from_name,
     update_catalog_service,
 )
+from app.services.deal_tags import TAG_HELP, MAX_TAGS, apply_deal_tags, list_tags, parse_tag_list
 from app.services.deals import (
     CALL_OUTCOMES,
     create_deal,
@@ -177,6 +178,50 @@ def _partner_updates(arguments):
     return updates, None
 
 
+def _parse_tags_arg(value):
+    tags, err = parse_tag_list(value)
+    if err:
+        return None, _err("invalid_tag", err)
+    return tags, None
+
+
+def _tag_filter_arg(arguments):
+    """`tags` (one or more, match all) plus an optional single `tag`. Both AND together."""
+    if "tag" not in arguments and "tags" not in arguments:
+        return None, None
+    raw = []
+    if "tag" in arguments and arguments.get("tag") not in (None, ""):
+        tag_val = arguments.get("tag")
+        if not isinstance(tag_val, str):
+            return None, _err("invalid_tag", f"tag must be a string. {TAG_HELP}")
+        raw.append(tag_val)
+    if "tags" in arguments and arguments.get("tags") not in (None, "", []):
+        tags_val = arguments.get("tags")
+        if isinstance(tags_val, str):
+            raw.append(tags_val)
+        elif isinstance(tags_val, list):
+            raw.extend(tags_val)
+        else:
+            return None, _err("invalid_tag", f"tags must be an array of strings. {TAG_HELP}")
+    if not raw:
+        return None, None
+    return _parse_tags_arg(raw)
+
+
+def _tag_ops_arg(arguments):
+    """update_deal: `tags` replaces; `add_tags` / `remove_tags` merge afterwards."""
+    ops = {}
+    for key, dest in (("tags", "replace"), ("add_tags", "add"), ("remove_tags", "remove")):
+        if key not in arguments:
+            continue
+        raw = arguments.get(key)
+        parsed, error = _parse_tags_arg([] if raw is None else raw)
+        if error:
+            return None, error
+        ops[dest] = parsed
+    return ops, None
+
+
 def _owner_arg(arguments):
     raw = arguments.get("owner_key")
     if raw in (None, ""):
@@ -273,9 +318,14 @@ def list_deals_tool(arguments):
     if arguments.get("parent_deal_id") not in (None, "") and (parent_deal_id is None or parent_deal_id < 1):
         return _err("invalid_id", "parent_deal_id must be a positive integer")
     due_only = as_bool(arguments.get("due_only"), default=False)
+    tag_filter, error = _tag_filter_arg(arguments)
+    if error:
+        return error
     limit = clamp_limit(arguments.get("limit"))
     if due_only:
-        rows = list_due_deals(stage=stage, owner_key=owner_key, service_slug=service_slug)
+        rows = list_due_deals(
+            stage=stage, owner_key=owner_key, service_slug=service_slug, tags=tag_filter,
+        )
         if partner_id:
             rows = [d for d in rows if d["partner_id"] == partner_id]
         if parent_deal_id:
@@ -283,7 +333,7 @@ def list_deals_tool(arguments):
     else:
         rows = list_deals(
             stage=stage, partner_id=partner_id, owner_key=owner_key, service_slug=service_slug,
-            parent_deal_id=parent_deal_id,
+            parent_deal_id=parent_deal_id, tags=tag_filter,
         )
     sliced, truncated = paginate(rows, limit)
     return _ok(
@@ -295,6 +345,7 @@ def list_deals_tool(arguments):
         owner_key=owner_key,
         service_slug=service_slug,
         parent_deal_id=parent_deal_id,
+        tags=tag_filter,
     )
 
 
@@ -403,6 +454,11 @@ def list_due_followups_tool(arguments):
         truncated=truncated,
         owner_key=owner_key,
     )
+
+
+def list_tags_tool(_arguments):
+    rows = list_tags()
+    return _ok(tags=rows, count=len(rows))
 
 
 def list_catalog_tool(_arguments):
@@ -521,6 +577,11 @@ def create_deal_tool(arguments):
     service, error = _resolve_service(arguments)
     if error:
         return error
+    tags = None
+    if "tags" in arguments:
+        tags, error = _parse_tags_arg(arguments.get("tags"))
+        if error:
+            return error
     existing = get_open_deal_for_partner_service(partner_id, service["id"])
     if existing:
         return _ok(
@@ -555,6 +616,7 @@ def create_deal_tool(arguments):
         owner_key=_owner_arg(arguments) or as_text(arguments.get("owner_key")),
         external_ref=as_text(arguments.get("external_ref")),
         parent_deal_id=parent_deal_id,
+        tags=tags,
     )
     return _ok(status="created", deal=deal_brief(get_deal(deal_id)), partner=partner_brief(partner))
 
@@ -566,15 +628,27 @@ def update_deal_tool(arguments):
     deal, error = _require_deal(deal_id)
     if error:
         return error
+    tag_ops, error = _tag_ops_arg(arguments)
+    if error:
+        return error
     updates = _deal_updates(arguments)
-    if not updates:
-        return _err("no_fields", "Pass at least one deal field to change (not stage — use set_deal_stage)")
+    if not updates and not tag_ops:
+        return _err(
+            "no_fields",
+            "Pass at least one deal field to change (not stage — use set_deal_stage). "
+            "tags replaces the set; add_tags and remove_tags merge.",
+        )
     if "parent_deal_id" in updates:
         cleaned, error = validate_parent_link(deal_id, updates["parent_deal_id"], deal["partner_id"])
         if error:
             return _parent_error(error)
         updates["parent_deal_id"] = cleaned
-    update_deal_fields(deal_id, **updates)
+    if updates:
+        update_deal_fields(deal_id, **updates)
+    if tag_ops:
+        tag_error = apply_deal_tags(deal_id, **tag_ops)
+        if tag_error:
+            return _err(tag_error, "Could not update tags on that deal")
     return _ok(status="updated", deal=deal_brief(get_deal(deal_id)))
 
 
@@ -826,8 +900,21 @@ def bulk_update_deals_tool(arguments):
         next_action = as_text(next_action)
     if next_action_date is not None:
         next_action_date = as_text(next_action_date).strip()[:10] or None
-    if not set_stage and next_action is None and next_action_date is None:
-        return _err("no_fields", "Pass set_stage and/or next_action / next_action_date")
+    add_tags = None
+    remove_tags = None
+    if "add_tags" in arguments:
+        add_tags, error = _parse_tags_arg(arguments.get("add_tags"))
+        if error:
+            return error
+    if "remove_tags" in arguments:
+        remove_tags, error = _parse_tags_arg(arguments.get("remove_tags"))
+        if error:
+            return error
+    if not set_stage and next_action is None and next_action_date is None and not add_tags and not remove_tags:
+        return _err(
+            "no_fields",
+            "Pass set_stage, next_action / next_action_date, and/or add_tags / remove_tags",
+        )
 
     rows = list_deals(
         stage=stage_filter,
@@ -848,6 +935,8 @@ def bulk_update_deals_tool(arguments):
             fields["next_action_date"] = next_action_date
         if fields:
             update_deal_fields(deal["id"], **fields)
+        if add_tags or remove_tags:
+            apply_deal_tags(deal["id"], add=add_tags, remove=remove_tags)
         updated.append(deal["id"])
     return _ok(
         status="updated",
@@ -1004,6 +1093,15 @@ _OWNER_PROP = {
     "type": "string",
     "description": "Assignee slug (alice, bob, sales-agent). Letters, digits, hyphens.",
 }
+_TAGS_PROP = {
+    "type": "array",
+    "items": {"type": "string"},
+    "maxItems": MAX_TAGS,
+    "description": (
+        "Lowercase slugs of letters, digits, hyphens and colons "
+        "(campaign:icp-hc-illawarra-2026-09, church, illawarra)."
+    ),
+}
 
 TOOLS = [
     {
@@ -1058,8 +1156,11 @@ TOOLS = [
         "name": "list_deals",
         "description": (
             "List deals, optionally filtered by pipeline stage key, partner_id, "
-            "owner / owner_key (alice, bob, sales-agent), service_slug, and "
-            "parent_deal_id (follow-on deals). "
+            "owner / owner_key (alice, bob, sales-agent), service_slug, "
+            "parent_deal_id (follow-on deals), and tags. "
+            "tags is one or more slugs; a deal must carry every one of them. "
+            "tag is a single-tag alias, combined with tags the same way. "
+            "Each deal includes tags (an empty array when it has none). "
             "due_only=true is the follow-up queue (next_action_date today or earlier)."
         ),
         "inputSchema": {
@@ -1076,6 +1177,18 @@ TOOLS = [
                     "minimum": 1,
                     "description": "Only child deals of this parent (HC ladder).",
                 },
+                "tag": {
+                    "type": "string",
+                    "description": "Single tag. Combined with tags; the deal must carry every tag.",
+                },
+                "tags": {
+                    **_TAGS_PROP,
+                    "description": (
+                        "Match deals that carry every one of these tags. "
+                        "Lowercase slugs of letters, digits, hyphens and colons "
+                        "(campaign:icp-hc-illawarra-2026-09, church)."
+                    ),
+                },
                 "due_only": {"type": "boolean", "description": "Only deals whose next action is due/overdue."},
                 "limit": _LIMIT_PROP,
             },
@@ -1090,12 +1203,31 @@ TOOLS = [
         "handler": list_deals_tool,
     },
     {
+        "name": "list_tags",
+        "description": (
+            "Tags currently in use, with how many deals carry each one. "
+            "A tag is a lowercase slug of letters, digits, hyphens and colons "
+            "(campaign:icp-hc-illawarra-2026-09, church, illawarra). "
+            "Use with list_deals(tags=...) to pull every deal in a campaign."
+        ),
+        "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+        "annotations": {
+            "title": "List tags",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": list_tags_tool,
+    },
+    {
         "name": "get_deal",
         "description": (
             "One deal plus partner, service, offer, ICP fit score, delegated_tasks, "
             "child_deals (id, service slug, stage, offer), "
             "and recent activities. The talk track for a call lives here "
-            "(pain_points, goals, next_action). parent_deal_id is on the deal."
+            "(pain_points, goals, next_action). parent_deal_id is on the deal. "
+            "tags is the deal's labels (empty array when none)."
         ),
         "inputSchema": {
             "type": "object",
@@ -1267,6 +1399,14 @@ TOOLS = [
                                 "type": "string",
                                 "description": "Freeform project/engagement ref (e.g. acme-childcare-2026). Does not clobber pain_points/goals. Timeline notes: log_activity type=note.",
                             },
+                            "tags": {
+                                **_TAGS_PROP,
+                                "description": (
+                                    "Optional labels merged onto the deal. A re-run adds "
+                                    "these and leaves tags off the payload to keep the "
+                                    "existing set. Invalid entries are dropped."
+                                ),
+                            },
                         },
                     },
                 },
@@ -1375,6 +1515,8 @@ TOOLS = [
             "exists for that pair, returns it as duplicate_open_deal instead of creating a second. "
             "parent_deal_id links a follow-on (must share partner_id; cycles rejected). "
             "For brand-new inbound leads prefer ingest_leads. "
+            "tags sets the deal's labels. A duplicate open deal is returned as-is "
+            "(tags are not merged — use update_deal add_tags, or ingest_leads, which merges). "
             "Do not invent Automation prices — attach an existing offer_id or leave empty."
         ),
         "inputSchema": {
@@ -1396,6 +1538,7 @@ TOOLS = [
                 "owner": _OWNER_PROP,
                 "owner_key": _OWNER_PROP,
                 "external_ref": {"type": "string", "description": "Freeform engagement/project ref. Does not clobber pain_points/goals."},
+                "tags": _TAGS_PROP,
                 "parent_deal_id": {
                     "type": "integer",
                     "minimum": 1,
@@ -1416,8 +1559,11 @@ TOOLS = [
         "name": "update_deal",
         "description": (
             "Edit deal fields (source, value, pain_points, goals, next_action, offer, "
-            "owner_key, external_ref, parent_deal_id). Does not change stage — use set_deal_stage, "
+            "owner_key, external_ref, parent_deal_id, tags). Does not change stage — use set_deal_stage, "
             "set_deal_owner, record_call_outcome, or bulk_update_deals. "
+            "tags replaces the whole set (tags=[] clears it). add_tags and remove_tags "
+            "merge, and are applied after tags when both are sent (remove wins on overlap). "
+            "Omitting all three leaves tags unchanged. "
             "parent_deal_id null unlinks. Child must share the parent's partner_id; cycles are rejected."
         ),
         "inputSchema": {
@@ -1436,6 +1582,18 @@ TOOLS = [
                 "owner": _OWNER_PROP,
                 "owner_key": _OWNER_PROP,
                 "external_ref": {"type": "string"},
+                "tags": {
+                    **_TAGS_PROP,
+                    "description": "Replace the deal's tags. Empty array clears them. Omit to leave tags unchanged.",
+                },
+                "add_tags": {
+                    **_TAGS_PROP,
+                    "description": "Merge these tags onto the deal. Applied after tags when both are sent.",
+                },
+                "remove_tags": {
+                    **_TAGS_PROP,
+                    "description": "Remove these tags. Applied last, so it wins over tags and add_tags.",
+                },
                 "parent_deal_id": {
                     "type": ["integer", "null"],
                     "description": "Parent deal id, or null to unlink.",
@@ -1694,11 +1852,12 @@ TOOLS = [
     {
         "name": "bulk_update_deals",
         "description": (
-            "Set stage and/or next_action + next_action_date on up to "
-            f"{MAX_BULK} deals. Pass deal_ids, or filter by service_slug "
-            "(optionally stage and owner). Uses set_deal_stage so nurture side effects fire. "
+            "Set stage and/or next_action + next_action_date, and/or add or remove tags, "
+            f"on up to {MAX_BULK} deals. Pass deal_ids, or filter by service_slug "
+            "(optionally stage and owner). add_tags merges; remove_tags drops. "
+            "Uses set_deal_stage so nurture side effects fire. "
             "Example: service_slug=dead-lead-reactivation, stage=new, set_stage=contacted, "
-            "next_action_date=today."
+            "next_action_date=today. Or deal_ids plus add_tags=[\"campaign:spring\"]."
         ),
         "inputSchema": {
             "type": "object",
@@ -1716,6 +1875,14 @@ TOOLS = [
                 "set_stage": {"type": "string", "description": "Move matching deals to this stage key."},
                 "next_action": {"type": "string"},
                 "next_action_date": {"type": "string", "description": "YYYY-MM-DD"},
+                "add_tags": {
+                    **_TAGS_PROP,
+                    "description": "Merge these tags onto every selected deal.",
+                },
+                "remove_tags": {
+                    **_TAGS_PROP,
+                    "description": "Remove these tags from every selected deal. Applied after add_tags.",
+                },
             },
         },
         "annotations": {

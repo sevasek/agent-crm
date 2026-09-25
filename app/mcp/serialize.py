@@ -18,6 +18,7 @@ _DEAL_FIELDS = (
     "owner_key", "external_ref", "parent_deal_id",
     "created_at", "updated_at", "closed_at",
     "partner_name", "service_name", "service_slug",
+    "tags",
 )
 
 
@@ -49,6 +50,7 @@ def deal_brief(deal):
         return None
     annotated = annotate_deal(deal)
     out = _pick(annotated, _DEAL_FIELDS)
+    out["tags"] = list(annotated.get("tags") or [])
     out["due_status"] = annotated.get("due_status")
     out["days_overdue"] = annotated.get("days_overdue")
     if annotated.get("action_date"):

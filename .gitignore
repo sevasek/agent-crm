@@ -9,6 +9,13 @@ venv/
 data/
 *.db
 
+# Local backups (PII). Keep them out of ./data and the Docker build context.
+/backups/
+
+# Per-instance state from scripts/new-instance.sh (secrets + port registry)
+/instances/*
+!/instances/.gitignore
+
 # Environment
 .env
 .env.*

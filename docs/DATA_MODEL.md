@@ -4,9 +4,9 @@ Entities, schema, the deal pipeline, nurture hand-off and lead ingest. For what
 the app does and does not attempt, see [`SCOPE.md`](SCOPE.md). For the agent
 interface, see [`MCP.md`](MCP.md).
 
-The schema is plain `CREATE TABLE IF NOT EXISTS` statements in
-`app/database.py`, with guarded `ALTER TABLE ... ADD COLUMN` for columns added
-later. No ORM and no migration tool.
+The schema lives in `app/database.py`. `PRAGMA user_version` is the schema
+version; numbered additive migrations run inside a transaction on startup.
+A database newer than the running code refuses to start. No ORM.
 
 ## Entities
 

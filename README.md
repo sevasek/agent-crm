@@ -101,6 +101,8 @@ TLS-terminating reverse proxy in front and forward everything, including
 - `SECURE_COOKIES=true` and `BASE_URL=https://your.domain`.
 - `TRUSTED_PROXIES`: your proxy's IP, a CIDR (e.g. the compose network `172.18.0.0/16`), or a hostname, so rate limits use the real client IP.
 - `TZ`: decides what "today" means for follow-ups.
+- `CRM_PORT` and `COMPOSE_PROJECT_NAME`: set these when more than one
+  instance shares a host (see [Multiple instances on one host](#multiple-instances-on-one-host)).
 
 Security defaults: login uses expiring session cookies with CSRF protection;
 login and API endpoints are rate limited (failed auth is counted per IP;
@@ -142,38 +144,91 @@ See [`CHANGELOG.md`](CHANGELOG.md) for what changed between tags.
 ### Backup, restore and upgrade
 
 All data is one sqlite file, `./data/crm.db`, in WAL mode. Do not `cp` it while
-the app runs: you can copy a torn database. Use sqlite's online backup, which is
-safe under load (the image has no `sqlite3` CLI, so this uses Python):
+the app runs: you can copy a torn database. Use the shipped online-backup
+script (sqlite's backup API, safe under load; files are mode 0600 and land
+in `./backups/`, not `./data/`):
 
 ```bash
-docker compose exec -T app python -c "import sqlite3,sys; s=sqlite3.connect('data/crm.db'); d=sqlite3.connect(sys.argv[1]); s.backup(d); d.close()" data/backup-$(date +%F).db
+./scripts/backup.sh
 ```
 
-Daily at 03:00 from the host's crontab (adjust the path; keeps 14 days), then
-copy `./data/backup-*.db` off the machine:
+It prefers host Python against the bind-mounted file, and falls back to
+`docker compose exec` if the database is only reachable inside the container.
+It verifies `PRAGMA integrity_check` and prunes snapshots older than
+`BACKUP_KEEP_DAYS` (default 14).
 
-```cron
-0 3 * * * cd /path/to/agent-crm && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T app python -c "import sqlite3,sys; s=sqlite3.connect('data/crm.db'); d=sqlite3.connect(sys.argv[1]); s.backup(d); d.close()" data/backup-$(date +\%F).db && find data -name 'backup-*.db' -mtime +14 -delete
-```
-
-Restore:
+Nothing leaves the host until you set an off-host hook — pick one:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
-rm -f data/crm.db-wal data/crm.db-shm      # stale WAL files would corrupt the restore
-cp data/backup-YYYY-MM-DD.db data/crm.db
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# restic / any command; the backup path is appended (or substitute {})
+export BACKUP_REMOTE_CMD='restic -r s3:s3.amazonaws.com/your-bucket backup'
+# or rclone
+export BACKUP_RCLONE_DEST='remote:crm-backups'
+# or aws s3
+export BACKUP_S3_URI='s3://your-bucket/crm'
+```
+
+Do not put cloud credentials in CI; these are operator-only. Install a
+schedule from the examples (not just this README):
+
+- `scripts/backup.cron.example` — crontab / `/etc/cron.d`
+- `scripts/crm-backup.service.example` + `scripts/crm-backup.timer.example` — systemd, 03:00
+
+Restore (stops the stack, drops WAL/SHM, copies the snapshot, starts):
+
+```bash
+./scripts/restore.sh backups/crm-YYYY-MM-DDTHHMMSSZ.db
 ```
 
 The entrypoint fixes ownership of `./data` on start. Check `docker compose ps`
 shows `healthy` and you can log in.
 
-Upgrade: take a backup, then `git pull` and re-run the `up -d --build` command
-above. There is no migration tool: schema changes are applied by `init_db()` on
-startup. Before jumping several versions, read `git log -p -- app/database.py`
-for the range, and test on a copy of the backup first. To roll back, `down`,
-`git checkout` the previous version, and restore the backup taken before the
-upgrade (a newer schema may not open cleanly on older code).
+Optional sub-minute RPO: run [Litestream](https://litestream.io/) beside the
+app to replicate `data/crm.db` to S3/GCS. It is not bundled and not required.
+
+Upgrade: take a backup (`./scripts/backup.sh`), then `git pull` and re-run
+the `up -d --build` command above. `init_db()` stores `PRAGMA user_version`
+and applies numbered additive migrations inside a transaction. A process
+holding an exclusive migrate lock (file lock + `BEGIN IMMEDIATE`) is the
+only one that migrates, so `app` and `staleness-cron` cannot race. If the
+on-disk version is *newer* than this code, startup refuses with a clear
+error — an older container will not mutate a newer schema. An online backup
+is taken automatically before any migration of an existing database
+(`backups/pre-migrate-vN-to-vM-*.db`).
+
+To roll back: `down`, check out the previous version (or previous image),
+and restore the pre-migrate backup. Serving a published GHCR image shrinks
+the outage to a container swap instead of a rebuild.
+
+### Multiple instances on one host
+
+`scripts/new-instance.sh NAME TZ EMAIL` allocates the next free `CRM_PORT`
+(from `instances/ports.tsv`, starting at 8000), writes a mode-600
+`instances/$NAME/.env` with fresh `secrets.token_hex(32)` values, sets
+`COMPOSE_PROJECT_NAME=crm-$NAME`, starts the stack with
+`docker-compose.port.yml` + `docker-compose.instance.yml`, waits for
+`/health`, creates the admin via `create_admin.py` (one-time password
+printed once — `BOOTSTRAP_ADMIN_PASSWORD` is not left in the env), and
+prints a Caddy site block.
+
+`CRM_PORT` is interpolated as `127.0.0.1:${CRM_PORT:-8000}:8000`.
+`COMPOSE_PROJECT_NAME` keeps container and network names from colliding
+when two instances share a host. `TRUSTED_PROXIES` is set to the compose
+network CIDR (`172.16.0.0/12`). Use `--dry-run` to generate the env
+without Docker.
+
+Backup and restore default to `./data/crm.db` and the default compose
+project. For an instance, point them at that instance or they will copy
+or `down` the wrong stack:
+
+```bash
+export CRM_DB_PATH=instances/acme/data/crm.db
+export COMPOSE_PROJECT_NAME=crm-acme
+export CRM_ENV_FILE=instances/acme/.env
+export BACKUP_DIR=instances/acme/backups
+./scripts/backup.sh
+./scripts/restore.sh instances/acme/backups/crm-YYYY-MM-DDTHHMMSSZ.db
+```
 
 ## Ingest leads
 

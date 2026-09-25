@@ -1,0 +1,13 @@
+# Pair with scripts/crm-backup.service.example. Daily 03:00, catch up after downtime.
+
+[Unit]
+Description=Daily agent-crm sqlite backup
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=5m
+Unit=crm-backup.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+# Optional port overlay for a second instance on the same host.
+# docker-compose.prod.yml already interpolates CRM_PORT the same way;
+# this file stays so new-instance.sh can pin the port without editing
+# prod compose. Requires Docker Compose 2.24+ (!override).
+#
+#   CRM_PORT=8001 docker compose -f docker-compose.yml \
+#     -f docker-compose.prod.yml -f docker-compose.port.yml up -d
+
+services:
+  app:
+    ports: !override
+      - "127.0.0.1:${CRM_PORT:-8000}:8000"

@@ -278,6 +278,7 @@ def test_init_db_backfills_legacy_social_url(db):
         )
         conn.commit()
         _backfill_partner_social_urls(conn)
+        conn.commit()
     partner = list_partners("Legacy Lead")[0]
     assert partner["x_url"] == "https://x.com/legacy"
     assert partner["social_url"] == "https://x.com/legacy"

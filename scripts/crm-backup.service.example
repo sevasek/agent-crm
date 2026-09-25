@@ -1,0 +1,22 @@
+# Install:
+#   sudo cp scripts/crm-backup.service.example /etc/systemd/system/crm-backup.service
+#   sudo cp scripts/crm-backup.timer.example /etc/systemd/system/crm-backup.timer
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now crm-backup.timer
+#
+# Set WorkingDirectory and any BACKUP_* env to match the host.
+
+[Unit]
+Description=agent-crm sqlite online backup
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+WorkingDirectory=/opt/agent-crm
+ExecStart=/opt/agent-crm/scripts/backup.sh
+# Optional off-host hook (do not commit credentials):
+# Environment=BACKUP_RCLONE_DEST=remote:crm-backups
+# Environment=BACKUP_KEEP_DAYS=14
+# User=deploy

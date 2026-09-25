@@ -19,6 +19,9 @@ jobs:
           cp .env.example .env
           docker compose -f docker-compose.yml config --quiet
           docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+          CRM_PORT=8001 CRM_ENV_FILE=.env CRM_DATA_DIR=./data \
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+            -f docker-compose.port.yml -f docker-compose.instance.yml config --quiet
 
       - name: Assert image drops root after chowning data
         run: |

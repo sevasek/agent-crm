@@ -1,0 +1,17 @@
+# Two install recipes — do not mix them.
+#
+# 1) User crontab (`crontab -e`). No username field. Paste:
+#    0 3 * * * /bin/bash -lc 'umask 077; cd /opt/agent-crm && ./scripts/backup.sh >> /var/log/agent-crm-backup.log 2>&1'
+#
+# 2) /etc/cron.d (`sudo cp scripts/backup.cron.example /etc/cron.d/agent-crm-backup`).
+#    The username field is required. Adjust REPO and the user below.
+#
+# Daily 03:00 — keeps 14 days locally, then the off-host hook if configured.
+# Off-host: export BACKUP_REMOTE_CMD / BACKUP_RCLONE_DEST / BACKUP_S3_URI
+# in the crontab environment or a file sourced by the script.
+# umask 077 is set inside backup.sh.
+#
+# Per-instance: set CRM_DB_PATH, COMPOSE_PROJECT_NAME, CRM_ENV_FILE, BACKUP_DIR
+# to the instance paths (see README "Multiple instances on one host").
+
+0 3 * * * root /bin/bash -lc 'umask 077; cd /opt/agent-crm && /opt/agent-crm/scripts/backup.sh >> /var/log/agent-crm-backup.log 2>&1'

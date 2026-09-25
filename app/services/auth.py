@@ -1,11 +1,13 @@
 from passlib.context import CryptContext
 from itsdangerous import URLSafeTimedSerializer
+from collections import defaultdict, deque
 import hashlib
 import logging
 import math
 import os
 import re
 import secrets as secrets_module
+import threading
 import time
 from datetime import datetime
 
@@ -57,25 +59,63 @@ def count_users() -> int:
         return db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
 
 
+def _read_bootstrap_admin_password() -> tuple[str, str]:
+    """Return (password, source) for the first-admin bootstrap.
+
+    Prefer BOOTSTRAP_ADMIN_PASSWORD_FILE (Docker/Podman secret) so the
+    password is not copied into the process environment. Trailing newlines
+    from the file are stripped (secret files usually end with one). If the
+    file is set, readable and non-empty it wins over BOOTSTRAP_ADMIN_PASSWORD.
+    An unreadable or empty file is a misconfiguration: we do not fall back
+    to the env password.
+    """
+    path = (os.getenv("BOOTSTRAP_ADMIN_PASSWORD_FILE") or "").strip()
+    env_password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD") or ""
+    if not path:
+        return env_password, "env" if env_password else ""
+
+    try:
+        with open(path, encoding="utf-8") as fh:
+            file_password = fh.read().rstrip("\r\n")
+    except OSError as exc:
+        logger.error(
+            "bootstrap admin: could not read BOOTSTRAP_ADMIN_PASSWORD_FILE "
+            "(%s): %s",
+            path,
+            exc,
+        )
+        return "", "file"
+
+    if file_password:
+        return file_password, "file"
+    logger.error(
+        "bootstrap admin: BOOTSTRAP_ADMIN_PASSWORD_FILE (%s) is empty",
+        path,
+    )
+    return "", "file"
+
+
 def maybe_bootstrap_admin() -> None:
     """Create the first admin from env when the users table is empty.
 
     Production sudoers cannot `compose exec`, and create_admin.py is
-    interactive (getpass). Set BOOTSTRAP_ADMIN_EMAIL + BOOTSTRAP_ADMIN_PASSWORD
-    (optional BOOTSTRAP_ADMIN_NAME) once, start the app, log in, then delete
-    the password from .env and redeploy. Deleting the line is not enough while
-    the current container is still running — Compose already interpolated it
-    into the process environment (`docker inspect` still shows it). Empty/unset
-    env is a no-op so local dev is unchanged. Misconfiguration logs and skips
-    — never crashes startup.
+    interactive (getpass). Set BOOTSTRAP_ADMIN_EMAIL and a password via
+    BOOTSTRAP_ADMIN_PASSWORD_FILE (preferred; Docker/Podman secret) or
+    BOOTSTRAP_ADMIN_PASSWORD (optional BOOTSTRAP_ADMIN_NAME) once, start
+    the app, and log in. The FILE form never lands in `docker inspect`.
+    If the env password is used, delete it from .env and redeploy —
+    Compose already interpolated it into the process environment.
+    Empty/unset env is a no-op so local dev is unchanged. Misconfiguration
+    logs and skips — never crashes startup.
     """
     email = (os.getenv("BOOTSTRAP_ADMIN_EMAIL") or "").strip()
-    password = os.getenv("BOOTSTRAP_ADMIN_PASSWORD") or ""
+    password, password_source = _read_bootstrap_admin_password()
     name = (os.getenv("BOOTSTRAP_ADMIN_NAME") or "").strip()
 
     email_set = bool(email)
     password_set = bool(password)
-    if not email_set and not password_set:
+    file_configured = bool((os.getenv("BOOTSTRAP_ADMIN_PASSWORD_FILE") or "").strip())
+    if not email_set and not password_set and not file_configured:
         return
 
     try:
@@ -85,18 +125,25 @@ def maybe_bootstrap_admin() -> None:
         return
 
     if existing:
-        if password_set:
+        if os.getenv("BOOTSTRAP_ADMIN_PASSWORD"):
             logger.warning(
                 "BOOTSTRAP_ADMIN_PASSWORD is set but the users table is not empty. "
                 "Not creating another user and not overwriting. Delete "
                 "BOOTSTRAP_ADMIN_PASSWORD from .env and redeploy so the secret "
                 "leaves the running container (docker inspect still shows it until then)."
             )
+        elif file_configured:
+            logger.warning(
+                "BOOTSTRAP_ADMIN_PASSWORD_FILE is set but the users table is not empty. "
+                "Not creating another user and not overwriting. Unmount the secret "
+                "when you no longer need it."
+            )
         return
 
     if not email_set or not password_set:
         logger.error(
-            "bootstrap admin: BOOTSTRAP_ADMIN_EMAIL and BOOTSTRAP_ADMIN_PASSWORD "
+            "bootstrap admin: BOOTSTRAP_ADMIN_EMAIL and a password "
+            "(BOOTSTRAP_ADMIN_PASSWORD_FILE or BOOTSTRAP_ADMIN_PASSWORD) "
             "must both be set to create the first admin; skipping"
         )
         return
@@ -125,13 +172,22 @@ def maybe_bootstrap_admin() -> None:
         logger.exception("bootstrap admin: failed to create the first admin; skipping")
         return
 
-    logger.info(
-        "bootstrap admin: created user #%s (%s). After you can log in, delete "
-        "BOOTSTRAP_ADMIN_PASSWORD from .env and redeploy so the secret leaves "
-        "the running container.",
-        user_id,
-        email.strip().lower(),
-    )
+    if password_source == "file":
+        logger.info(
+            "bootstrap admin: created user #%s (%s) from "
+            "BOOTSTRAP_ADMIN_PASSWORD_FILE. After you can log in, unmount the "
+            "secret so it is no longer readable by the process.",
+            user_id,
+            email.strip().lower(),
+        )
+    else:
+        logger.info(
+            "bootstrap admin: created user #%s (%s). After you can log in, delete "
+            "BOOTSTRAP_ADMIN_PASSWORD from .env and redeploy so the secret leaves "
+            "the running container.",
+            user_id,
+            email.strip().lower(),
+        )
 
 
 def authenticate_user(email: str, password: str):
@@ -156,77 +212,119 @@ def validate_csrf_token(token: str) -> bool:
         return False
 
 
-# ==================== Rate limiting (sqlite, shared across workers) ====================
+# ==================== Rate limiting (in-memory; one uvicorn worker) ====================
 RATE_LIMIT_WINDOW = 60
-# Per-action caps. "leads_api" 30/min is the lead-ingest ceiling. The check
-# runs before _check_api_key, so that number is also the unauthenticated
-# key-guess cap per IP. The reverse proxy's allowlist is the real front door; do not
-# treat a later bump as free for abuse.
+# Unauthenticated / failed-auth caps, keyed on client IP (plus email for login).
+# Successful MCP/API requests use RATE_LIMIT_MAX_AUTH_BY_ACTION instead, keyed
+# on the key/token identity, so a flood of bad keys cannot lock out the agent.
 RATE_LIMIT_MAX_BY_ACTION = {
     "login": 5,
     "leads_api": 30,
     "stages_api": 30,
     # Bots are chatty (initialize + tools/list + several calls per turn).
-    # 120/min is the unauthenticated key-guess cap per IP as well.
+    # 120/min is the unauthenticated key-guess cap per IP.
     "mcp_api": 120,
     "oauth_register": 10,
     "oauth_token": 20,
     "oauth_authorize": 10,
     "default": 5,
 }
+# Authenticated ceilings (per key/token id, not IP). Larger than the guess cap
+# so a shared proxy IP does not throttle a busy agent.
+RATE_LIMIT_MAX_AUTH_BY_ACTION = {
+    "leads_api": 120,
+    "stages_api": 120,
+    "mcp_api": 600,
+}
+
+_rate_limit_hits: dict[str, deque[float]] = defaultdict(deque)
+_rate_limit_lock = threading.Lock()
 
 
-def check_rate_limit_retry(key: str, action: str = "default"):
+def _rate_limit_cap(action: str, authenticated: bool) -> int:
+    if authenticated:
+        if action in RATE_LIMIT_MAX_AUTH_BY_ACTION:
+            return RATE_LIMIT_MAX_AUTH_BY_ACTION[action]
+        unauth = RATE_LIMIT_MAX_BY_ACTION.get(action, RATE_LIMIT_MAX_BY_ACTION["default"])
+        return max(unauth * 4, unauth)
+    return RATE_LIMIT_MAX_BY_ACTION.get(action, RATE_LIMIT_MAX_BY_ACTION["default"])
+
+
+def _rate_limit_bucket(key: str, action: str, authenticated: bool) -> str:
+    if authenticated:
+        return f"{action}:auth:{key}"
+    return f"{action}:{key}"
+
+
+def _prune_rate_limit_bucket(bucket: str, now: float) -> deque:
+    cutoff = now - RATE_LIMIT_WINDOW
+    idle = [
+        name
+        for name, times in _rate_limit_hits.items()
+        if name != bucket and (not times or times[-1] < cutoff)
+    ]
+    for name in idle:
+        del _rate_limit_hits[name]
+    hits = _rate_limit_hits[bucket]
+    while hits and hits[0] < cutoff:
+        hits.popleft()
+    if not hits:
+        del _rate_limit_hits[bucket]
+    return hits
+
+
+def check_rate_limit_retry(key: str, action: str = "default", *, authenticated: bool = False):
     """Return (allowed, retry_after_seconds). retry_after is 0 when allowed.
 
     Sliding-window remaining time is how long until the oldest hit ages out,
-    at least 1s. Hits older than the window are deleted so rotating IPs cannot
-    grow the table forever. Stored in sqlite so two workers share one bucket.
+    at least 1s. Hits older than the window are dropped. In-memory: this app
+    runs a single uvicorn worker, so a sqlite write per request is wasted
+    (and a full/read-only disk would fail reads that only needed a limit check).
+
+    Callers should count failed auth toward the unauthenticated IP bucket, and
+    successful MCP/API requests toward the larger authenticated bucket
+    (`authenticated=True`, key = key/token id).
     """
-    full_key = f"{action}:{key}"
+    bucket = _rate_limit_bucket(key, action, authenticated)
     now = time.time()
-    cutoff = now - RATE_LIMIT_WINDOW
-    limit = RATE_LIMIT_MAX_BY_ACTION.get(action, RATE_LIMIT_MAX_BY_ACTION["default"])
-    with get_db() as conn:
-        conn.execute(
-            "DELETE FROM rate_limit_hits WHERE bucket = ? AND hit_at < ?",
-            (full_key, cutoff),
-        )
-        row = conn.execute(
-            "SELECT COUNT(*) AS c, MIN(hit_at) AS oldest "
-            "FROM rate_limit_hits WHERE bucket = ?",
-            (full_key,),
-        ).fetchone()
-        count = row["c"]
-        oldest = row["oldest"]
-        if count >= limit:
-            remaining = RATE_LIMIT_WINDOW
-            if oldest is not None:
-                remaining = max(1, math.ceil(RATE_LIMIT_WINDOW - (now - oldest)))
-            conn.commit()
+    limit = _rate_limit_cap(action, authenticated)
+    with _rate_limit_lock:
+        hits = _prune_rate_limit_bucket(bucket, now)
+        if len(hits) >= limit:
+            oldest = hits[0]
+            remaining = max(1, math.ceil(RATE_LIMIT_WINDOW - (now - oldest)))
             return False, remaining
-        conn.execute(
-            "INSERT INTO rate_limit_hits (bucket, hit_at) VALUES (?, ?)",
-            (full_key, now),
-        )
-        conn.commit()
+        hits.append(now)
+        _rate_limit_hits[bucket] = hits
     return True, 0
 
 
-def check_rate_limit(key: str, action: str = "default") -> bool:
-    allowed, _retry_after = check_rate_limit_retry(key, action)
+def check_rate_limit(key: str, action: str = "default", *, authenticated: bool = False) -> bool:
+    allowed, _retry_after = check_rate_limit_retry(key, action, authenticated=authenticated)
     return allowed
 
 
 def clear_rate_limits() -> None:
     """Drop every stored hit. Tests call this between cases."""
-    with get_db() as conn:
-        conn.execute("DELETE FROM rate_limit_hits")
-        conn.commit()
+    with _rate_limit_lock:
+        _rate_limit_hits.clear()
 
 
 def get_rate_limit_key(ip: str, email: str = "") -> str:
     return f"{ip}:{email}" if email else ip
+
+
+def env_key_rate_limit_identity(env_var: str) -> str:
+    """Stable bucket id for a shared env API key (does not include the secret)."""
+    return f"env:{env_var}"
+
+
+def user_key_rate_limit_identity(key_id: int) -> str:
+    return f"userkey:{key_id}"
+
+
+def oauth_rate_limit_identity(client_id: str) -> str:
+    return f"oauth:{client_id or 'token'}"
 
 
 def _digest_api_key(value: str) -> bytes:

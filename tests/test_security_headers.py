@@ -46,6 +46,55 @@ def test_health_includes_nosniff_and_does_not_require_login(client):
     assert resp.headers["Referrer-Policy"] == "no-referrer"
 
 
+def test_health_returns_503_when_db_check_fails(db, monkeypatch, caplog):
+    import logging
+    from contextlib import contextmanager
+
+    @contextmanager
+    def failing_db(*args, **kwargs):
+        raise RuntimeError("attempt to write a readonly database")
+        yield None
+
+    monkeypatch.setattr("app.main.get_db", failing_db)
+    monkeypatch.setattr("app.main._health_db_warned", False)
+    from app.main import create_app
+    with caplog.at_level(logging.WARNING, logger="app.main"):
+        with TestClient(create_app()) as c:
+            resp = c.get("/health")
+            again = c.get("/health")
+    assert resp.status_code == 503
+    assert resp.json() == {"status": "unavailable"}
+    assert again.status_code == 503
+    assert "database check failed" in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_health_returns_503_when_db_file_is_readonly(client, tmp_path, monkeypatch):
+    import os
+    import stat
+
+    from app import database
+
+    monkeypatch.setattr("app.main._health_db_warned", False)
+    paths = [database.DB_PATH]
+    for suffix in ("-wal", "-shm"):
+        extra = database.DB_PATH + suffix
+        if os.path.exists(extra):
+            paths.append(extra)
+    for path in paths:
+        os.chmod(path, stat.S_IREAD)
+    os.chmod(tmp_path, stat.S_IREAD | stat.S_IEXEC)
+    try:
+        resp = client.get("/health")
+        assert resp.status_code == 503
+        assert resp.json() == {"status": "unavailable"}
+    finally:
+        os.chmod(tmp_path, stat.S_IRWXU)
+        for path in paths:
+            if os.path.exists(path):
+                os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+
+
 def test_login_includes_nosniff(client):
     resp = client.get("/auth/login")
     assert resp.status_code == 200

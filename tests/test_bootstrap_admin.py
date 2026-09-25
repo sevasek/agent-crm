@@ -12,7 +12,7 @@ from app.services.auth import (
 )
 
 
-def _set_bootstrap(monkeypatch, email="admin@example.com", password="longenough", name="Admin"):
+def _set_bootstrap(monkeypatch, email="admin@example.com", password="longenough", name="Admin", password_file=None):
     if email is None:
         monkeypatch.delenv("BOOTSTRAP_ADMIN_EMAIL", raising=False)
     else:
@@ -21,6 +21,10 @@ def _set_bootstrap(monkeypatch, email="admin@example.com", password="longenough"
         monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD", raising=False)
     else:
         monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD", password)
+    if password_file is None:
+        monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD_FILE", raising=False)
+    else:
+        monkeypatch.setenv("BOOTSTRAP_ADMIN_PASSWORD_FILE", password_file)
     if name is None:
         monkeypatch.delenv("BOOTSTRAP_ADMIN_NAME", raising=False)
     else:
@@ -57,6 +61,7 @@ def test_existing_user_skips_and_does_not_overwrite(db, monkeypatch, caplog):
 def test_unset_env_is_noop(db, monkeypatch):
     monkeypatch.delenv("BOOTSTRAP_ADMIN_EMAIL", raising=False)
     monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD", raising=False)
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_PASSWORD_FILE", raising=False)
     monkeypatch.delenv("BOOTSTRAP_ADMIN_NAME", raising=False)
     maybe_bootstrap_admin()
     assert count_users() == 0
@@ -134,6 +139,60 @@ def test_partial_bootstrap_does_not_500_health_or_login(db, monkeypatch):
         assert client.get("/health").status_code == 200
         assert client.get("/auth/login").status_code == 200
         assert count_users() == 0
+
+
+def test_password_file_creates_one_user(db, monkeypatch, tmp_path, caplog):
+    secret = tmp_path / "admin.secret"
+    secret.write_text("file-password\n", encoding="utf-8")
+    _set_bootstrap(monkeypatch, password=None, password_file=str(secret))
+    with caplog.at_level(logging.INFO, logger="app.services.auth"):
+        maybe_bootstrap_admin()
+    assert count_users() == 1
+    user = get_user_by_email("admin@example.com")
+    assert verify_password("file-password", user["password_hash"])
+    assert authenticate_user("admin@example.com", "file-password") is not None
+    assert "BOOTSTRAP_ADMIN_PASSWORD_FILE" in caplog.text
+
+
+def test_password_file_wins_over_env_password(db, monkeypatch, tmp_path):
+    secret = tmp_path / "admin.secret"
+    secret.write_text("from-file-wins", encoding="utf-8")
+    _set_bootstrap(
+        monkeypatch,
+        password="from-env-ignored",
+        password_file=str(secret),
+    )
+    maybe_bootstrap_admin()
+    user = get_user_by_email("admin@example.com")
+    assert verify_password("from-file-wins", user["password_hash"])
+    assert authenticate_user("admin@example.com", "from-env-ignored") is None
+
+
+def test_unreadable_password_file_does_not_fall_back_to_env(db, monkeypatch, tmp_path, caplog):
+    secret = tmp_path / "missing.secret"
+    _set_bootstrap(
+        monkeypatch,
+        password="env-fallback",
+        password_file=str(secret),
+    )
+    with caplog.at_level(logging.ERROR, logger="app.services.auth"):
+        maybe_bootstrap_admin()
+    assert count_users() == 0
+    assert "BOOTSTRAP_ADMIN_PASSWORD_FILE" in caplog.text
+
+
+def test_empty_password_file_does_not_fall_back_to_env(db, monkeypatch, tmp_path, caplog):
+    secret = tmp_path / "empty.secret"
+    secret.write_text("\n", encoding="utf-8")
+    _set_bootstrap(
+        monkeypatch,
+        password="env-fallback",
+        password_file=str(secret),
+    )
+    with caplog.at_level(logging.ERROR, logger="app.services.auth"):
+        maybe_bootstrap_admin()
+    assert count_users() == 0
+    assert "empty" in caplog.text
 
 
 def test_bootstrapped_user_can_log_in_over_http(db, monkeypatch):

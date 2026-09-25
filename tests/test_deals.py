@@ -138,20 +138,20 @@ def test_lost_nurture_and_already_won_do_not_call_won_webhook(db, monkeypatch):
         "app.services.deals.notify_deal_won",
         lambda *a, **k: called.append(1) or (True, "sent"),
     )
-
-    _, _, lost_id = _setup(db)
-    set_deal_stage(lost_id, "lost")
-    assert called == []
-
-    _, _, nurture_id = _setup(db, nurture_list_slug="automation-interest")
     monkeypatch.setattr(
         "app.services.deals.enroll_partner_in_nurture",
         lambda *a, **k: (True, "enrolled"),
     )
+
+    pid, sid, lost_id = _setup(db, nurture_list_slug="automation-interest")
+    set_deal_stage(lost_id, "lost")
+    assert called == []
+
+    nurture_id = create_deal(pid, sid, source="referral")
     set_deal_stage(nurture_id, "nurture")
     assert called == []
 
-    _, _, won_id = _setup(db)
+    won_id = create_deal(pid, sid, source="referral")
     set_deal_stage(won_id, "won")
     assert called == [1]
     set_deal_stage(won_id, "won")

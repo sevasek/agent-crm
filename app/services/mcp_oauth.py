@@ -57,12 +57,6 @@ def _now_ts() -> int:
     return int(datetime.now(timezone.utc).timestamp())
 
 
-def list_clients():
-    with get_db() as db:
-        rows = db.execute("SELECT * FROM mcp_oauth_clients ORDER BY created_at").fetchall()
-        return [dict(r) for r in rows]
-
-
 def get_client(client_id: str):
     if not client_id:
         return None

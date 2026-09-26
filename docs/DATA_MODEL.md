@@ -18,7 +18,7 @@ A database newer than the running code refuses to start. No ORM.
 - `activities`: the timeline.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
-- `users`, `api_keys`, `rate_limit_hits`, `mcp_oauth_clients`: auth plumbing.
+- `users`, `api_keys`, `mcp_oauth_clients`: auth plumbing.
 
 ### Why one `partners` table
 

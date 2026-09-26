@@ -345,7 +345,7 @@ import pytest
     ("Australia/Perth", (8, 8)),
 ])
 def test_australian_timezones_set_operator_date(monkeypatch, zone, offset_hours):
-    from datetime import datetime, timezone
+    from datetime import datetime
     from zoneinfo import ZoneInfo
     from app.services.staleness import operator_today
 

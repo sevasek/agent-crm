@@ -124,7 +124,9 @@ at 256 MB RAM. `docker stop` / `docker kill` leave the container stopped under
 again with `docker compose ... up -d` when you are done.
 
 Once a `v*` tag exists, you can run a published multi-arch image instead of
-building from the working copy (`build: .` stays the default):
+building from the working copy (`build: .` stays the default). How to cut
+the first tag (`v0.1.0`) and what the workflow publishes:
+[`docs/RELEASE.md`](docs/RELEASE.md).
 
 ```yaml
 # compose override (a third -f file, or docker-compose.override.yml)
@@ -253,7 +255,8 @@ markdown files, see `scripts/import_clients.py`.
 [`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
-[`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS
+[`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
+[`RELEASE.md`](docs/RELEASE.md) how to cut a version tag
 
 ## Contributing
 

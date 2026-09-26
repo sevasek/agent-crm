@@ -166,7 +166,7 @@ async def oauth_authorize_page(request: Request):
         "resource": params.get("resource") or "",
     }
     error, client_name = _validate_authorize_query(form)
-    return templates.TemplateResponse("auth/mcp_authorize.html", {
+    return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
         "request": request,
         "error": error,
         "csrf_token": generate_csrf_token(),
@@ -204,7 +204,7 @@ async def oauth_authorize_submit(
         # Failed auth (CSRF) counts toward the IP bucket, like a wrong key.
         limited = _unauth_limited(request, "oauth_authorize")
         if limited:
-            return templates.TemplateResponse("auth/mcp_authorize.html", {
+            return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
                 "request": request,
                 "error": "Too many attempts. Wait a minute and try again.",
                 "csrf_token": generate_csrf_token(),
@@ -213,7 +213,7 @@ async def oauth_authorize_submit(
                 "mcp_enabled": mcp_oauth.mcp_enabled(),
                 "logged_in": bool(get_current_user(request)),
             }, status_code=429)
-        return templates.TemplateResponse("auth/mcp_authorize.html", {
+        return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": "Invalid form submission. Please try again.",
             "csrf_token": generate_csrf_token(),
@@ -225,7 +225,7 @@ async def oauth_authorize_submit(
 
     error, client_name = _validate_authorize_query(form)
     if error:
-        return templates.TemplateResponse("auth/mcp_authorize.html", {
+        return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": error,
             "csrf_token": generate_csrf_token(),
@@ -241,7 +241,7 @@ async def oauth_authorize_submit(
         # guesses still works (same rule as login).
         limited = _unauth_limited(request, "oauth_authorize")
         if limited:
-            return templates.TemplateResponse("auth/mcp_authorize.html", {
+            return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
                 "request": request,
                 "error": "Too many attempts. Wait a minute and try again.",
                 "csrf_token": generate_csrf_token(),
@@ -250,7 +250,7 @@ async def oauth_authorize_submit(
                 "mcp_enabled": mcp_oauth.mcp_enabled(),
                 "logged_in": bool(user),
             }, status_code=429)
-        return templates.TemplateResponse("auth/mcp_authorize.html", {
+        return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": (
                 "MCP is disabled." if not mcp_oauth.mcp_enabled()

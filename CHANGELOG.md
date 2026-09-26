@@ -23,8 +23,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   (directories 0700, files 0600). Clear startup error if the database path is
   not writable.
 - Dependabot for pip, Docker, and GitHub Actions.
-- `pip-audit` (report-only until FastAPI/Starlette can pass) and a Trivy
-  image scan (HIGH/CRITICAL, report-only) in CI.
+- `pip-audit` (gating) and a Trivy image scan (HIGH/CRITICAL, report-only)
+  in CI.
 - Release workflow: pushing a `v*` tag builds and pushes
   `ghcr.io/sevasek/agent-crm:<tag>` and, for non-prerelease tags, `:latest`
   for `linux/amd64` and `linux/arm64`.
@@ -40,6 +40,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Operator notes for cutting the first `v*` tag and what the GHCR
   workflow publishes, in [`docs/RELEASE.md`](docs/RELEASE.md).
 
+### Removed
+
+- Unused `rate_limit_hits` sqlite table (schema v3). Rate limiting stays
+  in-memory (`app.services.auth`). Existing v2 databases drop the table on
+  startup; new databases never create it.
+- Unused helpers `get_user_by_id` and `list_clients` (no app callers).
+
 ### Changed
 
 - Production port bind is `127.0.0.1:${CRM_PORT:-8000}:8000` so a second
@@ -47,13 +54,27 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Base image is `python:3.12-slim` pinned by its multi-arch index digest.
   Dependabot can bump the digest; a floating `3.12-slim` tag is no longer used.
 - `python-multipart` 0.0.20 → 0.0.31 and `python-dotenv` 1.0.1 → 1.2.2 (safe
-  pin bumps for known CVEs). FastAPI/uvicorn/Starlette are unchanged; Dependabot
-  can propose those later.
+  pin bumps for known CVEs).
+- FastAPI 0.115.0 → 0.133.0 and pin Starlette 1.3.1 (smallest release that
+  clears current pip-audit; 0.115.0 requires `starlette<0.39`, and even
+  0.115.12 only allows `<0.47`). uvicorn stays 0.30.6. Jinja2
+  `TemplateResponse` calls use the Starlette 1.x `(request, name, context)`
+  order. Offer name fields use `Form("")` so an empty HTML input still
+  reaches handler validation (Starlette 1.x treats `name=` as missing).
 - Rate limits: failed login, lead/stages ingest, MCP, and OAuth
   register/token/authorize-POST count toward a per-IP guessing bucket. A
   valid key or OAuth client uses a larger bucket keyed on the key/token
   id (`env:CRM_*`, `userkey:{id}`, `oauth:{client_id}`), so a flood of
   bad keys cannot lock out the agent. Authorize GET (the form) and
   well-known metadata are not counted.
+
+### Security
+
+- CI `pip-audit` is now gating (leftover from #22). The FastAPI bump clears
+  Starlette findings that blocked the job: PYSEC-2026-1943 (multipart DoS,
+  0.40.0), PYSEC-2026-1941 (large multipart files, 0.47.2), PYSEC-2026-161
+  (Host header / `request.url.path`, 1.0.1), PYSEC-2026-2280 / 2281
+  (HTTPEndpoint method dispatch, 1.1.0), PYSEC-2026-248 (path in authority,
+  1.3.0), and PYSEC-2026-249 (urlencoded `request.form()` limits, 1.3.1).
 
 [Unreleased]: https://github.com/sevasek/agent-crm/compare/main...HEAD

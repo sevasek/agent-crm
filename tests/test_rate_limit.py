@@ -288,8 +288,13 @@ def test_rate_limiter_does_not_write_sqlite(client):
 
     assert check_rate_limit("10.0.0.5", action="leads_api") is True
     with get_db() as conn:
-        n = conn.execute("SELECT COUNT(*) AS c FROM rate_limit_hits").fetchone()["c"]
-    assert n == 0
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE name LIKE 'rate_limit_%'"
+            )
+        }
+    assert tables == set()
 
 
 def test_oauth_register_allows_10_then_rejects_11th(client):

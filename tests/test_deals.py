@@ -1,7 +1,12 @@
 from app.services.partners import create_partner
 from app.services.catalog import create_service
-from app.services.deals import create_deal, get_deal, set_deal_stage, update_deal_fields
+from app.services.deals import (
+    create_deal, get_deal, list_parent_candidates, set_deal_stage,
+    update_deal_fields, validate_parent_link,
+)
 from app.services.activities import list_activities_for_partner
+from app.services import pipeline_stages
+from app.services.offers import create_offer
 
 
 def _setup(db, nurture_list_slug=None, email="jane@acme.example"):
@@ -85,6 +90,31 @@ def test_non_nurture_transition_does_not_call_enrollment(db, monkeypatch):
     assert called == []
 
 
+def test_parent_link_same_partner_and_rejects_mismatch_and_cycle(db):
+    pid = create_partner("Jane Doe", email="jane@acme.example")
+    other = create_partner("Other Co", email="other@acme.example")
+    sid = create_service("Consulting", "consulting")
+    support = create_service("Support", "support")
+    parent_id = create_deal(pid, sid)
+    child_id = create_deal(pid, support)
+    stranger_id = create_deal(other, sid)
+
+    cleaned, error = validate_parent_link(child_id, parent_id, pid)
+    assert error is None
+    assert cleaned == parent_id
+
+    _cleaned, error = validate_parent_link(child_id, stranger_id, pid)
+    assert error == "parent_partner_mismatch"
+
+    assert update_deal_fields(child_id, parent_deal_id=parent_id)
+    _cleaned, error = validate_parent_link(parent_id, child_id, pid)
+    assert error == "parent_cycle"
+
+    candidates = list_parent_candidates(pid, exclude_deal_id=child_id)
+    assert [c["id"] for c in candidates] == [parent_id]
+    assert list_parent_candidates(pid, exclude_deal_id=parent_id) == []
+
+
 def test_enrollment_failure_is_logged_not_raised(db, monkeypatch):
     monkeypatch.setattr(
         "app.services.deals.enroll_partner_in_nurture",
@@ -96,3 +126,80 @@ def test_enrollment_failure_is_logged_not_raised(db, monkeypatch):
 
     activities = list_activities_for_partner(pid)
     assert any("Nurture enrollment failed: webhook unreachable" in (a["body"] or "") for a in activities)
+
+
+def test_transition_into_won_triggers_webhook(db, monkeypatch):
+    calls = []
+
+    def fake_notify(partner, service, deal, stage, offer=None):
+        calls.append({
+            "email": partner["email"],
+            "service": service["slug"],
+            "deal_id": deal["id"],
+            "stage": stage,
+            "offer": offer,
+            "value_estimate": deal.get("value_estimate"),
+        })
+        return True, "sent to deal-won webhook for deal 1"
+
+    monkeypatch.setattr("app.services.deals.notify_deal_won", fake_notify)
+
+    pid, sid, deal_id = _setup(db)
+    offer, _ = create_offer("Discovery Session", service_id=sid, price=350, currency="AUD")
+    update_deal_fields(deal_id, offer_id=offer["id"], value_estimate=1500)
+    set_deal_stage(deal_id, "won")
+
+    assert len(calls) == 1
+    assert calls[0]["email"] == "jane@acme.example"
+    assert calls[0]["service"] == "consulting"
+    assert calls[0]["deal_id"] == deal_id
+    assert calls[0]["stage"] == "won"
+    assert calls[0]["offer"]["name"] == "Discovery Session"
+    assert calls[0]["value_estimate"] == 1500
+    activities = list_activities_for_partner(pid)
+    assert any("Deal-won webhook succeeded" in (a["body"] or "") for a in activities)
+
+
+def test_lost_nurture_and_already_won_do_not_call_won_webhook(db, monkeypatch):
+    called = []
+    monkeypatch.setattr(
+        "app.services.deals.notify_deal_won",
+        lambda *a, **k: called.append(1) or (True, "sent"),
+    )
+    monkeypatch.setattr(
+        "app.services.deals.enroll_partner_in_nurture",
+        lambda *a, **k: (True, "enrolled"),
+    )
+
+    pid, sid, lost_id = _setup(db, nurture_list_slug="automation-interest")
+    set_deal_stage(lost_id, "lost")
+    assert called == []
+
+    nurture_id = create_deal(pid, sid, source="referral")
+    set_deal_stage(nurture_id, "nurture")
+    assert called == []
+
+    won_id = create_deal(pid, sid, source="referral")
+    set_deal_stage(won_id, "won")
+    assert called == [1]
+    set_deal_stage(won_id, "won")
+    assert called == [1]
+
+    pipeline_stages.create_stage("closed-won", "Closed won", is_won=True)
+    set_deal_stage(won_id, "closed-won")
+    assert get_deal(won_id)["stage"] == "closed-won"
+    assert called == [1]
+
+
+def test_won_webhook_failure_is_logged_not_raised(db, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.deals.notify_deal_won",
+        lambda *a, **k: (False, "webhook unreachable"),
+    )
+
+    pid, _, deal_id = _setup(db)
+    assert set_deal_stage(deal_id, "won") is True
+    assert get_deal(deal_id)["stage"] == "won"
+
+    activities = list_activities_for_partner(pid)
+    assert any("Deal-won webhook failed: webhook unreachable" in (a["body"] or "") for a in activities)

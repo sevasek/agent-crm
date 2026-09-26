@@ -8,7 +8,6 @@
     {% if deal %}
     <p class="muted">{{ partner.name }} · {{ service.name }} · <span class="pill">{{ deal.stage }}</span>
         — stage changes on the partner page.
-        {% if deal.parent_deal_id %}Parent deal #{{ deal.parent_deal_id }}.{% endif %}
     </p>
     {% else %}
     <div class="form-row">
@@ -70,6 +69,31 @@
                value="{{ deal.external_ref if deal and deal.external_ref else '' }}">
     </div>
     <div class="form-row">
+        <label for="parent_deal_id">Parent deal</label>
+        {% set selected_parent = form_parent_deal_id if form_parent_deal_id is not none else (deal.parent_deal_id if deal else none) %}
+        <select id="parent_deal_id" name="parent_deal_id">
+            <option value="">— none —</option>
+            {% for p in parent_candidates %}
+            <option value="{{ p.id }}" data-partner-id="{{ p.partner_id }}"
+                    {% if selected_parent and selected_parent|string == p.id|string %}selected{% endif %}>
+                #{{ p.id }} — {{ p.service_name }} ({{ p.stage }}){% if not deal %} · {{ p.partner_name }}{% endif %}
+            </option>
+            {% endfor %}
+        </select>
+        <p class="muted">Follow-on of an earlier deal with this partner. Leave unset if this is the first.</p>
+    </div>
+    {% if deal and child_deals %}
+    <div class="form-row">
+        <p>Follow-on deals</p>
+        <ul>
+            {% for c in child_deals %}
+            <li><a href="/deals/{{ c.id }}/edit">#{{ c.id }} — {{ c.service_name }}</a>
+                <span class="pill">{{ c.stage }}</span></li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+    <div class="form-row">
         <label for="tags">Tags</label>
         <input type="text" id="tags" name="tags"
                placeholder="church, illawarra, campaign:icp-hc-illawarra-2026-09"
@@ -81,4 +105,23 @@
     <a class="btn btn-secondary" href="/partners/{{ deal.partner_id }}">Cancel</a>
     {% endif %}
 </form>
+{% if not deal %}
+<script>
+(function () {
+    var partner = document.getElementById("partner_id");
+    var parent = document.getElementById("parent_deal_id");
+    if (!partner || !parent) return;
+    function filterParents() {
+        var pid = partner.value;
+        Array.prototype.forEach.call(parent.options, function (opt) {
+            if (!opt.value) { opt.hidden = false; return; }
+            opt.hidden = !pid || opt.getAttribute("data-partner-id") !== pid;
+            if (opt.hidden && opt.selected) parent.value = "";
+        });
+    }
+    partner.addEventListener("change", filterParents);
+    filterParents();
+})();
+</script>
+{% endif %}
 {% endblock %}

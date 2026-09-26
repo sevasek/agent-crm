@@ -1,6 +1,7 @@
 # Data model
 
-Entities, schema, the deal pipeline, nurture hand-off and lead ingest. For what
+Entities, schema, the deal pipeline, nurture hand-off, deal-won invoice
+hand-off and lead ingest. For what
 the app does and does not attempt, see [`SCOPE.md`](SCOPE.md). For the agent
 interface, see [`MCP.md`](MCP.md).
 
@@ -17,7 +18,7 @@ A database newer than the running code refuses to start. No ORM.
 - `activities`: the timeline.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
-- `users`, `api_keys`, `rate_limit_hits`, `mcp_oauth_clients`: auth plumbing.
+- `users`, `api_keys`, `mcp_oauth_clients`: auth plumbing.
 
 ### Why one `partners` table
 
@@ -89,7 +90,7 @@ The catalogue. Operator-defined and empty on a fresh install.
 | `offer_id` | INTEGER | FK to `offers(id)`. Defaults to the default offer on create. |
 | `owner_key` | TEXT | Owner slug. |
 | `external_ref` | TEXT | Caller's own id, for example from a source system. A value that is a `campaign:` tag slug is copied onto a tag the first time `deal_tags` is created; the ref itself is left unchanged. |
-| `parent_deal_id` | INTEGER | FK to `deals(id)`. Links a follow-on deal to its parent. Same partner required; cycles rejected at the service layer. |
+| `parent_deal_id` | INTEGER | FK to `deals(id)`. Links a follow-on deal to its parent. Same partner required; cycles rejected at the service layer. This is the post-sale primitive (issue #10): not `delivery_status`, invoice state, or a second pipeline. |
 
 ### `deal_tags`
 
@@ -137,7 +138,7 @@ The pipeline itself, in board-column order. `deals.stage` stores the `key`.
 | `is_default` | INTEGER NOT NULL DEFAULT 0 | Where a new deal starts. Setting it clears the flag elsewhere. |
 | `is_qualified_pool` | INTEGER NOT NULL DEFAULT 0 | Deals here are candidates for the call queue. |
 | `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | Entering this stage fires the nurture webhook. |
-| `is_won`, `is_lost` | INTEGER NOT NULL DEFAULT 0 | Entering sets `closed_at` and marks the deal closed for follow-ups. A stage cannot be both. |
+| `is_won`, `is_lost` | INTEGER NOT NULL DEFAULT 0 | Entering sets `closed_at` and marks the deal closed for follow-ups. Entering `is_won` from a non-won stage also fires the deal-won webhook. A stage cannot be both. |
 | `created_at`, `updated_at` | TEXT | |
 
 Seeded once on first start, then just data. Edit it in `/admin/stages`, or with
@@ -221,6 +222,16 @@ project manager: a title, a brief, an owner and a status tied to a deal.
 
 See [`MCP.md`](MCP.md) for the webhook behaviour.
 
+### Post-sale / follow-on deals
+
+Issue #10 asked whether the CRM should grow a fulfilment module (invoice
+status, `delivery_status`, a second pipeline). It does not. A won sale that
+still needs work is another deal whose `parent_deal_id` points at the original,
+plus `delegated_tasks` for hand-offs. Same partner; cycles are rejected. The
+admin deal form sets or clears the link and lists children; pipeline cards
+show "follow-on of #N" and a child count; `get_deal` returns `child_deals`.
+That is the post-sale model.
+
 ### Indexes
 
 `partners.parent_id`, `deals.partner_id`, `deals.stage`, `deals.owner_key`,
@@ -272,6 +283,37 @@ never block the stage change: `NURTURE_WEBHOOK_URL` unset, the service has no
 valid `nurture_list_slug`, or the partner has no email. A network failure or a
 non-2xx response is caught the same way, since this is a network boundary.
 Leaving the stage does not undo anything on the receiving side.
+
+## Deal-won invoice hand-off
+
+When `set_deal_stage` moves a deal **into** a stage with `is_won` from a
+stage that is not already won, `app/services/won_webhook.py::notify_deal_won`
+POSTs to `DEAL_WON_WEBHOOK_URL`:
+
+```
+POST {DEAL_WON_WEBHOOK_URL}
+Authorization: Bearer {DEAL_WON_WEBHOOK_TOKEN}      (only if set)
+{
+  "deal_id": ...,
+  "stage": ...,
+  "partner_id": ...,
+  "partner_name": ...,
+  "partner_email": ...,
+  "service_id": ...,
+  "service_name": ...,
+  "service_slug": ...,
+  "value_estimate": ...,
+  "offer": {"id": ..., "name": ..., "price": ..., "currency": ...} | null
+}
+```
+
+The payload is small and stable: enough for an invoicing tool or Zapier to
+raise an invoice, and no secrets. `offer` and `partner_email` are null when
+absent; a missing email still fires. The CRM does not create invoices itself
+and does not ingest invoice status back. Skips are logged as a `system`
+activity and never block the stage change: `DEAL_WON_WEBHOOK_URL` unset, or
+a network failure / non-2xx. Re-saving an already-won deal, moving between
+two `is_won` stages, or entering `is_lost` does not fire.
 
 ## Lead ingest
 

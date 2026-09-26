@@ -1,7 +1,7 @@
 from app.services.auth import generate_csrf_token
 from app.services.partners import create_partner
 from app.services.catalog import create_service
-from app.services.deals import create_deal, get_deal, update_deal_fields
+from app.services.deals import create_deal, get_deal, list_deals, update_deal_fields
 
 
 def _deal(db, **fields):
@@ -218,3 +218,174 @@ def test_partner_and_deals_list_link_to_edit(logged_in_client, db):
     deals_page = logged_in_client.get("/deals")
     assert f"/deals/{deal_id}/edit" in deals_page.text
     assert "/deals/new" in deals_page.text
+
+
+def _two_deals(db):
+    pid = create_partner("Jane Doe", email="jane@acme.example")
+    consulting = create_service("Consulting", "consulting")
+    support = create_service("Support", "support")
+    parent_id = create_deal(pid, consulting)
+    child_id = create_deal(pid, support)
+    return pid, consulting, support, parent_id, child_id
+
+
+def _edit_payload(parent_deal_id="", **extra):
+    data = {
+        "csrf_token": generate_csrf_token(),
+        "source": "referral",
+        "value_estimate": "",
+        "pain_points": "",
+        "goals": "",
+        "next_action": "",
+        "next_action_date": "",
+        "parent_deal_id": parent_deal_id,
+    }
+    data.update(extra)
+    return data
+
+
+def test_new_deal_form_has_parent_picker(logged_in_client, db):
+    pid, consulting, _support, parent_id, child_id = _two_deals(db)
+    resp = logged_in_client.get("/deals/new")
+    assert resp.status_code == 200
+    assert 'name="parent_deal_id"' in resp.text
+    assert f'value="{parent_id}"' in resp.text
+    assert f'value="{child_id}"' in resp.text
+    assert f'data-partner-id="{pid}"' in resp.text
+    assert "Consulting" in resp.text
+
+
+def test_edit_deal_form_lists_parent_candidates_and_children(logged_in_client, db):
+    _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    update_deal_fields(child_id, parent_deal_id=parent_id)
+
+    parent_page = logged_in_client.get(f"/deals/{parent_id}/edit")
+    assert parent_page.status_code == 200
+    assert 'name="parent_deal_id"' in parent_page.text
+    assert f'<option value="{parent_id}"' not in parent_page.text
+    assert f"/deals/{child_id}/edit" in parent_page.text
+    assert "Follow-on deals" in parent_page.text
+    assert "Support" in parent_page.text
+
+    child_page = logged_in_client.get(f"/deals/{child_id}/edit")
+    assert child_page.status_code == 200
+    assert f'<option value="{parent_id}"' in child_page.text
+    assert 'selected' in child_page.text
+    assert f'<option value="{child_id}"' not in child_page.text
+    assert "Follow-on deals" not in child_page.text
+
+
+def test_edit_deal_sets_parent(logged_in_client, db):
+    pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    resp = logged_in_client.post(
+        f"/deals/{child_id}/edit",
+        data=_edit_payload(str(parent_id)),
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/partners/{pid}"
+    assert get_deal(child_id)["parent_deal_id"] == parent_id
+
+
+def test_edit_deal_clears_parent(logged_in_client, db):
+    _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    update_deal_fields(child_id, parent_deal_id=parent_id)
+    resp = logged_in_client.post(
+        f"/deals/{child_id}/edit",
+        data=_edit_payload(""),
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert get_deal(child_id)["parent_deal_id"] is None
+
+
+def test_edit_deal_rejects_other_partner_parent(logged_in_client, db):
+    _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    other = create_partner("Other Co", email="other@acme.example")
+    stranger_id = create_deal(other, create_service("Audit", "audit"))
+
+    resp = logged_in_client.post(
+        f"/deals/{child_id}/edit",
+        data=_edit_payload(str(stranger_id)),
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert "same partner" in resp.text
+    assert get_deal(child_id)["parent_deal_id"] is None
+
+
+def test_edit_deal_rejects_parent_cycle(logged_in_client, db):
+    _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    update_deal_fields(child_id, parent_deal_id=parent_id)
+    resp = logged_in_client.post(
+        f"/deals/{parent_id}/edit",
+        data=_edit_payload(str(child_id)),
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert "cycle" in resp.text
+    assert get_deal(parent_id)["parent_deal_id"] is None
+    assert get_deal(child_id)["parent_deal_id"] == parent_id
+
+
+def test_new_deal_sets_parent(logged_in_client, db):
+    pid, _consulting, support, parent_id, _child_id = _two_deals(db)
+    resp = logged_in_client.post(
+        "/deals/new",
+        data={
+            "csrf_token": generate_csrf_token(),
+            "partner_id": str(pid),
+            "service_id": str(support),
+            "source": "repeat",
+            "value_estimate": "",
+            "pain_points": "",
+            "goals": "",
+            "next_action": "",
+            "next_action_date": "",
+            "parent_deal_id": str(parent_id),
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/partners/{pid}"
+    follow_ons = [d for d in list_deals(partner_id=pid) if d.get("parent_deal_id") == parent_id]
+    assert follow_ons
+    assert follow_ons[0]["source"] == "repeat"
+
+
+def test_new_deal_rejects_other_partner_parent(logged_in_client, db):
+    pid, consulting, _support, _parent_id, _child_id = _two_deals(db)
+    other = create_partner("Other Co", email="other@acme.example")
+    stranger_id = create_deal(other, create_service("Audit", "audit"))
+    resp = logged_in_client.post(
+        "/deals/new",
+        data={
+            "csrf_token": generate_csrf_token(),
+            "partner_id": str(pid),
+            "service_id": str(consulting),
+            "source": "",
+            "value_estimate": "",
+            "pain_points": "",
+            "goals": "",
+            "next_action": "",
+            "next_action_date": "",
+            "parent_deal_id": str(stranger_id),
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 400
+    assert "same partner" in resp.text
+    assert all(d.get("parent_deal_id") is None for d in list_deals(partner_id=pid))
+
+
+def test_pipeline_and_deals_list_show_follow_on(logged_in_client, db):
+    _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    update_deal_fields(child_id, parent_deal_id=parent_id)
+
+    board = logged_in_client.get("/pipeline")
+    assert board.status_code == 200
+    assert f"follow-on of #{parent_id}" in board.text
+    assert "1 child" in board.text
+
+    deals_page = logged_in_client.get("/deals")
+    assert f"follow-on of #{parent_id}" in deals_page.text

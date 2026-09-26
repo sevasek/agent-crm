@@ -9,6 +9,7 @@ from app.services.activities import log_activity
 from app.services.catalog import get_service
 from app.services.partners import get_partner
 from app.services.nurture import enroll_partner_in_nurture
+from app.services.won_webhook import notify_deal_won
 from app.services import pipeline_stages
 from app.services.offers import default_offer_id, get_offer
 
@@ -240,6 +241,24 @@ def validate_parent_link(deal_id, parent_deal_id, partner_id):
     return parent_id, None
 
 
+def list_parent_candidates(partner_id, exclude_deal_id=None):
+    """This partner's other deals that would be a valid parent.
+
+    Used by the admin deal form picker. Self-parent, partner mismatch, and
+    cycles are already rejected by validate_parent_link.
+    """
+    if not partner_id:
+        return []
+    rows = list_deals(partner_id=partner_id)
+    out = []
+    for row in rows:
+        _cleaned, error = validate_parent_link(exclude_deal_id, row["id"], partner_id)
+        if error:
+            continue
+        out.append(row)
+    return out
+
+
 def update_deal_fields(deal_id: int, **fields):
     allowed = {
         "source", "value_estimate", "pain_points", "goals", "next_action", "next_action_date",
@@ -281,7 +300,8 @@ def update_deal_fields(deal_id: int, **fields):
 
 def set_deal_stage(deal_id: int, new_stage: str) -> bool:
     """Move a deal to a new stage. Fires nurture enrollment when the target
-    stage has `triggers_nurture` set (not on every save), sets `closed_at`
+    stage has `triggers_nurture` set (not on every save), fires the deal-won
+    webhook when entering `is_won` from a non-won stage, sets `closed_at`
     when it has `is_won` or `is_lost` set, and logs the transition."""
     stage_meta = pipeline_stages.get_stage(new_stage)
     if not stage_meta:
@@ -313,6 +333,22 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
             deal["partner_id"],
             "system",
             f"Nurture enrollment {'succeeded' if success else 'failed'}: {message}",
+            deal_id=deal_id,
+        )
+
+    old_meta = pipeline_stages.get_stage(old_stage)
+    already_won = bool(old_meta and old_meta["is_won"])
+    if stage_meta["is_won"] and not already_won:
+        partner = get_partner(deal["partner_id"])
+        service = get_service(deal["service_id"])
+        offer = get_offer(deal.get("offer_id"))
+        success, message = notify_deal_won(
+            partner, service, deal, new_stage, offer=offer,
+        )
+        log_activity(
+            deal["partner_id"],
+            "system",
+            f"Deal-won webhook {'succeeded' if success else 'failed'}: {message}",
             deal_id=deal_id,
         )
 

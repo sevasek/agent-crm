@@ -81,8 +81,10 @@ Full tool list, auth and limits: [`docs/MCP.md`](docs/MCP.md).
 - Lead ingest over an API or CLI, with duplicate matching.
 - Tags on deals (a campaign, a region, anything else you want to filter by),
   set from the deals page or from the agent.
+- Follow-on (post-sale) work is another deal linked with `parent_deal_id`, plus delegated tasks — not a separate fulfilment module.
 - Delegated tasks to hand work to another agent or a person, with an optional webhook.
 - An optional webhook when a deal enters a nurture stage.
+- An optional webhook when a deal is won, for invoice hand-off.
 
 It starts empty apart from a starter pipeline: services, offers and fit rules
 are yours to define. Judgement lives in your agent, not in the CRM; scores are
@@ -123,7 +125,9 @@ at 256 MB RAM. `docker stop` / `docker kill` leave the container stopped under
 again with `docker compose ... up -d` when you are done.
 
 Once a `v*` tag exists, you can run a published multi-arch image instead of
-building from the working copy (`build: .` stays the default):
+building from the working copy (`build: .` stays the default). How to cut
+the first tag (`v0.1.0`) and what the workflow publishes:
+[`docs/RELEASE.md`](docs/RELEASE.md).
 
 ```yaml
 # compose override (a third -f file, or docker-compose.override.yml)
@@ -252,7 +256,8 @@ markdown files, see `scripts/import_clients.py`.
 [`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
-[`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS
+[`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
+[`RELEASE.md`](docs/RELEASE.md) how to cut a version tag
 
 ## Contributing
 

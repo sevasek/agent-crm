@@ -13,6 +13,7 @@ from app.database import (
     init_db,
     migrate_001,
     migrate_002,
+    migrate_003,
 )
 
 
@@ -71,10 +72,11 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 2
-    assert set(MIGRATIONS) == {1, 2}
+    assert SCHEMA_VERSION == 3
+    assert set(MIGRATIONS) == {1, 2, 3}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
+    assert MIGRATIONS[3] is migrate_003
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -123,8 +125,66 @@ def test_init_db_migrates_legacy_version_0(tmp_path, monkeypatch):
         }
         assert "deals" in tables
         assert "users" in tables
+        assert "deal_tags" in tables
+        assert not any(name.startswith("rate_limit_") for name in tables)
     pre = list((tmp_path / "backups").glob("pre-migrate-v0-to-*.db"))
     assert pre, "expected an online backup next to data/ before migrating"
+
+
+def _rate_limit_sqlite_names(conn):
+    return {
+        row[0]
+        for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE name LIKE 'rate_limit_%'"
+        )
+    }
+
+
+def test_fresh_db_has_no_rate_limit_tables(db):
+    with get_db() as conn:
+        assert _rate_limit_sqlite_names(conn) == set()
+
+
+def test_init_db_migrates_v2_drops_rate_limit_hits(tmp_path, monkeypatch):
+    """A live v2 file that still has rate_limit_hits must drop it at v3."""
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        migrate_001(db)
+        migrate_002(db)
+        db.execute(
+            """
+            CREATE TABLE rate_limit_hits (
+                bucket TEXT NOT NULL,
+                hit_at REAL NOT NULL
+            )
+            """
+        )
+        db.execute(
+            "CREATE INDEX idx_rate_limit_hits_bucket_hit "
+            "ON rate_limit_hits (bucket, hit_at)"
+        )
+        db.execute(
+            "INSERT INTO rate_limit_hits (bucket, hit_at) VALUES (?, ?)",
+            ("login:1.2.3.4", 1.0),
+        )
+        db.execute("PRAGMA user_version = 2")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        assert _rate_limit_sqlite_names(conn) == set()
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "deal_tags" in tables
+    pre = list((tmp_path / "backups").glob("pre-migrate-v2-to-*.db"))
+    assert pre, "expected an online backup before migrating a live v2 DB"
 
 
 def test_init_db_skips_backup_on_fresh_empty_db(tmp_path, monkeypatch):

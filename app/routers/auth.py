@@ -1,6 +1,6 @@
 import os
 
-from fastapi import APIRouter, Request, Form, HTTPException, Depends
+from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import URLSafeTimedSerializer
@@ -59,7 +59,7 @@ def set_session_cookie(response: RedirectResponse, user_id: int):
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
-    return templates.TemplateResponse("auth/login.html", {
+    return templates.TemplateResponse(request, "auth/login.html", {
         "request": request, "csrf_token": generate_csrf_token()
     })
 
@@ -67,7 +67,7 @@ async def login_page(request: Request):
 @router.post("/login")
 async def login_submit(request: Request, email: str = Form(...), password: str = Form(...), csrf_token: str = Form(...)):
     if not validate_csrf_token(csrf_token):
-        return templates.TemplateResponse("auth/login.html", {
+        return templates.TemplateResponse(request, "auth/login.html", {
             "request": request, "error": "Invalid form submission. Please try again.",
             "csrf_token": generate_csrf_token(),
         }, status_code=400)
@@ -83,12 +83,12 @@ async def login_submit(request: Request, email: str = Form(...), password: str =
     # succeeds; the sixth failure in a minute is 429.
     ip = get_client_ip(request)
     if not check_rate_limit(get_rate_limit_key(ip, email), action="login"):
-        return templates.TemplateResponse("auth/login.html", {
+        return templates.TemplateResponse(request, "auth/login.html", {
             "request": request, "error": "Too many attempts. Please wait a minute and try again.",
             "csrf_token": generate_csrf_token(),
         }, status_code=429)
 
-    return templates.TemplateResponse("auth/login.html", {
+    return templates.TemplateResponse(request, "auth/login.html", {
         "request": request, "error": "Invalid email or password",
         "csrf_token": generate_csrf_token(),
     }, status_code=400)

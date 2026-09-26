@@ -1614,7 +1614,9 @@ TOOLS = [
         "description": (
             "Move a deal to a pipeline stage key from list_catalog. "
             "Entering a nurture-trigger stage POSTs the partner to NURTURE_WEBHOOK_URL "
-            "(no-op if unconfigured). After a live call, prefer record_call_outcome."
+            "(no-op if unconfigured). Entering an is_won stage POSTs to "
+            "DEAL_WON_WEBHOOK_URL (no-op if unconfigured). After a live call, "
+            "prefer record_call_outcome."
         ),
         "inputSchema": {
             "type": "object",

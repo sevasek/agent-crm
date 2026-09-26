@@ -1,6 +1,7 @@
 # Data model
 
-Entities, schema, the deal pipeline, nurture hand-off and lead ingest. For what
+Entities, schema, the deal pipeline, nurture hand-off, deal-won invoice
+hand-off and lead ingest. For what
 the app does and does not attempt, see [`SCOPE.md`](SCOPE.md). For the agent
 interface, see [`MCP.md`](MCP.md).
 
@@ -17,7 +18,7 @@ A database newer than the running code refuses to start. No ORM.
 - `activities`: the timeline.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
-- `users`, `api_keys`, `rate_limit_hits`, `mcp_oauth_clients`: auth plumbing.
+- `users`, `api_keys`, `mcp_oauth_clients`: auth plumbing.
 
 ### Why one `partners` table
 
@@ -137,7 +138,7 @@ The pipeline itself, in board-column order. `deals.stage` stores the `key`.
 | `is_default` | INTEGER NOT NULL DEFAULT 0 | Where a new deal starts. Setting it clears the flag elsewhere. |
 | `is_qualified_pool` | INTEGER NOT NULL DEFAULT 0 | Deals here are candidates for the call queue. |
 | `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | Entering this stage fires the nurture webhook. |
-| `is_won`, `is_lost` | INTEGER NOT NULL DEFAULT 0 | Entering sets `closed_at` and marks the deal closed for follow-ups. A stage cannot be both. |
+| `is_won`, `is_lost` | INTEGER NOT NULL DEFAULT 0 | Entering sets `closed_at` and marks the deal closed for follow-ups. Entering `is_won` from a non-won stage also fires the deal-won webhook. A stage cannot be both. |
 | `created_at`, `updated_at` | TEXT | |
 
 Seeded once on first start, then just data. Edit it in `/admin/stages`, or with
@@ -282,6 +283,37 @@ never block the stage change: `NURTURE_WEBHOOK_URL` unset, the service has no
 valid `nurture_list_slug`, or the partner has no email. A network failure or a
 non-2xx response is caught the same way, since this is a network boundary.
 Leaving the stage does not undo anything on the receiving side.
+
+## Deal-won invoice hand-off
+
+When `set_deal_stage` moves a deal **into** a stage with `is_won` from a
+stage that is not already won, `app/services/won_webhook.py::notify_deal_won`
+POSTs to `DEAL_WON_WEBHOOK_URL`:
+
+```
+POST {DEAL_WON_WEBHOOK_URL}
+Authorization: Bearer {DEAL_WON_WEBHOOK_TOKEN}      (only if set)
+{
+  "deal_id": ...,
+  "stage": ...,
+  "partner_id": ...,
+  "partner_name": ...,
+  "partner_email": ...,
+  "service_id": ...,
+  "service_name": ...,
+  "service_slug": ...,
+  "value_estimate": ...,
+  "offer": {"id": ..., "name": ..., "price": ..., "currency": ...} | null
+}
+```
+
+The payload is small and stable: enough for an invoicing tool or Zapier to
+raise an invoice, and no secrets. `offer` and `partner_email` are null when
+absent; a missing email still fires. The CRM does not create invoices itself
+and does not ingest invoice status back. Skips are logged as a `system`
+activity and never block the stage change: `DEAL_WON_WEBHOOK_URL` unset, or
+a network failure / non-2xx. Re-saving an already-won deal, moving between
+two `is_won` stages, or entering `is_lost` does not fire.
 
 ## Lead ingest
 

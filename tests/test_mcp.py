@@ -129,6 +129,7 @@ def test_tools_list_includes_bot_safety_descriptions(client, db, monkeypatch):
     assert tools["update_partner"]["annotations"]["readOnlyHint"] is False
     assert "parent_deal_id" in tools["list_deals"]["description"]
     assert "NURTURE_WEBHOOK_URL" in tools["set_deal_stage"]["description"]
+    assert "DEAL_WON_WEBHOOK_URL" in tools["set_deal_stage"]["description"]
 
 
 def test_unknown_method_is_jsonrpc_error_not_http_404(client, db, monkeypatch):

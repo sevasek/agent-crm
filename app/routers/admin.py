@@ -69,12 +69,21 @@ async def dashboard(request: Request, q: str = "", user=Depends(require_login)):
     })
 
 
-def _partner_form_context(request, user, partner, csrf_token):
+def _partner_form_context(request, user, partner, csrf_token, error=None):
     return {
         "request": request, "user": user, "companies": list_companies(),
         "partner": partner, "csrf_token": csrf_token,
         "social_fields": [(field, label) for field, label, _hosts in SOCIAL_PLATFORMS],
+        "error": error,
     }
+
+
+def _partner_form_response(request, user, partner, error, status_code=400):
+    return templates.TemplateResponse(
+        request, "admin/partner_form.html",
+        _partner_form_context(request, user, partner, generate_csrf_token(), error=error),
+        status_code=status_code,
+    )
 
 
 def _partner_fields_from_form(
@@ -117,7 +126,7 @@ async def new_partner_page(request: Request, user=Depends(require_login)):
 @router.post("/partners/new")
 async def new_partner_submit(
     request: Request,
-    name: str = Form(...), is_company: str = Form(""), parent_id: str = Form(""),
+    name: str = Form(""), is_company: str = Form(""), parent_id: str = Form(""),
     email: str = Form(""), phone: str = Form(""), website: str = Form(""), title: str = Form(""),
     address: str = Form(""), preferred_channel: str = Form(""),
     industry: str = Form(""), team_size: str = Form(""),
@@ -128,6 +137,8 @@ async def new_partner_submit(
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/partners/new", status_code=303)
+    if not (name or "").strip():
+        return _partner_form_response(request, user, None, "Name is required.")
     partner_id = create_partner(**_partner_fields_from_form(
         name=name, is_company=is_company, parent_id=parent_id, email=email,
         phone=phone, website=website, title=title, address=address,
@@ -171,7 +182,7 @@ async def edit_partner_page(request: Request, partner_id: int, user=Depends(requ
 @router.post("/partners/{partner_id}/edit")
 async def edit_partner_submit(
     request: Request, partner_id: int,
-    name: str = Form(...), is_company: str = Form(""), parent_id: str = Form(""),
+    name: str = Form(""), is_company: str = Form(""), parent_id: str = Form(""),
     email: str = Form(""), phone: str = Form(""), website: str = Form(""), title: str = Form(""),
     address: str = Form(""), preferred_channel: str = Form(""),
     industry: str = Form(""), team_size: str = Form(""),
@@ -182,6 +193,10 @@ async def edit_partner_submit(
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse(f"/partners/{partner_id}/edit", status_code=303)
+    if not (name or "").strip():
+        return _partner_form_response(
+            request, user, get_partner(partner_id), "Name is required.",
+        )
     fields = _partner_fields_from_form(
         name=name, is_company=is_company, parent_id=parent_id, email=email,
         phone=phone, website=website, title=title, address=address,
@@ -224,13 +239,19 @@ async def new_service_page(request: Request, user=Depends(require_login)):
 @router.post("/services/new")
 async def new_service_submit(
     request: Request,
-    name: str = Form(...), slug: str = Form(...), description: str = Form(""),
+    name: str = Form(""), slug: str = Form(""), description: str = Form(""),
     nurture_list_slug: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token) or not is_valid_slug(slug):
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": None,
             "error": "Invalid submission or slug (lowercase letters, numbers, hyphens only).",
+            "csrf_token": generate_csrf_token(),
+        }, status_code=400)
+    if not (name or "").strip():
+        return templates.TemplateResponse(request, "admin/service_form.html", {
+            "request": request, "user": user, "service": None,
+            "error": "Name is required.",
             "csrf_token": generate_csrf_token(),
         }, status_code=400)
     if nurture_list_slug and not is_valid_slug(nurture_list_slug):
@@ -256,12 +277,18 @@ async def edit_service_page(request: Request, service_id: int, user=Depends(requ
 @router.post("/services/{service_id}/edit")
 async def edit_service_submit(
     request: Request, service_id: int,
-    name: str = Form(...), description: str = Form(""),
+    name: str = Form(""), description: str = Form(""),
     nurture_list_slug: str = Form(""), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/services", status_code=303)
+    if not (name or "").strip():
+        return templates.TemplateResponse(request, "admin/service_form.html", {
+            "request": request, "user": user, "service": get_service(service_id),
+            "error": "Name is required.",
+            "csrf_token": generate_csrf_token(),
+        }, status_code=400)
     if nurture_list_slug and not is_valid_slug(nurture_list_slug):
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": get_service(service_id),
@@ -291,7 +318,7 @@ async def todays_calls(request: Request, user=Depends(require_login)):
 @router.post("/deals/{deal_id}/call-outcome")
 async def log_call_outcome(
     request: Request, deal_id: int,
-    outcome: str = Form(...), note: str = Form(""), next: str = Form("calls"),
+    outcome: str = Form(""), note: str = Form(""), next: str = Form("calls"),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if validate_csrf_token(csrf_token):
@@ -375,7 +402,7 @@ async def set_deal_offer(
 @router.post("/deals/{deal_id}/offer/new")
 async def create_offer_for_deal(
     request: Request, deal_id: int,
-    name: str = Form(...), pitch: str = Form(""), proof_point: str = Form(""),
+    name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
     price_anchor: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
     """"Create a new offer" from the call view itself — no detour through
@@ -485,15 +512,42 @@ def _parent_form_error(code):
     return _PARENT_FORM_ERRORS.get(code, "Invalid parent deal.")
 
 
-def _deal_parent_context(deal=None):
+def _group_parent_candidates(deals):
+    """Optgroups labelled by partner so an unfiltered picker is usable without JS."""
+    groups = {}
+    for d in deals:
+        pid = d["partner_id"]
+        if pid not in groups:
+            groups[pid] = {
+                "partner_id": pid,
+                "label": d.get("partner_name") or f"Partner #{pid}",
+                "candidates": [],
+            }
+        groups[pid]["candidates"].append(d)
+    return sorted(groups.values(), key=lambda g: (g["label"] or "").lower())
+
+
+def _deal_parent_context(deal=None, partner_id=0):
     if deal:
         return {
             "parent_candidates": list_parent_candidates(
                 deal["partner_id"], exclude_deal_id=deal["id"],
             ),
+            "parent_candidate_groups": None,
             "child_deals": list_deals(parent_deal_id=deal["id"]),
         }
-    return {"parent_candidates": list_deals(), "child_deals": []}
+    if partner_id:
+        return {
+            "parent_candidates": list_parent_candidates(partner_id),
+            "parent_candidate_groups": None,
+            "child_deals": [],
+        }
+    candidates = list_deals()
+    return {
+        "parent_candidates": candidates,
+        "parent_candidate_groups": _group_parent_candidates(candidates),
+        "child_deals": [],
+    }
 
 
 def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal_id=None,
@@ -506,7 +560,7 @@ def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
         "error": error,
     }
-    ctx.update(_deal_parent_context())
+    ctx.update(_deal_parent_context(partner_id=partner_id))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
 
 
@@ -524,9 +578,10 @@ def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
 
 
 def _annotate_child_counts(columns):
+    """Count every child, not only deals still visible after a tag filter."""
     visible = [d for col in columns for d in col["deals"]]
     counts = {}
-    for d in visible:
+    for d in list_deals():
         parent = d.get("parent_deal_id")
         if parent:
             counts[parent] = counts.get(parent, 0) + 1
@@ -543,7 +598,7 @@ async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(requ
 @router.post("/deals/new")
 async def new_deal_submit(
     request: Request,
-    partner_id: int = Form(...), service_id: int = Form(...), source: str = Form(""),
+    partner_id: str = Form(""), service_id: str = Form(""), source: str = Form(""),
     value_estimate: str = Form(""), pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
@@ -553,21 +608,31 @@ async def new_deal_submit(
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/deals/new", status_code=303)
+    parsed_partner_id = _safe_int(partner_id) or 0
+    parsed_service_id = _safe_int(service_id)
+    if not parsed_partner_id or not parsed_service_id:
+        return _new_deal_form(
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id,
+            error="Pick a partner and a service.", status_code=400,
+        )
     parsed_tags, tag_error = parse_tag_list(tags)
     if tag_error:
         return _new_deal_form(
-            request, user, partner_id=partner_id, form_tags=tags,
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
             form_parent_deal_id=parent_deal_id, error=tag_error, status_code=400,
         )
-    cleaned_parent, parent_error = validate_parent_link(None, parent_deal_id, partner_id)
+    cleaned_parent, parent_error = validate_parent_link(
+        None, parent_deal_id, parsed_partner_id,
+    )
     if parent_error:
         return _new_deal_form(
-            request, user, partner_id=partner_id, form_tags=tags,
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
             form_parent_deal_id=parent_deal_id, error=_parent_form_error(parent_error),
             status_code=400,
         )
     create_deal(
-        partner_id, service_id, source=source,
+        parsed_partner_id, parsed_service_id, source=source,
         value_estimate=float(value_estimate) if value_estimate else None,
         pain_points=pain_points, goals=goals,
         next_action=next_action, next_action_date=next_action_date or None,
@@ -575,7 +640,7 @@ async def new_deal_submit(
         parent_deal_id=cleaned_parent,
         tags=parsed_tags or None,
     )
-    return RedirectResponse(f"/partners/{partner_id}", status_code=303)
+    return RedirectResponse(f"/partners/{parsed_partner_id}", status_code=303)
 
 
 @router.get("/deals/{deal_id}/edit", response_class=HTMLResponse)
@@ -728,7 +793,7 @@ async def stages_settings(request: Request, user=Depends(require_login)):
 @router.post("/stages/new")
 async def create_stage_submit(
     request: Request,
-    key: str = Form(...), label: str = Form(...),
+    key: str = Form(""), label: str = Form(""),
     is_default: str = Form(""), is_qualified_pool: str = Form(""),
     triggers_nurture: str = Form(""), is_won: str = Form(""), is_lost: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
@@ -753,7 +818,7 @@ async def create_stage_submit(
 @router.post("/stages/{key}/edit")
 async def edit_stage_submit(
     request: Request, key: str,
-    label: str = Form(...),
+    label: str = Form(""),
     is_default: str = Form(""), is_qualified_pool: str = Form(""),
     triggers_nurture: str = Form(""), is_won: str = Form(""), is_lost: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
@@ -942,7 +1007,7 @@ async def icp_settings(request: Request, user=Depends(require_login)):
 @router.post("/icp/new")
 async def create_icp_criterion_submit(
     request: Request,
-    label: str = Form(""), field: str = Form(...), operator: str = Form(...),
+    label: str = Form(""), field: str = Form(""), operator: str = Form(""),
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
@@ -976,7 +1041,7 @@ async def create_icp_criterion_submit(
 @router.post("/icp/{criterion_id}/edit")
 async def edit_icp_criterion_submit(
     request: Request, criterion_id: int,
-    label: str = Form(""), field: str = Form(...), operator: str = Form(...),
+    label: str = Form(""), field: str = Form(""), operator: str = Form(""),
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):

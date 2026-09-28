@@ -65,7 +65,12 @@ async def login_page(request: Request):
 
 
 @router.post("/login")
-async def login_submit(request: Request, email: str = Form(...), password: str = Form(...), csrf_token: str = Form(...)):
+async def login_submit(
+    request: Request,
+    email: str = Form(""),
+    password: str = Form(""),
+    csrf_token: str = Form(...),
+):
     if not validate_csrf_token(csrf_token):
         return templates.TemplateResponse(request, "auth/login.html", {
             "request": request, "error": "Invalid form submission. Please try again.",

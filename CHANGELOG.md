@@ -68,6 +68,16 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   `TemplateResponse` calls use the Starlette 1.x `(request, name, context)`
   order. Offer name fields use `Form("")` so an empty HTML input still
   reaches handler validation (Starlette 1.x treats `name=` as missing).
+- Remaining admin HTML required fields (partner/service name, stage
+  key/label, ICP field/operator, call outcome, login email/password,
+  new-deal partner/service, call-view offer name) also use `Form("")`
+  so an empty posted control hits the handler's HTML 4xx instead of
+  Starlette 1.x JSON 422. CSRF tokens stay required (`Form(...)`).
+- New-deal parent picker lists only that partner's candidates when a
+  partner is selected (`/deals/new?partner_id=` or the posted partner);
+  with no partner yet, options are grouped by partner name so the list
+  is usable without JavaScript. Pipeline cards count every child deal,
+  including children hidden by the current tag filter.
 - Rate limits: failed login, lead/stages ingest, MCP, and OAuth
   register/token/authorize-POST count toward a per-IP guessing bucket. A
   valid key or OAuth token uses a larger bucket keyed on the key/token

@@ -79,6 +79,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Security
 
+- OAuth authorization codes are single-use (OAuth 2.1). Each code carries a
+  `jti`; the first presentation of a valid code persists it in
+  `mcp_oauth_used_codes` (schema v4) and a second exchange returns
+  `invalid_grant`. A failed PKCE or client check still burns the code.
 - CI `pip-audit` is now gating (leftover from #22). The FastAPI bump clears
   Starlette findings that blocked the job: PYSEC-2026-1943 (multipart DoS,
   0.40.0), PYSEC-2026-1941 (large multipart files, 0.47.2), PYSEC-2026-161

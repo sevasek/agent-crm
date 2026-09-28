@@ -40,3 +40,29 @@ def test_get_current_user_honors_session_max_age(client, monkeypatch):
 
 def test_session_cookie_max_age_matches_loads_constant():
     assert SESSION_MAX_AGE == 60 * 60 * 24 * 30
+
+
+def test_login_empty_email_or_password_is_html_error_not_422(client):
+    from app.services.auth import generate_csrf_token
+
+    empty_email = client.post("/auth/login", data={
+        "email": "", "password": "password123", "csrf_token": generate_csrf_token(),
+    })
+    assert empty_email.status_code == 400
+    assert "text/html" in empty_email.headers.get("content-type", "")
+    assert "Invalid email or password" in empty_email.text
+
+    empty_password = client.post("/auth/login", data={
+        "email": "test@example.com", "password": "", "csrf_token": generate_csrf_token(),
+    })
+    assert empty_password.status_code == 400
+    assert "text/html" in empty_password.headers.get("content-type", "")
+    assert "Invalid email or password" in empty_password.text
+
+
+def test_login_missing_csrf_still_422(client):
+    resp = client.post("/auth/login", data={
+        "email": "test@example.com", "password": "password123",
+    })
+    assert resp.status_code == 422
+    assert "application/json" in resp.headers.get("content-type", "")

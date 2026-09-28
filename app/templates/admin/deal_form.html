@@ -73,12 +73,25 @@
         {% set selected_parent = form_parent_deal_id if form_parent_deal_id is not none else (deal.parent_deal_id if deal else none) %}
         <select id="parent_deal_id" name="parent_deal_id">
             <option value="">— none —</option>
+            {% if parent_candidate_groups %}
+            {% for group in parent_candidate_groups %}
+            <optgroup label="{{ group.label }}">
+                {% for p in group.candidates %}
+                <option value="{{ p.id }}" data-partner-id="{{ p.partner_id }}"
+                        {% if selected_parent and selected_parent|string == p.id|string %}selected{% endif %}>
+                    #{{ p.id }} — {{ p.service_name }} ({{ p.stage }})
+                </option>
+                {% endfor %}
+            </optgroup>
+            {% endfor %}
+            {% else %}
             {% for p in parent_candidates %}
             <option value="{{ p.id }}" data-partner-id="{{ p.partner_id }}"
                     {% if selected_parent and selected_parent|string == p.id|string %}selected{% endif %}>
                 #{{ p.id }} — {{ p.service_name }} ({{ p.stage }}){% if not deal %} · {{ p.partner_name }}{% endif %}
             </option>
             {% endfor %}
+            {% endif %}
         </select>
         <p class="muted">Follow-on of an earlier deal with this partner. Leave unset if this is the first.</p>
     </div>
@@ -117,6 +130,13 @@
             if (!opt.value) { opt.hidden = false; return; }
             opt.hidden = !pid || opt.getAttribute("data-partner-id") !== pid;
             if (opt.hidden && opt.selected) parent.value = "";
+        });
+        Array.prototype.forEach.call(parent.getElementsByTagName("optgroup"), function (og) {
+            var any = false;
+            Array.prototype.forEach.call(og.getElementsByTagName("option"), function (opt) {
+                if (!opt.hidden) any = true;
+            });
+            og.hidden = !any;
         });
     }
     partner.addEventListener("change", filterParents);

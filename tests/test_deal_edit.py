@@ -253,6 +253,38 @@ def test_new_deal_form_has_parent_picker(logged_in_client, db):
     assert f'value="{child_id}"' in resp.text
     assert f'data-partner-id="{pid}"' in resp.text
     assert "Consulting" in resp.text
+    assert '<optgroup label="Jane Doe">' in resp.text
+
+
+def test_new_deal_form_groups_parents_by_partner_when_none_selected(logged_in_client, db):
+    pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    other = create_partner("Other Co", email="other@acme.example")
+    stranger_id = create_deal(other, create_service("Audit", "audit"))
+    resp = logged_in_client.get("/deals/new")
+    assert resp.status_code == 200
+    assert '<optgroup label="Jane Doe">' in resp.text
+    assert '<optgroup label="Other Co">' in resp.text
+    assert f'value="{parent_id}"' in resp.text
+    assert f'value="{child_id}"' in resp.text
+    assert f'value="{stranger_id}"' in resp.text
+    assert f'data-partner-id="{pid}"' in resp.text
+    assert f'data-partner-id="{other}"' in resp.text
+
+
+def test_new_deal_form_with_partner_id_only_lists_that_partners_candidates(logged_in_client, db):
+    pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    other = create_partner("Other Co", email="other@acme.example")
+    stranger_id = create_deal(other, create_service("Audit", "audit"))
+    resp = logged_in_client.get(f"/deals/new?partner_id={pid}")
+    assert resp.status_code == 200
+    assert f'value="{parent_id}"' in resp.text
+    assert f'value="{child_id}"' in resp.text
+    assert f'data-partner-id="{pid}"' in resp.text
+    assert f'data-partner-id="{other}"' not in resp.text
+    assert f'<option value="{stranger_id}" data-partner-id=' not in resp.text
+    assert "<optgroup" not in resp.text
+    assert f'option value="{pid}"' in resp.text
+    assert "selected" in resp.text
 
 
 def test_edit_deal_form_lists_parent_candidates_and_children(logged_in_client, db):
@@ -389,3 +421,17 @@ def test_pipeline_and_deals_list_show_follow_on(logged_in_client, db):
 
     deals_page = logged_in_client.get("/deals")
     assert f"follow-on of #{parent_id}" in deals_page.text
+
+
+def test_pipeline_tag_filter_still_counts_children_without_that_tag(logged_in_client, db):
+    from app.services.deal_tags import apply_deal_tags
+
+    _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
+    update_deal_fields(child_id, parent_deal_id=parent_id)
+    apply_deal_tags(parent_id, replace=["campaign"])
+
+    board = logged_in_client.get("/pipeline?tag=campaign")
+    assert board.status_code == 200
+    assert "Jane Doe" in board.text
+    assert "1 child" in board.text
+    assert f"follow-on of #{parent_id}" not in board.text

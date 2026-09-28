@@ -5,6 +5,22 @@
     --accent: #2c5aa0;
 }
 
+/* Pico.css primary tokens → existing brand blue. data-theme="light" is locked
+   in base.html so Pico's auto dark mode cannot override these. */
+:root,
+[data-theme="light"] {
+    --pico-primary: var(--accent);
+    --pico-primary-background: var(--accent);
+    --pico-primary-border: var(--accent);
+    --pico-primary-hover: #234a85;
+    --pico-primary-hover-background: #234a85;
+    --pico-primary-hover-border: #234a85;
+    --pico-primary-hover-underline: #234a85;
+    --pico-primary-underline: var(--accent);
+    --pico-primary-focus: rgba(44, 90, 160, 0.25);
+    --pico-primary-inverse: #fff;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -62,8 +78,10 @@ summary:focus-visible {
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 /* Kanban needs the full window. The default 900px centre column is a form-page
-   width; seven stage columns cannot be read at a glance inside it. */
-.container-wide { max-width: none; }
+   width; seven stage columns cannot be read at a glance inside it.
+   Both classes are on the pipeline <main> so this beats Pico's .container
+   max-width media queries (same-origin, later, and more specific). */
+.container.container-wide { max-width: none; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }

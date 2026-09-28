@@ -49,6 +49,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Admin UI accessibility: skip link to `#main`, `aria-current="page"` on the
   matching top-nav item, visible focus styles, announced login/MCP authorize
   errors, and read-only deal tags on the call view.
+- Vendored Pico.css 2.1.1 (`app/static/vendor/pico.min.css`) as the admin UI
+  baseline: one `<link>` in `base.html`, `--pico-primary*` mapped to the
+  existing brand blue, `data-theme="light"` locked so Pico's auto dark mode
+  does not clash with hand-picked pill colors (closes #43).
 
 ### Removed
 

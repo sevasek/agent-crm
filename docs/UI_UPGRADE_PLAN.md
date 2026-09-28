@@ -1,0 +1,353 @@
+# UI upgrade plan: Pico.css + htmx
+
+**Goal:** make the app look launch-ready for paying customers within the week,
+without a build step, a JS framework, or a rewrite of the 18 Jinja2 templates.
+
+**Do not deviate from this constraint:** every file this plan adds is
+downloaded once and committed into `app/static/vendor/`. Nothing is loaded
+from a CDN at runtime — see `README.md` / `docs/DEPLOY.md`, this app must work
+fully offline and self-hosted. No `package.json`, no Node, no build step.
+
+Read this whole file before starting. Work phase by phase, in order. Do not
+skip ahead to Phase 3 or 4 before Phase 1 and 2 are done and merged — they are
+the ones that must ship this week; the rest is optional.
+
+---
+
+## Current state (verified 2026-09-28, do not re-derive — just confirm it's
+still true if something looks off)
+
+- `app/templates/base.html` — single layout, all 16 other templates extend it.
+  Loads one stylesheet: `<link rel="stylesheet" href="/static/style.css">`.
+- `app/static/style.css` — 152 lines, hand-written, 4 CSS variables
+  (`--border`, `--muted`, `--bg-alt`, `--accent: #2c5aa0`), no framework.
+- `app/main.py` mounts `/static` → `app/static/` via `StaticFiles`, and
+  `Jinja2Templates(directory="app/templates")`.
+- No CSP header is set anywhere in the app (`grep -rn CSP app/` returns
+  nothing) — a `<script src="/static/vendor/...">` tag needs no CSP change.
+- No test asserts on a specific CSS class name or exact HTML string
+  (`grep -rn 'assert.*response.text' tests/` shows only status-code/content
+  checks, not markup checks) — you are free to add/change classes.
+- Test suite: `python -m pytest tests/ -q` (38 test files). CI runs the same
+  command — see `.github/workflows/ci.yml`.
+- All 18 templates, for reference:
+  `app/templates/base.html`, and under `app/templates/admin/`: `calls.html`,
+  `call_view.html`, `deal_form.html`, `deals.html`, `icp.html`, `offers.html`,
+  `partner_detail.html`, `partner_form.html`, `partners.html`,
+  `pipeline.html`, `service_form.html`, `services.html`, `settings.html`,
+  `stages.html`; under `app/templates/auth/`: `login.html`,
+  `mcp_authorize.html`.
+
+---
+
+## Phase 1 — Vendor Pico.css and wire it in (MUST ship before launch)
+
+This is a single `<link>` line. It is the highest-value, lowest-risk change
+available: modern spacing, typography, form controls, button/table styling,
+focus states, and automatic light/dark mode, with **zero markup changes**,
+because the templates already use plain semantic tags (`table`, `form`,
+`button`, `select`, `nav`, `details`) and the layout already wraps page
+content in `<main class="container">` (`base.html:25`), which is exactly the
+convention Pico's default build expects.
+
+1. Create the vendor directory and fetch Pico v2 (classic, non-classless
+   build — the classless build auto-styles direct children of `<body>` and
+   would fight the app's own `.container` / `.container-wide` rules; the
+   default build only styles bare tags, which is what we want):
+
+   ```bash
+   mkdir -p app/static/vendor
+   curl -fSL -o app/static/vendor/pico.min.css \
+     https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css
+   ```
+
+   Confirm it downloaded a real stylesheet, not an error page:
+   ```bash
+   head -c 200 app/static/vendor/pico.min.css   # should start with a CSS comment / minified CSS, not "<!DOCTYPE"
+   wc -l app/static/vendor/pico.min.css          # should be 1 (minified) and non-trivial size (100KB+)
+   ```
+
+   Find the exact resolved version (jsdelivr's `@2` alias floats to the
+   latest 2.x release) so it's pinned and documented:
+   ```bash
+   curl -fsSL https://data.jsdelivr.com/v1/packages/npm/@picocss/pico/resolved?specifier=2 \
+     | grep -o '"version":"[^"]*"'
+   ```
+   Record that version number in a new `app/static/vendor/VENDOR.md`:
+   ```markdown
+   # Vendored frontend assets
+
+   | File | Source | Version | Fetched |
+   |---|---|---|---|
+   | pico.min.css | https://picocss.com (npm @picocss/pico) | <version from above> | 2026-09-28 |
+   ```
+   (You'll append rows to this same table in later phases — don't create a
+   second file.)
+
+2. Edit `app/templates/base.html`. Add the Pico link **before** the existing
+   `style.css` link, so `style.css` still wins the cascade wherever it sets a
+   rule Pico also sets (same-origin stylesheets, later wins on equal
+   specificity):
+
+   ```html
+   <link rel="stylesheet" href="/static/vendor/pico.min.css">
+   <link rel="stylesheet" href="/static/style.css">
+   ```
+
+3. Map the brand color. Open `app/static/vendor/pico.min.css` and search for
+   `--pico-primary` to confirm the exact variable names this version ships
+   (they are stable across 2.x but confirm rather than assume). Then add a
+   block near the top of `app/static/style.css`, right after the existing
+   `:root { ... }` block, overriding just the primary-color tokens to the
+   existing brand blue (`--accent: #2c5aa0`) so Pico's buttons/links match
+   the rest of the app instead of Pico's default teal:
+
+   ```css
+   :root {
+       --pico-primary: var(--accent);
+       --pico-primary-background: var(--accent);
+       --pico-primary-hover: #234a85;      /* ~15% darker than --accent, for hover */
+       --pico-primary-hover-background: #234a85;
+       --pico-primary-underline: var(--accent);
+       --pico-primary-focus: rgba(44, 90, 160, 0.25);
+   }
+   ```
+   If any of those variable names don't exist in the file you downloaded,
+   use `grep -o -- '--pico-primary[a-z-]*' app/static/vendor/pico.min.css | sort -u`
+   to get the real list and adjust the block to match — don't silently drop
+   the mapping.
+
+4. Run the app and visually check **every one of the 18 templates** listed
+   above (log in, click through every nav link, open at least one row/detail
+   page and one create/edit form per section, open the mobile call view).
+   For each page, check:
+   - Nothing is visually broken (overlapping elements, unreadable contrast,
+     a control that lost its click target).
+   - The `.pipeline-board` (kanban columns on `/pipeline`) still spans the
+     full window width, not capped at 900px — this is what
+     `.container-wide { max-width: none; }` in `style.css:32` exists to
+     guarantee; if it looks capped, Pico's cascade won a specificity fight
+     it shouldn't have and needs a `!important` or a more specific selector
+     on that one rule.
+   - The mobile call view (`/calls/<id>` or wherever `call_view.html`
+     renders) still looks like a focused single-column mobile screen, not a
+     desktop form — check it at a narrow viewport width (< 480px) in
+     browser devtools.
+   - Dark mode: toggle your OS/browser to dark mode and reload one page.
+     Pico applies dark mode automatically via `prefers-color-scheme`; the
+     app's own hand-picked colors (`.pill-overdue`, `.pill-due`, the pipeline
+     column background `--bg-alt: #f7f7f7`, etc.) were written assuming a
+     light background and will likely look wrong (a light-grey pill on a
+     near-black Pico dark background, low contrast). **Do not attempt to
+     fully fix dark mode this week** — instead add one line to force light
+     mode for now, so nothing looks broken for customers:
+     ```html
+     <html lang="en" data-theme="light">
+     ```
+     in `app/templates/base.html:2`. Revisit real dark-mode support later
+     (Phase 5) once there's time to redo the hand-picked colors as
+     `light-dark()` pairs or a second `--bg-alt`-style variable set.
+
+5. Run the test suite and confirm nothing broke:
+   ```bash
+   python -m pytest tests/ -q
+   ```
+
+6. Commit. Suggested message: `Add Pico.css for a modern baseline look
+   (vendored, no build step)`.
+
+**Acceptance for Phase 1:** all 18 templates render correctly in light mode,
+desktop and mobile widths, `pytest` is green, nothing is loaded from a CDN at
+runtime (check `grep -rn 'http' app/templates/base.html` shows no external
+`http(s)://` src/href).
+
+---
+
+## Phase 2 — Small polish pass (MUST ship before launch, do right after Phase 1)
+
+Pico gives you the primitives; a few of the app's existing hand-rolled bits
+will look dated or slightly off next to them. Go through this list, in
+`app/static/style.css` only (don't touch templates unless a fix genuinely
+needs a new class):
+
+- [ ] `.pill`, `.pill-tag`, `.pill-due`, `.pill-overdue` (style.css:65-77,
+      87-88) — these are bespoke badges. Check they still look intentional
+      next to Pico's more rounded, more padded buttons/inputs. Nudge
+      `border-radius` / padding to match Pico's scale if they look flat.
+- [ ] `button, .btn` (style.css:50-61) and `.btn-secondary` — Pico already
+      styles bare `<button>` well. Decide whether to **delete** this custom
+      block and let Pico's defaults + your `--pico-primary` override handle
+      it (less code, more consistent), or keep it if it does something Pico
+      can't. Prefer deleting if the rendered result looks the same or
+      better — fewer overrides is less to maintain.
+- [ ] `.btn-outcome-*` variants (style.css:117-119, the call-outcome buttons:
+      no-answer / not-interested / won) — these rely on setting `background`
+      and `border-color` directly; confirm they still read clearly as
+      distinct states next to Pico's button padding/shadow.
+- [ ] `input[type=...], select, textarea` block (style.css:44-48) — Pico
+      already styles these. Check for doubled borders/radius (both rules
+      applying slightly different `border-radius` looks worse than either
+      alone). Likely outcome: delete this block too.
+- [ ] `.topnav` (style.css:17-27) — confirm the nav still reads as a nav bar,
+      not a loose row of links, next to Pico's page chrome. Pico doesn't
+      forcibly restyle a `<nav class="topnav">` with no `<ul>/<li>` inside it
+      much, so this should be low-risk, but check anyway.
+- [ ] `<details>` / `<summary>` (style.css:90-91) — Pico styles these nicely
+      by default (adds a disclosure triangle, hover state); your two-line
+      override may now be redundant. Check where `<details>` is used
+      (grep `<details` across `app/templates/`) and confirm it still looks
+      right; delete the override if Pico's default is equal or better.
+
+For each item: change it, reload the affected page(s), confirm visually,
+move on. Re-run `pytest` once at the end of this phase (should be a no-op
+since these are pure CSS changes). Commit as
+`Polish custom CSS to sit cleanly on top of Pico`.
+
+**Acceptance for Phase 2:** `style.css` is shorter or the same length, no
+visual regression, `pytest` green. **This is the launch bar — Phases 1+2
+alone are enough to ship.** Treat everything below as stretch goals.
+
+---
+
+## Phase 3 — htmx: kill full-page reloads on the two worst offenders (SHOULD, only if Phase 1+2 are done with days to spare)
+
+Every action in the app is a `<form method=post>` that reloads the whole
+page. The two that feel worst to a live user are the pipeline stage-move
+dropdown and the call-outcome buttons, because both are used repeatedly in a
+single sitting (a rep moving several deals, or working down a call list).
+htmx fixes this without a rewrite: same server-rendered HTML, same forms, you
+just add `hx-*` attributes and return a fragment instead of a redirect when
+the request came from htmx.
+
+1. Vendor htmx the same way as Phase 1:
+   ```bash
+   curl -fSL -o app/static/vendor/htmx.min.js \
+     https://cdn.jsdelivr.net/npm/htmx.org@2/dist/htmx.min.js
+   curl -fsSL https://data.jsdelivr.com/v1/packages/npm/htmx.org/resolved?specifier=2 \
+     | grep -o '"version":"[^"]*"'
+   ```
+   Add a row to `app/static/vendor/VENDOR.md` with the resolved version.
+   Add to `base.html`, right before `</head>` or alongside the existing
+   `<script>` block near the end of `<body>` (either works; htmx just needs
+   to load before any `hx-*` attributes are interacted with, so put it in
+   `<head>` with `defer`, matching how the sendBeacon script already sits
+   inline at the bottom — pick one pattern and be consistent):
+   ```html
+   <script src="/static/vendor/htmx.min.js" defer></script>
+   ```
+
+2. **Pipeline stage-move** (`app/templates/admin/pipeline.html:37-45`,
+   backend at `app/routers/admin.py:605` `change_deal_stage`):
+   - Read `change_deal_stage` in full first. It currently does the DB update
+     then presumably redirects (check for `RedirectResponse` — the `next`
+     hidden field, `pipeline.html:39`, suggests it redirects back to
+     wherever it was called from, since this same form is reused elsewhere).
+   - Add an htmx path: when the request has an `HX-Request` header, instead
+     of redirecting, re-render **just the one column** the deal moved out of
+     and **just the one column** it moved into (two `pipeline-column` divs),
+     and return both concatenated, using `hx-swap-oob` on the second one so
+     a single response can update two DOM locations at once. This needs a
+     small new partial template, e.g.
+     `app/templates/admin/_pipeline_column.html`, extracted from the
+     `{% for col in columns %}` loop body in `pipeline.html` (lines 21-50),
+     parameterized on one `col` — render it from both `pipeline.html` (loop
+     over it with `{% include %}`) and from the new htmx branch in the
+     router (render it twice, once per affected column, wrap the second in
+     `<div id="col-{{ col.stage.key }}" hx-swap-oob="true">`).
+   - On the `<select>` in the partial, replace:
+     ```html
+     <select name="stage" onchange="this.form.submit()">
+     ```
+     with:
+     ```html
+     <select name="stage"
+             hx-post="/deals/{{ d.id }}/stage"
+             hx-include="closest form"
+             hx-swap="none"
+             hx-trigger="change">
+     ```
+     (`hx-swap="none"` because the response uses out-of-band swaps to
+     target both columns directly, not the element the request came from.)
+     Keep the `<form>` wrapper and its hidden CSRF field — htmx will pick up
+     the CSRF token via `hx-include`.
+   - Test manually: move a deal between two visible columns, confirm the
+     card jumps columns without a page reload and without a URL change.
+     Then **turn off JS in the browser** and confirm the old behavior (plain
+     form POST + full reload) still works — this must degrade gracefully
+     since it's a `<form>` with a real `action`/`method`, not JS-only.
+
+3. **Call outcome buttons** (`app/templates/admin/call_view.html`, look for
+   `.call-outcome-form` / `.btn-outcome-*`, backend
+   `app/routers/admin.py:291` `@router.post("/deals/{deal_id}/call-outcome")`):
+   - Same pattern: on `HX-Request`, return a re-rendered fragment of the
+     call view's outcome section (or the whole card) instead of a redirect,
+     with `hx-post` + `hx-target="closest .call-outcome-form"` (or the
+     nearest sensible wrapping element) + `hx-swap="outerHTML"` on each
+     outcome button. A rep working down a call queue should see the next
+     call load without a full navigation.
+   - Same graceful-degradation check: JS off → falls back to a normal POST
+     + redirect.
+
+4. Run `pytest` — the existing tests hit these routes without the
+   `HX-Request` header, so they should exercise the exact same code path as
+   before (the redirect branch) and stay green; if you added a new branch
+   guarded by `if request.headers.get("HX-Request")`, the old tests are your
+   regression check that the non-htmx path is untouched. Optionally add one
+   new test per route asserting that sending `HX-Request: true` returns a
+   200 with a fragment (not a redirect) and no `<html>`/`<!DOCTYPE>` wrapper.
+
+5. Commit each route's htmx conversion separately (two commits), so either
+   can be reverted on its own without losing the other if something's off
+   in production: `htmx: partial-swap pipeline stage moves`,
+   `htmx: partial-swap call outcomes`.
+
+**Acceptance for Phase 3:** both flows work with JS on (no reload) and with
+JS off (falls back to the original full-page POST), `pytest` green including
+new tests, each change is its own revertable commit.
+
+**Do not start Phase 3 unless Phase 1 and 2 already shipped with real days
+to spare before the customer launch.** It touches backend routes, not just
+CSS — higher risk than the first two phases, and the app is fully usable
+(if less snappy) without it.
+
+---
+
+## Phase 4 — SortableJS drag-and-drop kanban (LATER, explicitly not for this launch)
+
+Turning the pipeline's per-card `<select>` into actual drag-and-drop is real
+scope: a new endpoint that accepts "deal X moved to stage Y, position Z",
+touch-device testing (the call view already proves mobile matters here),
+and it depends on Phase 3's htmx work being in place and stable first (drag
+libraries pair with htmx via the `htmx-ext-sortable` pattern: SortableJS
+fires a DOM event on drop, an htmx listener turns it into the same
+`hx-post` the dropdown already uses). Do not attempt this before Phase 3 is
+shipped and stable. Leave it out of the launch-week scope entirely; revisit
+after launch with its own plan.
+
+---
+
+## Phase 5 — optional, only if a specific page needs it (LATER)
+
+- **Tom Select / Choices.js** for the partner/service `<select>` fields, but
+  only if a customer actually has enough partners or services that a plain
+  `<select>` becomes hard to scroll (check `partner_form.html` and
+  `service_form.html` for which dropdowns those are). Don't add this
+  speculatively.
+- **Alpine.js** only if a specific interaction needs client-side state that
+  htmx can't express server-side (e.g. a multi-step form section that
+  toggles without a round-trip). Nothing identified in the current templates
+  needs this yet — don't add it "just in case."
+- **Real dark mode** — redo `--bg-alt` and the `.pill-*` colors as proper
+  light/dark pairs (Pico's own tokens already flip automatically; the app's
+  hand-picked ones don't), then remove the `data-theme="light"` lock added
+  in Phase 1 step 4.
+
+---
+
+## If something goes wrong mid-phase
+
+Each phase is one or two commits. If a phase causes a visible regression
+after merging, `git revert` the specific commit(s) for that phase — Phase 1
+and 2 are pure CSS/one `<link>` tag, Phase 3's two routes are independent of
+each other and of Phases 1-2, so reverting one doesn't require reverting the
+others. Don't reach for a broader rollback than the phase that broke.

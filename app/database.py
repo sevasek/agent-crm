@@ -71,6 +71,13 @@ def get_db(timeout=None):
         conn.close()
 
 
+def row_to_dict(row):
+    """None stays None; sqlite3.Row or a mapping becomes a plain dict."""
+    if row is None:
+        return None
+    return dict(row)
+
+
 def get_user_version(conn) -> int:
     """PRAGMA user_version; 0 means a legacy DB that has never been versioned."""
     return int(conn.execute("PRAGMA user_version").fetchone()[0])

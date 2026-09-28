@@ -4,7 +4,7 @@ a proof point, and a priced USD figure. Deals reference one via
 pipeline stages.
 """
 
-from app.database import get_db
+from app.database import get_db, row_to_dict
 from app.services.auth import sanitize_text
 
 CURRENCY_DEFAULT = "USD"
@@ -38,10 +38,6 @@ STARTER_OFFERS = (
         "price_anchor": "TBD",
     },
 )
-
-
-def _row(r):
-    return dict(r) if r else None
 
 
 def _aud_anchor(price):
@@ -96,7 +92,7 @@ def get_offer(offer_id):
         return None
     with get_db() as db:
         row = db.execute("SELECT * FROM offers WHERE id = ?", (offer_id,)).fetchone()
-        return _row(row)
+        return row_to_dict(row)
 
 
 def find_offer(name: str, service_id=None):
@@ -116,7 +112,7 @@ def find_offer(name: str, service_id=None):
                 "SELECT * FROM offers WHERE lower(name) = lower(?) LIMIT 1",
                 (name,),
             ).fetchone()
-        return _row(row)
+        return row_to_dict(row)
 
 
 def default_offer():
@@ -124,7 +120,7 @@ def default_offer():
         row = db.execute(
             "SELECT * FROM offers WHERE is_default = 1 AND active = 1 LIMIT 1"
         ).fetchone()
-        return _row(row)
+        return row_to_dict(row)
 
 
 def default_offer_id():

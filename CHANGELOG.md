@@ -56,6 +56,7 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Changed
 
+- Share `row_to_dict` from `app.database` instead of duplicate `_row` helpers in pipeline, ICP, and offers services.
 - Production port bind is `127.0.0.1:${CRM_PORT:-8000}:8000` so a second
   instance on the same host can set `CRM_PORT` instead of a third compose file.
 - Base image is `python:3.12-slim` pinned by its multi-arch index digest.

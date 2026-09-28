@@ -79,6 +79,15 @@ def _qualified_callable_deal(db):
     return deal_id
 
 
+def test_calls_page_wires_htmx_on_the_outcome_form(logged_in_client, db):
+    _qualified_callable_deal(db)
+    resp = logged_in_client.get("/calls")
+    assert resp.status_code == 200
+    assert 'id="calls-table"' in resp.text
+    assert 'hx-target="#calls-table"' in resp.text
+    assert 'hx-post="/deals/' in resp.text
+
+
 def test_call_outcome_without_hx_still_redirects(logged_in_client, db):
     deal_id = _qualified_callable_deal(db)
     resp = logged_in_client.post(

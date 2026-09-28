@@ -1,4 +1,5 @@
-<table id="calls-table">
+<div id="calls-table">
+<table>
     <tr>
         <th>#</th>
         <th>Partner</th>
@@ -24,17 +25,17 @@
         <td>{{ d.next_action or "" }}{% if d.next_action_date %} ({{ d.next_action_date }}){% endif %}</td>
         <td><a class="btn btn-secondary" href="/deals/{{ d.id }}/call">Call view</a></td>
         <td>
-            <form method="post" action="/deals/{{ d.id }}/call-outcome" class="call-outcome-form">
+            <form method="post" action="/deals/{{ d.id }}/call-outcome" class="call-outcome-form"
+                  hx-post="/deals/{{ d.id }}/call-outcome"
+                  hx-target="#calls-table"
+                  hx-swap="outerHTML"
+                  hx-push-url="false">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <input type="text" name="note" placeholder="Note (optional)"
                        onkeydown="if(event.key==='Enter'){event.preventDefault();}">
                 {% for key, label, _ in outcomes %}
                 <button type="submit" name="outcome" value="{{ key }}"
-                        class="btn-outcome btn-outcome-{{ key }}"
-                        hx-post="/deals/{{ d.id }}/call-outcome"
-                        hx-include="closest form"
-                        hx-target="#calls-table"
-                        hx-swap="outerHTML">{{ label }}</button>
+                        class="btn-outcome btn-outcome-{{ key }}">{{ label }}</button>
                 {% endfor %}
             </form>
         </td>
@@ -43,3 +44,4 @@
     <tr><td colspan="9" class="muted">No qualified deals with a phone number. A lead you can't call doesn't belong on this list.</td></tr>
     {% endfor %}
 </table>
+</div>

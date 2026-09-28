@@ -79,18 +79,18 @@
     {% endif %}
 
     <h2>Log this call</h2>
-    <form method="post" action="/deals/{{ deal.id }}/call-outcome" class="call-outcome-form call-view-outcome-form">
+    <form method="post" action="/deals/{{ deal.id }}/call-outcome" class="call-outcome-form call-view-outcome-form"
+          hx-post="/deals/{{ deal.id }}/call-outcome"
+          hx-target="#call-view"
+          hx-swap="outerHTML"
+          hx-push-url="false">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="next" value="call_view">
         <input type="text" name="note" placeholder="Note (optional)"
                onkeydown="if(event.key==='Enter'){event.preventDefault();}">
         {% for key, label, _ in outcomes %}
         <button type="submit" name="outcome" value="{{ key }}"
-                class="btn-outcome btn-outcome-{{ key }}"
-                hx-post="/deals/{{ deal.id }}/call-outcome"
-                hx-include="closest form"
-                hx-target="#call-view"
-                hx-swap="outerHTML">{{ label }}</button>
+                class="btn-outcome btn-outcome-{{ key }}">{{ label }}</button>
         {% endfor %}
     </form>
 

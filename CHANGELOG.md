@@ -43,6 +43,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   `set_deal_stage` first moves a deal into an `is_won` stage, the CRM POSTs
   partner, service, offer and value to an invoicing tool. Unset is a no-op.
   Invoice status is not written back.
+- Admin deal form can set or clear a parent deal and lists children on edit.
+  Pipeline cards show follow-on linkage. Post-sale work is child deals plus
+  delegated tasks (closes #10; no fulfilment module).
 
 ### Removed
 

@@ -223,13 +223,15 @@ RATE_LIMIT_MAX_BY_ACTION = {
     "oauth_authorize": 10,
     "default": 5,
 }
-# Authenticated ceilings (per key/token id, not IP). Larger than the guess cap
-# so a shared proxy IP does not throttle a busy agent.
+# Authenticated ceilings. Larger than the guess cap so a shared proxy IP
+# does not throttle a busy agent. MCP/API/token keys are per key/token id;
+# successful OAuth register is per IP (see oauth_register note below).
 RATE_LIMIT_MAX_AUTH_BY_ACTION = {
     "leads_api": 120,
     "stages_api": 120,
     "mcp_api": 600,
-    # Successful OAuth register/token, keyed on oauth:{client_id}.
+    # Successful register is keyed on IP: each 201 mints a unique client_id.
+    # Successful token is keyed on oauth:{client_id}.
     # Guess caps stay in RATE_LIMIT_MAX_BY_ACTION (register 10, token 20).
     "oauth_register": 40,
     "oauth_token": 80,

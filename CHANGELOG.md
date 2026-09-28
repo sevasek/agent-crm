@@ -56,6 +56,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Changed
 
+- Unset `NURTURE_WEBHOOK_URL` / `DEAL_WON_WEBHOOK_URL` no longer writes a
+  `system` activity that looks like a webhook failure. Real send failures
+  still log.
 - Production port bind is `127.0.0.1:${CRM_PORT:-8000}:8000` so a second
   instance on the same host can set `CRM_PORT` instead of a third compose file.
 - Base image is `python:3.12-slim` pinned by its multi-arch index digest.

@@ -1,4 +1,6 @@
-from app.services.nurture import enroll_partner_in_nurture
+import logging
+
+from app.services.nurture import FAILED, SENT, SKIPPED, enroll_partner_in_nurture
 
 
 class FakeResponse:
@@ -22,24 +24,29 @@ def _configure(monkeypatch, token=None):
         monkeypatch.delenv("NURTURE_WEBHOOK_TOKEN", raising=False)
 
 
-def test_noop_when_webhook_not_configured(monkeypatch):
+def test_noop_when_webhook_not_configured(monkeypatch, caplog):
     monkeypatch.delenv("NURTURE_WEBHOOK_URL", raising=False)
-    success, message = enroll_partner_in_nurture(PARTNER, SERVICE)
-    assert success is False
+    called = []
+    monkeypatch.setattr("app.services.nurture.httpx.post", lambda *a, **k: called.append(1))
+    with caplog.at_level(logging.DEBUG, logger="app.services.nurture"):
+        status, message = enroll_partner_in_nurture(PARTNER, SERVICE)
+    assert status == SKIPPED
     assert "not configured" in message
+    assert called == []
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
 
 def test_noop_when_service_has_no_list_slug(monkeypatch):
     _configure(monkeypatch)
-    success, message = enroll_partner_in_nurture(PARTNER, {"name": "Consulting", "nurture_list_slug": None})
-    assert success is False
+    status, message = enroll_partner_in_nurture(PARTNER, {"name": "Consulting", "nurture_list_slug": None})
+    assert status == FAILED
     assert "nurture_list_slug" in message
 
 
 def test_noop_when_partner_has_no_email(monkeypatch):
     _configure(monkeypatch)
-    success, message = enroll_partner_in_nurture({"name": "Jane Doe", "email": None}, SERVICE)
-    assert success is False
+    status, message = enroll_partner_in_nurture({"name": "Jane Doe", "email": None}, SERVICE)
+    assert status == FAILED
     assert "no email" in message
 
 
@@ -53,9 +60,9 @@ def test_successful_hand_off_posts_expected_payload(monkeypatch):
 
     monkeypatch.setattr("app.services.nurture.httpx.post", fake_post)
 
-    success, message = enroll_partner_in_nurture(PARTNER, SERVICE, deal_id=42)
+    status, message = enroll_partner_in_nurture(PARTNER, SERVICE, deal_id=42)
 
-    assert success is True
+    assert status == SENT
     assert "automation-interest" in message
     assert captured["url"] == "http://hooks.test/nurture"
     assert captured["headers"]["Authorization"] == "Bearer test-token"
@@ -75,7 +82,7 @@ def test_no_auth_header_without_token(monkeypatch):
         "app.services.nurture.httpx.post",
         lambda url, json=None, headers=None, **kw: captured.update(headers=headers) or FakeResponse(),
     )
-    assert enroll_partner_in_nurture(PARTNER, SERVICE)[0] is True
+    assert enroll_partner_in_nurture(PARTNER, SERVICE)[0] == SENT
     assert "Authorization" not in captured["headers"]
 
 
@@ -87,8 +94,8 @@ def test_http_failure_is_caught_not_raised(monkeypatch):
 
     monkeypatch.setattr("app.services.nurture.httpx.post", fake_post)
 
-    success, message = enroll_partner_in_nurture(PARTNER, SERVICE)
-    assert success is False
+    status, message = enroll_partner_in_nurture(PARTNER, SERVICE)
+    assert status == FAILED
     assert "receiver is down" in message
 
 
@@ -96,7 +103,7 @@ def test_invalid_nurture_list_slug_does_not_call_webhook(monkeypatch):
     _configure(monkeypatch)
     called = []
     monkeypatch.setattr("app.services.nurture.httpx.post", lambda *a, **k: called.append(1))
-    success, message = enroll_partner_in_nurture(PARTNER, {"name": "Consulting", "nurture_list_slug": "../admin"})
-    assert success is False
+    status, message = enroll_partner_in_nurture(PARTNER, {"name": "Consulting", "nurture_list_slug": "../admin"})
+    assert status == FAILED
     assert "invalid nurture_list_slug" in message
     assert called == []

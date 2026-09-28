@@ -1,4 +1,6 @@
-from app.services.won_webhook import notify_deal_won
+import logging
+
+from app.services.won_webhook import FAILED, SENT, SKIPPED, notify_deal_won
 
 
 class FakeResponse:
@@ -24,11 +26,16 @@ def _configure(monkeypatch, token=None):
         monkeypatch.delenv("DEAL_WON_WEBHOOK_TOKEN", raising=False)
 
 
-def test_noop_when_webhook_not_configured(monkeypatch):
+def test_noop_when_webhook_not_configured(monkeypatch, caplog):
     monkeypatch.delenv("DEAL_WON_WEBHOOK_URL", raising=False)
-    success, message = notify_deal_won(PARTNER, SERVICE, DEAL, "won", offer=OFFER)
-    assert success is False
+    called = []
+    monkeypatch.setattr("app.services.won_webhook.httpx.post", lambda *a, **k: called.append(1))
+    with caplog.at_level(logging.DEBUG, logger="app.services.won_webhook"):
+        status, message = notify_deal_won(PARTNER, SERVICE, DEAL, "won", offer=OFFER)
+    assert status == SKIPPED
     assert "not configured" in message
+    assert called == []
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records)
 
 
 def test_successful_hand_off_posts_expected_payload(monkeypatch):
@@ -41,9 +48,9 @@ def test_successful_hand_off_posts_expected_payload(monkeypatch):
 
     monkeypatch.setattr("app.services.won_webhook.httpx.post", fake_post)
 
-    success, message = notify_deal_won(PARTNER, SERVICE, DEAL, "won", offer=OFFER)
+    status, message = notify_deal_won(PARTNER, SERVICE, DEAL, "won", offer=OFFER)
 
-    assert success is True
+    assert status == SENT
     assert "deal 42" in message
     assert captured["url"] == "http://hooks.test/won"
     assert captured["headers"]["Authorization"] == "Bearer test-token"
@@ -75,7 +82,7 @@ def test_payload_omits_offer_when_absent_and_allows_missing_email(monkeypatch):
     )
     partner = {"id": 7, "name": "Jane Doe", "email": None}
     deal = {"id": 42, "value_estimate": None, "offer_id": None}
-    assert notify_deal_won(partner, SERVICE, deal, "won")[0] is True
+    assert notify_deal_won(partner, SERVICE, deal, "won")[0] == SENT
     assert captured["json"]["partner_email"] is None
     assert captured["json"]["offer"] is None
     assert captured["json"]["value_estimate"] is None
@@ -88,7 +95,7 @@ def test_no_auth_header_without_token(monkeypatch):
         "app.services.won_webhook.httpx.post",
         lambda url, json=None, headers=None, **kw: captured.update(headers=headers) or FakeResponse(),
     )
-    assert notify_deal_won(PARTNER, SERVICE, DEAL, "won")[0] is True
+    assert notify_deal_won(PARTNER, SERVICE, DEAL, "won")[0] == SENT
     assert "Authorization" not in captured["headers"]
 
 
@@ -100,6 +107,6 @@ def test_http_failure_is_caught_not_raised(monkeypatch):
 
     monkeypatch.setattr("app.services.won_webhook.httpx.post", fake_post)
 
-    success, message = notify_deal_won(PARTNER, SERVICE, DEAL, "won")
-    assert success is False
+    status, message = notify_deal_won(PARTNER, SERVICE, DEAL, "won")
+    assert status == FAILED
     assert "receiver is down" in message

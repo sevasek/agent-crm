@@ -68,7 +68,7 @@ def test_transition_into_nurture_triggers_enrollment(db, monkeypatch):
 
     def fake_enroll(partner, service, deal_id=None):
         calls.append((partner["email"], service["nurture_list_slug"]))
-        return True, "enrolled on 'automation-interest' (confirmed)"
+        return "sent", "enrolled on 'automation-interest' (confirmed)"
 
     monkeypatch.setattr("app.services.deals.enroll_partner_in_nurture", fake_enroll)
 
@@ -118,7 +118,7 @@ def test_parent_link_same_partner_and_rejects_mismatch_and_cycle(db):
 def test_enrollment_failure_is_logged_not_raised(db, monkeypatch):
     monkeypatch.setattr(
         "app.services.deals.enroll_partner_in_nurture",
-        lambda p, s, deal_id=None: (False, "webhook unreachable"),
+        lambda p, s, deal_id=None: ("failed", "webhook unreachable"),
     )
 
     pid, sid, deal_id = _setup(db, nurture_list_slug="automation-interest")
@@ -140,7 +140,7 @@ def test_transition_into_won_triggers_webhook(db, monkeypatch):
             "offer": offer,
             "value_estimate": deal.get("value_estimate"),
         })
-        return True, "sent to deal-won webhook for deal 1"
+        return "sent", "sent to deal-won webhook for deal 1"
 
     monkeypatch.setattr("app.services.deals.notify_deal_won", fake_notify)
 
@@ -164,11 +164,11 @@ def test_lost_nurture_and_already_won_do_not_call_won_webhook(db, monkeypatch):
     called = []
     monkeypatch.setattr(
         "app.services.deals.notify_deal_won",
-        lambda *a, **k: called.append(1) or (True, "sent"),
+        lambda *a, **k: called.append(1) or ("sent", "sent"),
     )
     monkeypatch.setattr(
         "app.services.deals.enroll_partner_in_nurture",
-        lambda *a, **k: (True, "enrolled"),
+        lambda *a, **k: ("sent", "enrolled"),
     )
 
     pid, sid, lost_id = _setup(db, nurture_list_slug="automation-interest")
@@ -194,7 +194,7 @@ def test_lost_nurture_and_already_won_do_not_call_won_webhook(db, monkeypatch):
 def test_won_webhook_failure_is_logged_not_raised(db, monkeypatch):
     monkeypatch.setattr(
         "app.services.deals.notify_deal_won",
-        lambda *a, **k: (False, "webhook unreachable"),
+        lambda *a, **k: ("failed", "webhook unreachable"),
     )
 
     pid, _, deal_id = _setup(db)
@@ -203,3 +203,46 @@ def test_won_webhook_failure_is_logged_not_raised(db, monkeypatch):
 
     activities = list_activities_for_partner(pid)
     assert any("Deal-won webhook failed: webhook unreachable" in (a["body"] or "") for a in activities)
+
+
+def test_unset_nurture_url_does_not_log_enrollment_activity(db, monkeypatch):
+    monkeypatch.delenv("NURTURE_WEBHOOK_URL", raising=False)
+    pid, _, deal_id = _setup(db, nurture_list_slug="automation-interest")
+    assert set_deal_stage(deal_id, "nurture") is True
+
+    bodies = [a["body"] or "" for a in list_activities_for_partner(pid)]
+    assert any("new -> nurture" in b for b in bodies)
+    assert not any("Nurture enrollment" in b for b in bodies)
+
+
+def test_nurture_skip_status_is_not_logged(db, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.deals.enroll_partner_in_nurture",
+        lambda p, s, deal_id=None: ("skipped", "NURTURE_WEBHOOK_URL not configured — nurture hand-off skipped"),
+    )
+    pid, _, deal_id = _setup(db, nurture_list_slug="automation-interest")
+    set_deal_stage(deal_id, "nurture")
+    bodies = [a["body"] or "" for a in list_activities_for_partner(pid)]
+    assert not any("Nurture enrollment" in b for b in bodies)
+
+
+def test_unset_won_webhook_url_does_not_log_webhook_activity(db, monkeypatch):
+    monkeypatch.delenv("DEAL_WON_WEBHOOK_URL", raising=False)
+    pid, _, deal_id = _setup(db)
+    assert set_deal_stage(deal_id, "won") is True
+    assert get_deal(deal_id)["stage"] == "won"
+
+    bodies = [a["body"] or "" for a in list_activities_for_partner(pid)]
+    assert any("new -> won" in b for b in bodies)
+    assert not any("Deal-won webhook" in b for b in bodies)
+
+
+def test_won_webhook_skip_status_is_not_logged(db, monkeypatch):
+    monkeypatch.setattr(
+        "app.services.deals.notify_deal_won",
+        lambda *a, **k: ("skipped", "DEAL_WON_WEBHOOK_URL not configured — deal-won hand-off skipped"),
+    )
+    pid, _, deal_id = _setup(db)
+    set_deal_stage(deal_id, "won")
+    bodies = [a["body"] or "" for a in list_activities_for_partner(pid)]
+    assert not any("Deal-won webhook" in b for b in bodies)

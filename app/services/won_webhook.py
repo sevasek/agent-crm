@@ -3,8 +3,8 @@
 The CRM does not raise invoices. When a deal enters a stage flagged
 ``is_won``, this POSTs a small JSON payload to whatever invoicing tool
 you point DEAL_WON_WEBHOOK_URL at (Zapier, an invoicing API, an agent)
-and logs the outcome. Unset URL = no-op. Invoice status is not written
-back into the CRM.
+and logs the outcome. Unset URL = no-op (no timeline activity). Invoice
+status is not written back into the CRM.
 """
 import logging
 import os
@@ -12,6 +12,11 @@ import os
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Returned as the first tuple element from notify_deal_won.
+SENT = "sent"
+SKIPPED = "skipped"
+FAILED = "failed"
 
 
 def _offer_payload(offer: dict | None) -> dict | None:
@@ -26,18 +31,22 @@ def _offer_payload(offer: dict | None) -> dict | None:
 
 
 def notify_deal_won(partner: dict, service: dict, deal: dict, stage: str,
-                    offer: dict = None) -> tuple[bool, str]:
-    """POST deal-won details to DEAL_WON_WEBHOOK_URL. Returns (success, message).
+                    offer: dict = None) -> tuple[str, str]:
+    """POST deal-won details to DEAL_WON_WEBHOOK_URL.
 
-    Never raises: this is a network boundary, so callers can always log the
-    result as an activity rather than let an outage block a stage change.
+    Returns ``(SENT, message)`` on 2xx, ``(SKIPPED, message)`` when the URL
+    is unset (callers must not write a timeline activity), or
+    ``(FAILED, message)`` on network / non-2xx errors.
+
+    Never raises: this is a network boundary, so an outage must not block
+    a stage change.
     """
     url = (os.getenv("DEAL_WON_WEBHOOK_URL") or "").strip()
     deal_id = (deal or {}).get("id")
     if not url:
         msg = "DEAL_WON_WEBHOOK_URL not configured — deal-won hand-off skipped"
-        logger.warning(msg)
-        return False, msg
+        logger.debug(msg)
+        return SKIPPED, msg
 
     headers = {"Content-Type": "application/json"}
     token = (os.getenv("DEAL_WON_WEBHOOK_TOKEN") or "").strip()
@@ -58,8 +67,8 @@ def notify_deal_won(partner: dict, service: dict, deal: dict, stage: str,
     try:
         response = httpx.post(url, json=body, headers=headers, timeout=10.0, follow_redirects=False)
         response.raise_for_status()
-        return True, f"sent to deal-won webhook for deal {deal_id}"
+        return SENT, f"sent to deal-won webhook for deal {deal_id}"
     except Exception as exc:
         msg = f"deal-won webhook failed for deal {deal_id}: {exc}"
         logger.warning(msg)
-        return False, msg
+        return FAILED, msg

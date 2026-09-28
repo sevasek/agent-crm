@@ -8,8 +8,8 @@ from app.services.deal_tags import (
 from app.services.activities import log_activity
 from app.services.catalog import get_service
 from app.services.partners import get_partner
-from app.services.nurture import enroll_partner_in_nurture
-from app.services.won_webhook import notify_deal_won
+from app.services.nurture import SENT as NURTURE_SENT, SKIPPED as NURTURE_SKIPPED, enroll_partner_in_nurture
+from app.services.won_webhook import SENT as WON_SENT, SKIPPED as WON_SKIPPED, notify_deal_won
 from app.services import pipeline_stages
 from app.services.offers import default_offer_id, get_offer
 
@@ -328,13 +328,14 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
     if stage_meta["triggers_nurture"]:
         partner = get_partner(deal["partner_id"])
         service = get_service(deal["service_id"])
-        success, message = enroll_partner_in_nurture(partner, service, deal_id=deal_id)
-        log_activity(
-            deal["partner_id"],
-            "system",
-            f"Nurture enrollment {'succeeded' if success else 'failed'}: {message}",
-            deal_id=deal_id,
-        )
+        status, message = enroll_partner_in_nurture(partner, service, deal_id=deal_id)
+        if status != NURTURE_SKIPPED:
+            log_activity(
+                deal["partner_id"],
+                "system",
+                f"Nurture enrollment {'succeeded' if status == NURTURE_SENT else 'failed'}: {message}",
+                deal_id=deal_id,
+            )
 
     old_meta = pipeline_stages.get_stage(old_stage)
     already_won = bool(old_meta and old_meta["is_won"])
@@ -342,15 +343,16 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
         partner = get_partner(deal["partner_id"])
         service = get_service(deal["service_id"])
         offer = get_offer(deal.get("offer_id"))
-        success, message = notify_deal_won(
+        status, message = notify_deal_won(
             partner, service, deal, new_stage, offer=offer,
         )
-        log_activity(
-            deal["partner_id"],
-            "system",
-            f"Deal-won webhook {'succeeded' if success else 'failed'}: {message}",
-            deal_id=deal_id,
-        )
+        if status != WON_SKIPPED:
+            log_activity(
+                deal["partner_id"],
+                "system",
+                f"Deal-won webhook {'succeeded' if status == WON_SENT else 'failed'}: {message}",
+                deal_id=deal_id,
+            )
 
     return True
 

@@ -32,6 +32,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
   MCP / ingest / UI filter and write support. Schema v2.
+- Admin UI accessibility: skip link to `#main`, `aria-current="page"` on the
+  matching top-nav item, visible focus styles, announced login/MCP authorize
+  errors, and read-only deal tags on the call view.
 
 ### Changed
 

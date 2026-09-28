@@ -14,6 +14,35 @@ body {
     background: #fff;
 }
 
+.skip-link {
+    position: absolute;
+    left: 0.75rem;
+    top: 0.75rem;
+    z-index: 100;
+    padding: 0.5rem 0.75rem;
+    background: var(--accent);
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+    transform: translateY(-200%);
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+    transform: none;
+    color: #fff;
+}
+
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
 .topnav {
     display: flex;
     align-items: center;
@@ -25,6 +54,11 @@ body {
 .topnav a { text-decoration: none; color: #222; }
 .topnav .brand { font-weight: 700; }
 .topnav .right { margin-left: auto; color: var(--muted); }
+.topnav a[aria-current="page"] {
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 0.3em;
+}
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 /* Kanban needs the full window. The default 900px centre column is a form-page
@@ -132,6 +166,12 @@ details summary { cursor: pointer; }
     text-decoration: none; border-radius: 8px; text-align: center; box-sizing: border-box;
     background: var(--accent); color: #fff; border: 1px solid var(--accent);
 }
+.btn-tel-big:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px var(--accent);
+}
+.call-view-tags { margin: 0.35rem 0 0; }
 .call-view-score { font-size: 0.85rem; }
 .call-view-talk-track {
     background: var(--bg-alt); border-radius: 6px; padding: 0.75rem; margin: 1rem 0;

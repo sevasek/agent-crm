@@ -6,10 +6,18 @@
 
     <h1>{{ partner.name }}</h1>
     <p class="muted">{{ service.name }}{% if deal.value_estimate %} · ${{ "%.0f"|format(deal.value_estimate) }}{% endif %}</p>
+    {% if deal.tags %}
+    <p class="call-view-tags">
+        {% for tag in deal.tags %}
+        <span class="pill pill-tag">{{ tag }}</span>
+        {% endfor %}
+    </p>
+    {% endif %}
 
     <div class="call-view-dial">
         {% if partner.phone is dialable %}
-        <a href="{{ partner.phone|tel_href }}" class="btn-tel btn-tel-big"
+        <a href="{{ partner.phone|tel_href }}" class="btn btn-tel btn-tel-big"
+           aria-label="Call {{ partner.name }} at {{ partner.phone }}"
            onclick="logCallTap('/deals/{{ deal.id }}/call-tel', '{{ csrf_token }}')">Call {{ partner.phone }}</a>
         {% else %}
         <p class="muted">No phone number on file.</p>

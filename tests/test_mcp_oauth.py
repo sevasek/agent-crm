@@ -70,6 +70,7 @@ def test_pkce_round_trip_can_call_mcp(client, db, monkeypatch):
     assert redirect in page.text
     assert client_id in page.text
     assert "the authorization code is sent to" in page.text
+    assert 'class="error"' not in page.text
 
     submitted = client.post("/oauth/authorize", data={
         "csrf_token": generate_csrf_token(),

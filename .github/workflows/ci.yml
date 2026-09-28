@@ -94,13 +94,10 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
-      - name: Audit pinned Python dependencies (report-only)
+      - name: Audit pinned Python dependencies
         run: |
           pip install pip-audit
-          # fastapi==0.115.0 pins starlette 0.38.x, which currently fails
-          # pip-audit. Keep this visible but non-gating until a dedicated
-          # FastAPI/Starlette bump can pass. Same policy as the Trivy job.
-          pip-audit -r requirements.txt || true
+          pip-audit -r requirements.txt
 
   image:
     runs-on: ubuntu-latest

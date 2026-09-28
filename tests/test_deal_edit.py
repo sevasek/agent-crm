@@ -279,7 +279,9 @@ def test_new_deal_form_with_partner_id_only_lists_that_partners_candidates(logge
     assert resp.status_code == 200
     assert f'value="{parent_id}"' in resp.text
     assert f'value="{child_id}"' in resp.text
-    assert f'value="{stranger_id}"' not in resp.text
+    assert f'data-partner-id="{pid}"' in resp.text
+    assert f'data-partner-id="{other}"' not in resp.text
+    assert f'<option value="{stranger_id}" data-partner-id=' not in resp.text
     assert "<optgroup" not in resp.text
     assert f'option value="{pid}"' in resp.text
     assert "selected" in resp.text

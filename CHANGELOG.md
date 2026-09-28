@@ -57,6 +57,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   columns as `hx-swap-oob` fragments when the request has `HX-Request`,
   so a card jumps columns without a full reload. No-JS still POSTs the
   same form.
+- Call-outcome buttons on the queue and call view swap a fragment
+  instead of reloading the page (closes #45). Plain POST still
+  redirects.
 
 ### Removed
 

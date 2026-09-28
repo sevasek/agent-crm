@@ -331,23 +331,36 @@ async def log_call_outcome(
 ):
     if validate_csrf_token(csrf_token):
         record_call_outcome(deal_id, outcome, note)
+    if _is_htmx(request):
+        if next == "call_view":
+            ctx = _call_view_context(request, user, deal_id)
+            if not ctx:
+                response = HTMLResponse("")
+                response.headers["HX-Redirect"] = "/calls"
+                return response
+            return HTMLResponse(_render_partial("admin/_call_view_body.html", **ctx))
+        return HTMLResponse(_render_partial(
+            "admin/_calls_table.html",
+            request=request, user=user,
+            calls=list_todays_calls(),
+            limit=CALL_QUEUE_LIMIT,
+            score_max=SCORE_MAX,
+            outcomes=CALL_OUTCOMES,
+            csrf_token=generate_csrf_token(),
+        ))
     if next == "call_view":
         return RedirectResponse(f"/deals/{deal_id}/call", status_code=303)
     return RedirectResponse("/calls", status_code=303)
 
 
-@router.get("/deals/{deal_id}/call", response_class=HTMLResponse)
-async def deal_call_view(request: Request, deal_id: int, user=Depends(require_login)):
-    """The phone-in-hand view: just what a rep needs mid-call — the number,
-    the talk track (pain points/goals/next action), recent history, and the
-    outcome buttons. Everything else on the full partner page is noise here."""
+def _call_view_context(request, user, deal_id):
     deal = get_deal(deal_id)
     if not deal:
-        return RedirectResponse("/calls", status_code=303)
+        return None
     partner = get_partner(deal["partner_id"])
     service = get_service(deal["service_id"])
     if not partner or not service:
-        return RedirectResponse("/calls", status_code=303)
+        return None
 
     activities = list_activities_for_deal(deal_id)[:5]
     for item in activities:
@@ -375,14 +388,25 @@ async def deal_call_view(request: Request, deal_id: int, user=Depends(require_lo
     offer = offers_service.get_offer(deal.get("offer_id"))
     offer_options = offers_service.list_offers(active_only=True)
 
-    return templates.TemplateResponse(request, "admin/call_view.html", {
+    return {
         "request": request, "user": user,
         "deal": deal, "partner": partner, "service": service,
         "activities": activities, "score": score, "score_max": SCORE_MAX,
         "fit": fit, "offer": offer, "offer_options": offer_options,
         "outcomes": CALL_OUTCOMES,
         "csrf_token": generate_csrf_token(),
-    })
+    }
+
+
+@router.get("/deals/{deal_id}/call", response_class=HTMLResponse)
+async def deal_call_view(request: Request, deal_id: int, user=Depends(require_login)):
+    """The phone-in-hand view: just what a rep needs mid-call — the number,
+    the talk track (pain points/goals/next action), recent history, and the
+    outcome buttons. Everything else on the full partner page is noise here."""
+    ctx = _call_view_context(request, user, deal_id)
+    if not ctx:
+        return RedirectResponse("/calls", status_code=303)
+    return templates.TemplateResponse(request, "admin/call_view.html", ctx)
 
 
 @router.post("/deals/{deal_id}/offer")

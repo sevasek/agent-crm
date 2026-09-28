@@ -67,3 +67,68 @@ def test_stage_change_htmx_returns_column_fragments(logged_in_client, db):
     assert "hx-swap-oob" in html
     assert "Jane Doe" in html
     assert get_deal(deal_id)["stage"] == "contacted"
+
+
+def _qualified_callable_deal(db):
+    from app.services.deals import set_deal_stage
+    pid = create_partner("Jane Doe", email="jane@acme.example", phone="555-1234")
+    sid = create_service("Consulting", "consulting")
+    deal_id = create_deal(pid, sid, source="referral")
+    set_deal_stage(deal_id, "contacted")
+    set_deal_stage(deal_id, "qualified")
+    return deal_id
+
+
+def test_call_outcome_without_hx_still_redirects(logged_in_client, db):
+    deal_id = _qualified_callable_deal(db)
+    resp = logged_in_client.post(
+        f"/deals/{deal_id}/call-outcome",
+        data={
+            "outcome": "no_answer",
+            "csrf_token": generate_csrf_token(),
+        },
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/calls"
+
+
+def test_call_outcome_htmx_from_calls_returns_table(logged_in_client, db):
+    deal_id = _qualified_callable_deal(db)
+    resp = logged_in_client.post(
+        f"/deals/{deal_id}/call-outcome",
+        data={
+            "outcome": "no_answer",
+            "note": "Voicemail",
+            "csrf_token": generate_csrf_token(),
+        },
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200
+    html = resp.text
+    assert "<html" not in html.lower()
+    assert 'id="calls-table"' in html
+    assert "Jane Doe" in html
+    assert get_deal(deal_id)["stage"] == "qualified"
+
+
+def test_call_outcome_htmx_from_call_view_returns_fragment(logged_in_client, db):
+    deal_id = _qualified_callable_deal(db)
+    resp = logged_in_client.post(
+        f"/deals/{deal_id}/call-outcome",
+        data={
+            "outcome": "won",
+            "note": "Signed today",
+            "next": "call_view",
+            "csrf_token": generate_csrf_token(),
+        },
+        headers={"HX-Request": "true"},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 200
+    html = resp.text
+    assert "<html" not in html.lower()
+    assert 'id="call-view"' in html
+    assert "Signed today" in html
+    assert get_deal(deal_id)["stage"] == "won"

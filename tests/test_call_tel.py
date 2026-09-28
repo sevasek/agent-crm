@@ -106,11 +106,27 @@ def test_call_view_shows_talk_track_and_dial_link(logged_in_client, db):
     assert "No CRM" in resp.text
     assert "Track leads" in resp.text
     assert 'href="tel:0400111222"' in resp.text
+    assert 'aria-label="Call Jane Doe at 0400 111 222"' in resp.text
+    assert "btn-tel-big" in resp.text
+    assert 'href="#main"' in resp.text
+    assert 'id="main"' in resp.text
     assert f"logCallTap('/deals/{deal_id}/call-tel'" in resp.text
     assert f"/deals/{deal_id}/call-outcome" in resp.text
     assert "Score" in resp.text  # qualified-pool deal, so score section renders
     assert "unknown when qualified" not in resp.text
     assert "referral/inbound" not in resp.text
+
+
+def test_call_view_shows_deal_tags(logged_in_client, db):
+    from app.services.deal_tags import apply_deal_tags
+
+    pid, _, deal_id = _qualified_deal(db)
+    apply_deal_tags(deal_id, replace=["church", "illawarra"])
+    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    assert resp.status_code == 200
+    assert 'class="pill pill-tag">church</span>' in resp.text
+    assert 'class="pill pill-tag">illawarra</span>' in resp.text
+    assert 'href="/deals?tag=' not in resp.text
 
 
 def test_call_view_score_uses_actual_qualified_at_recency(logged_in_client, db):

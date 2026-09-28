@@ -7,22 +7,24 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+    {% set path = request.url.path %}
     {% if user %}
     <nav class="topnav">
         <a class="brand" href="/partners">crm</a>
-        <a href="/partners">Partners</a>
-        <a href="/calls">Calls</a>
-        <a href="/pipeline">Pipeline</a>
-        <a href="/deals">Deals</a>
-        <a href="/services">Services</a>
-        <a href="/stages">Stages</a>
-        <a href="/offers">Offers</a>
-        <a href="/icp">ICP</a>
-        <a class="right" href="/settings">Settings</a>
+        <a href="/partners"{% if path == "/partners" or path.startswith("/partners/") %} aria-current="page"{% endif %}>Partners</a>
+        <a href="/calls"{% if path == "/calls" or path.startswith("/calls/") or (path.startswith("/deals/") and path.endswith("/call")) %} aria-current="page"{% endif %}>Calls</a>
+        <a href="/pipeline"{% if path == "/pipeline" or path.startswith("/pipeline/") %} aria-current="page"{% endif %}>Pipeline</a>
+        <a href="/deals"{% if path == "/deals" or (path.startswith("/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>
+        <a href="/services"{% if path == "/services" or path.startswith("/services/") %} aria-current="page"{% endif %}>Services</a>
+        <a href="/stages"{% if path == "/stages" or path.startswith("/stages/") %} aria-current="page"{% endif %}>Stages</a>
+        <a href="/offers"{% if path == "/offers" or path.startswith("/offers/") %} aria-current="page"{% endif %}>Offers</a>
+        <a href="/icp"{% if path == "/icp" or path.startswith("/icp/") %} aria-current="page"{% endif %}>ICP</a>
+        <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>
         <a href="/auth/logout">Logout</a>
     </nav>
     {% endif %}
-    <main class="{% block main_class %}container{% endblock %}">
+    <main id="main" class="{% block main_class %}container{% endblock %}">
         {% block content %}{% endblock %}
     </main>
     <script>

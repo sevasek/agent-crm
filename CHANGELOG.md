@@ -46,6 +46,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Admin deal form can set or clear a parent deal and lists children on edit.
   Pipeline cards show follow-on linkage. Post-sale work is child deals plus
   delegated tasks (closes #10; no fulfilment module).
+- Admin UI accessibility: skip link to `#main`, `aria-current="page"` on the
+  matching top-nav item, visible focus styles, announced login/MCP authorize
+  errors, and read-only deal tags on the call view.
 
 ### Removed
 

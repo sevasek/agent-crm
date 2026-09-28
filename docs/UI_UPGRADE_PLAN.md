@@ -12,6 +12,13 @@ Read this whole file before starting. Work phase by phase, in order. Do not
 skip ahead to Phase 3 or 4 before Phase 1 and 2 are done and merged — they are
 the ones that must ship this week; the rest is optional.
 
+**Status:** Phase 1+2 (#43, #44) are already in flight — PR #53
+(`cursor/polish-pico-css-42ff`) vendors Pico and does the polish pass. Check
+that PR before starting either phase so work isn't duplicated. Once it
+merges, the "Current state" line numbers below are stale — re-grep instead of
+trusting them. Phase 3 (#45) has a branch too (`cursor/htmx-pipeline-calls-42ff`,
+no PR yet as of this writing) but is not confirmed done.
+
 ---
 
 ## Current state (verified 2026-09-28, do not re-derive — just confirm it's
@@ -84,6 +91,11 @@ convention Pico's default build expects.
    (You'll append rows to this same table in later phases — don't create a
    second file.)
 
+   `.dockerignore` has a blanket `*.md` rule, so `VENDOR.md` won't be present
+   in the built image. That's fine — it's a changelog, never served — but
+   it's intentional, not a packaging bug; don't "fix" it by carving out an
+   exception.
+
 2. Edit `app/templates/base.html`. Add the Pico link **before** the existing
    `style.css` link, so `style.css` still wins the cascade wherever it sets a
    rule Pico also sets (same-origin stylesheets, later wins on equal
@@ -131,8 +143,11 @@ convention Pico's default build expects.
      on that one rule.
    - The mobile call view (`/calls/<id>` or wherever `call_view.html`
      renders) still looks like a focused single-column mobile screen, not a
-     desktop form — check it at a narrow viewport width (< 480px) in
-     browser devtools.
+     desktop form. Check these widths in browser devtools: 360px (small
+     Android phone, the floor), 390px (iPhone), 768px (tablet/iPad
+     breakpoint), 1280px (laptop). Browsers: current Chrome and Safari
+     (iOS Safari for the call view specifically — that's the real device
+     a rep dials from) are the bar; no IE/legacy-Edge support needed.
    - Dark mode: toggle your OS/browser to dark mode and reload one page.
      Pico applies dark mode automatically via `prefers-color-scheme`; the
      app's own hand-picked colors (`.pill-overdue`, `.pill-due`, the pipeline
@@ -236,11 +251,13 @@ the request came from htmx.
    <script src="/static/vendor/htmx.min.js" defer></script>
    ```
 
-2. **Pipeline stage-move** (`app/templates/admin/pipeline.html:37-45`,
-   backend at `app/routers/admin.py:605` `change_deal_stage`):
+2. **Pipeline stage-move** (`app/templates/admin/pipeline.html:39-47`,
+   backend at `app/routers/admin.py:737` `change_deal_stage` — re-grep both,
+   line numbers have already drifted once since this plan was written and
+   will drift again once PR #53 lands):
    - Read `change_deal_stage` in full first. It currently does the DB update
      then presumably redirects (check for `RedirectResponse` — the `next`
-     hidden field, `pipeline.html:39`, suggests it redirects back to
+     hidden field, `pipeline.html:40`, suggests it redirects back to
      wherever it was called from, since this same form is reused elsewhere).
    - Add an htmx path: when the request has an `HX-Request` header, instead
      of redirecting, re-render **just the one column** the deal moved out of
@@ -249,7 +266,7 @@ the request came from htmx.
      a single response can update two DOM locations at once. This needs a
      small new partial template, e.g.
      `app/templates/admin/_pipeline_column.html`, extracted from the
-     `{% for col in columns %}` loop body in `pipeline.html` (lines 21-50),
+     `{% for col in columns %}` loop body in `pipeline.html` (lines 20-54),
      parameterized on one `col` — render it from both `pipeline.html` (loop
      over it with `{% include %}`) and from the new htmx branch in the
      router (render it twice, once per affected column, wrap the second in
@@ -278,7 +295,8 @@ the request came from htmx.
 
 3. **Call outcome buttons** (`app/templates/admin/call_view.html`, look for
    `.call-outcome-form` / `.btn-outcome-*`, backend
-   `app/routers/admin.py:291` `@router.post("/deals/{deal_id}/call-outcome")`):
+   `app/routers/admin.py:318` `@router.post("/deals/{deal_id}/call-outcome")`
+   — re-grep, this has already moved once):
    - Same pattern: on `HX-Request`, return a re-rendered fragment of the
      call view's outcome section (or the whole card) instead of a redirect,
      with `hx-post` + `hx-target="closest .call-outcome-form"` (or the

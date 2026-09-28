@@ -32,6 +32,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
   MCP / ingest / UI filter and write support. Schema v2.
+- Online sqlite backup and restore (`./scripts/backup.sh`,
+  `./scripts/restore.sh`): backup API (safe under load), `PRAGMA
+  integrity_check`, mode-0600 files in `./backups/`, `BACKUP_KEEP_DAYS`
+  pruning, and an optional restic/rclone/S3 hook. Cron and systemd
+  examples ship beside the scripts.
+- Operator notes for cutting the first `v*` tag and what the GHCR
+  workflow publishes, in [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ### Removed
 
@@ -54,6 +61,14 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   `TemplateResponse` calls use the Starlette 1.x `(request, name, context)`
   order. Offer name fields use `Form("")` so an empty HTML input still
   reaches handler validation (Starlette 1.x treats `name=` as missing).
+- Rate limits: failed login, lead/stages ingest, MCP, and OAuth
+  register/token/authorize-POST count toward a per-IP guessing bucket. A
+  valid key or OAuth token uses a larger bucket keyed on the key/token
+  id (`env:CRM_*`, `userkey:{id}`, `oauth:{client_id}`). Successful
+  dynamic client registration uses the larger authenticated bucket
+  keyed on IP (each 201 mints a unique `client_id`). A flood of bad
+  keys cannot lock out the agent. Authorize GET (the form) and
+  well-known metadata are not counted.
 
 ### Security
 

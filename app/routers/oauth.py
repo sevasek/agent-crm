@@ -1,8 +1,12 @@
 """OAuth 2.1 endpoints for the MCP resource (Grok custom connectors).
 
-Well-known metadata is world-readable (Grok must discover it). Token and
-register are rate-limited. Authorize is a small HTML form: paste
-CRM_MCP_API_KEY, or confirm if already logged into the admin UI.
+Well-known metadata is unlimited (Grok must discover it). Register and
+token count only failures toward the unauthenticated IP bucket. A
+successful token exchange or refresh uses the larger oauth:{client_id}
+bucket. Successful register uses the larger authenticated bucket keyed
+on IP — each 201 mints a unique client_id, so a per-client bucket cannot
+cap volume. Authorize GET is a form view and is not counted. Authorize
+POST counts only failed auth (wrong key / CSRF).
 """
 
 from urllib.parse import urlencode
@@ -16,6 +20,7 @@ from app.services.auth import (
     check_rate_limit_retry,
     generate_csrf_token,
     get_rate_limit_key,
+    oauth_rate_limit_identity,
     validate_csrf_token,
 )
 from app.services.client_ip import get_client_ip
@@ -46,9 +51,17 @@ def _oauth_error(error, status=400, description=None):
     return _json(body, status)
 
 
-def _rate_limited(request, action):
-    ip = get_client_ip(request)
-    allowed, retry_after = check_rate_limit_retry(get_rate_limit_key(ip), action=action)
+def _rate_limited(request, action, *, identity=None, authenticated=False):
+    """Count one hit. Unauthenticated uses the client IP; success uses identity.
+
+    When authenticated is True and identity is omitted, the IP is still the
+    bucket key (used for successful dynamic client registration).
+    """
+    ip_key = get_rate_limit_key(get_client_ip(request))
+    key = identity if (authenticated and identity) else ip_key
+    allowed, retry_after = check_rate_limit_retry(
+        key, action=action, authenticated=authenticated,
+    )
     if allowed:
         return None
     response = JSONResponse(
@@ -57,6 +70,23 @@ def _rate_limited(request, action):
         headers={"Retry-After": str(retry_after), "Connection": "close"},
     )
     return _cors(response)
+
+
+def _unauth_limited(request, action):
+    return _rate_limited(request, action)
+
+
+def _client_limited(request, action, client_id):
+    return _rate_limited(
+        request, action,
+        identity=oauth_rate_limit_identity(client_id),
+        authenticated=True,
+    )
+
+
+def _ip_auth_limited(request, action):
+    """Authenticated cap keyed on IP (no stable client id yet)."""
+    return _rate_limited(request, action, authenticated=True)
 
 
 def _metadata(request: Request):
@@ -108,33 +138,38 @@ async def oauth_resource_metadata(request: Request):
 
 @router.post("/oauth/register")
 async def oauth_register(request: Request):
-    limited = _rate_limited(request, "oauth_register")
-    if limited:
-        return limited
     if not mcp_oauth.mcp_enabled():
+        limited = _unauth_limited(request, "oauth_register")
+        if limited:
+            return limited
         return _oauth_error("temporarily_unavailable", 503, "MCP is disabled (CRM_MCP_API_KEY unset)")
     try:
         body = await request.json()
     except Exception:
+        limited = _unauth_limited(request, "oauth_register")
+        if limited:
+            return limited
         return _oauth_error("invalid_client_metadata", 400, "JSON body required")
-    payload, status = mcp_oauth.register_client(body if isinstance(body, dict) else {})
+    body = body if isinstance(body, dict) else {}
+    parsed, error = mcp_oauth.validate_register_body(body)
+    if error:
+        limited = _unauth_limited(request, "oauth_register")
+        if limited:
+            return limited
+        payload, status = error
+        return _json(payload, status)
+    # Cap successful DCR per IP before insert. A per-client bucket cannot
+    # work here: register_client mints a new client_id on every 201.
+    limited = _ip_auth_limited(request, "oauth_register")
+    if limited:
+        return limited
+    payload, status = mcp_oauth.register_client(body)
     return _json(payload, status)
 
 
 @router.get("/oauth/authorize", response_class=HTMLResponse)
 async def oauth_authorize_page(request: Request):
-    limited = _rate_limited(request, "oauth_authorize")
-    if limited:
-        return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
-            "request": request,
-            "error": "Too many attempts. Wait a minute and try again.",
-            "csrf_token": generate_csrf_token(),
-            "form": {},
-            "client_name": "",
-            "mcp_enabled": mcp_oauth.mcp_enabled(),
-            "logged_in": bool(get_current_user(request)),
-        }, status_code=429)
-
+    # Form views do not burn the failure bucket (same as GET /auth/login).
     params = request.query_params
     form = {
         "client_id": params.get("client_id") or "",
@@ -181,6 +216,18 @@ async def oauth_authorize_submit(
     }
 
     if not validate_csrf_token(csrf_token):
+        # Failed auth (CSRF) counts toward the IP bucket, like a wrong key.
+        limited = _unauth_limited(request, "oauth_authorize")
+        if limited:
+            return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
+                "request": request,
+                "error": "Too many attempts. Wait a minute and try again.",
+                "csrf_token": generate_csrf_token(),
+                "form": form,
+                "client_name": "",
+                "mcp_enabled": mcp_oauth.mcp_enabled(),
+                "logged_in": bool(get_current_user(request)),
+            }, status_code=429)
         return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": "Invalid form submission. Please try again.",
@@ -207,7 +254,7 @@ async def oauth_authorize_submit(
     if not mcp_oauth.operator_may_authorize(api_key, user):
         # Count only failed authorize attempts so a correct key after
         # guesses still works (same rule as login).
-        limited = _rate_limited(request, "oauth_authorize")
+        limited = _unauth_limited(request, "oauth_authorize")
         if limited:
             return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
                 "request": request,
@@ -241,10 +288,10 @@ async def oauth_authorize_submit(
 
 @router.post("/oauth/token")
 async def oauth_token(request: Request):
-    limited = _rate_limited(request, "oauth_token")
-    if limited:
-        return limited
     if not mcp_oauth.mcp_enabled():
+        limited = _unauth_limited(request, "oauth_token")
+        if limited:
+            return limited
         return _oauth_error("temporarily_unavailable", 503, "MCP is disabled")
 
     content_type = (request.headers.get("content-type") or "").split(";")[0].strip().lower()
@@ -252,8 +299,14 @@ async def oauth_token(request: Request):
         try:
             body = await request.json()
         except Exception:
+            limited = _unauth_limited(request, "oauth_token")
+            if limited:
+                return limited
             return _oauth_error("invalid_request", 400, "invalid JSON")
         if not isinstance(body, dict):
+            limited = _unauth_limited(request, "oauth_token")
+            if limited:
+                return limited
             return _oauth_error("invalid_request")
     else:
         form = await request.form()
@@ -271,9 +324,19 @@ async def oauth_token(request: Request):
     elif grant == "refresh_token":
         tokens, error = mcp_oauth.refresh_access(client_id, body.get("refresh_token") or "")
     else:
+        limited = _unauth_limited(request, "oauth_token")
+        if limited:
+            return limited
         return _oauth_error("unsupported_grant_type")
     if error:
+        limited = _unauth_limited(request, "oauth_token")
+        if limited:
+            return limited
         return _oauth_error(error)
+    if client_id:
+        limited = _client_limited(request, "oauth_token", client_id)
+        if limited:
+            return limited
     return _json(tokens)
 
 

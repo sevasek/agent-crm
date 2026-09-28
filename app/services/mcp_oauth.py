@@ -96,19 +96,29 @@ def redirect_allowed(uri: str) -> bool:
     return True
 
 
-def register_client(body: dict):
-    """RFC 7591. Returns (payload, status_code)."""
+def validate_register_body(body: dict):
+    """Validate RFC 7591 metadata without inserting.
+
+    Returns ((cleaned_uris, client_name), None) on success, or
+    (None, (payload, status_code)) on failure.
+    """
     if not isinstance(body, dict):
-        return {"error": "invalid_client_metadata"}, 400
+        return None, ({"error": "invalid_client_metadata"}, 400)
     uris = body.get("redirect_uris")
     if not isinstance(uris, list) or not uris:
-        return {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"}, 400
+        return None, (
+            {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"},
+            400,
+        )
     if len(uris) > MAX_REDIRECT_URIS:
-        return {"error": "invalid_redirect_uri", "error_description": "too many redirect_uris"}, 400
+        return None, (
+            {"error": "invalid_redirect_uri", "error_description": "too many redirect_uris"},
+            400,
+        )
     cleaned = []
     for uri in uris:
         if not isinstance(uri, str) or not redirect_allowed(uri):
-            return {"error": "invalid_redirect_uri"}, 400
+            return None, ({"error": "invalid_redirect_uri"}, 400)
         cleaned.append(uri)
 
     client_name = body.get("client_name")
@@ -116,6 +126,15 @@ def register_client(body: dict):
         client_name = None
     if isinstance(client_name, str):
         client_name = client_name.strip()[:120] or None
+    return (cleaned, client_name), None
+
+
+def register_client(body: dict):
+    """RFC 7591. Returns (payload, status_code)."""
+    parsed, error = validate_register_body(body)
+    if error:
+        return error
+    cleaned, client_name = parsed
 
     client_id = secrets.token_urlsafe(24)
     issued_at = _now_ts()

@@ -39,6 +39,14 @@ _SQLITE_INT_MIN = -(2**63)
 _SQLITE_INT_MAX = 2**63 - 1
 
 
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request", "").lower() == "true"
+
+
+def _render_partial(name, **context):
+    return templates.env.get_template(name).render(context)
+
+
 def _safe_int(value):
     """int from a form field's string (or a real int/float), within
     SQLite's signed 64-bit range; None for anything else — never raises."""
@@ -590,6 +598,41 @@ def _annotate_child_counts(columns):
     return columns
 
 
+def _pipeline_board_data(current_tag="", tag_error=""):
+    stages = pipeline_stages.list_stages()
+    tag_filter = [current_tag] if current_tag else None
+    columns = [
+        {
+            "stage": s,
+            "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter)),
+        }
+        for s in stages
+    ]
+    _annotate_child_counts(columns)
+    return stages, columns
+
+
+def _pipeline_columns_fragment(request, user, keys, current_tag="", tag_error=""):
+    stages, columns = _pipeline_board_data(current_tag, tag_error)
+    by_key = {c["stage"]["key"]: c for c in columns}
+    csrf_token = generate_csrf_token()
+    parts = []
+    seen = set()
+    for key in keys:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        col = by_key.get(key)
+        if not col:
+            continue
+        parts.append(_render_partial(
+            "admin/_pipeline_column.html",
+            request=request, user=user, col=col, stages=stages,
+            csrf_token=csrf_token, current_tag=current_tag, oob=True,
+        ))
+    return "".join(parts)
+
+
 @router.get("/deals/new", response_class=HTMLResponse)
 async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(require_login)):
     return _new_deal_form(request, user, partner_id=partner_id)
@@ -737,11 +780,19 @@ async def save_deal_next_action(
 async def change_deal_stage(
     request: Request, deal_id: int,
     stage: str = Form(...), next: str = Form("partner"),
+    tag: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
+    old_stage = deal["stage"] if deal else None
     if deal and validate_csrf_token(csrf_token):
         set_deal_stage(deal_id, stage)
+    if _is_htmx(request) and next == "pipeline":
+        current_tag, tag_error = _tag_query(tag)
+        html = _pipeline_columns_fragment(
+            request, user, [old_stage, stage], current_tag, tag_error,
+        )
+        return HTMLResponse(html)
     if next == "pipeline":
         return RedirectResponse("/pipeline", status_code=303)
     if deal:
@@ -752,14 +803,8 @@ async def change_deal_stage(
 # ==================== Pipeline (Kanban board) ====================
 @router.get("/pipeline", response_class=HTMLResponse)
 async def pipeline_board(request: Request, tag: str = "", user=Depends(require_login)):
-    stages = pipeline_stages.list_stages()
     current_tag, tag_error = _tag_query(tag)
-    tag_filter = [current_tag] if current_tag else None
-    columns = [
-        {"stage": s, "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter))}
-        for s in stages
-    ]
-    _annotate_child_counts(columns)
+    stages, columns = _pipeline_board_data(current_tag, tag_error)
     return templates.TemplateResponse(request, "admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,

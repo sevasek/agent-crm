@@ -53,6 +53,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   baseline: one `<link>` in `base.html`, `--pico-primary*` mapped to the
   existing brand blue, `data-theme="light"` locked so Pico's auto dark mode
   does not clash with hand-picked pill colors (closes #43).
+- Vendored htmx 2.0.11. Pipeline stage-move returns the two affected
+  columns as `hx-swap-oob` fragments when the request has `HX-Request`,
+  so a card jumps columns without a full reload. No-JS still POSTs the
+  same form.
 
 ### Removed
 

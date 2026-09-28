@@ -1,6 +1,6 @@
 """Deal tags: set, replace, merge, bulk, filter, list_tags, ingest, backfill."""
 
-from app.database import get_db, get_user_version, init_db
+from app.database import SCHEMA_VERSION, get_db, get_user_version, init_db
 from app.services.auth import generate_csrf_token
 from app.services.catalog import create_service, get_or_create_service
 from app.services.deal_tags import (
@@ -247,7 +247,7 @@ def test_migrate_002_adds_deal_tags_on_v1_and_does_not_restore_a_removed_tag(db)
         conn.commit()
     init_db()
     with get_db() as conn:
-        assert get_user_version(conn) == 2
+        assert get_user_version(conn) == SCHEMA_VERSION
         names = {
             row[0]
             for row in conn.execute(

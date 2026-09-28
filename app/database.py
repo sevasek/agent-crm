@@ -15,7 +15,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 4
 
 
 class SchemaVersionError(RuntimeError):
@@ -69,6 +69,13 @@ def get_db(timeout=None):
         yield conn
     finally:
         conn.close()
+
+
+def row_to_dict(row):
+    """None stays None; sqlite3.Row or a mapping becomes a plain dict."""
+    if row is None:
+        return None
+    return dict(row)
 
 
 def get_user_version(conn) -> int:
@@ -309,15 +316,6 @@ _SCHEMA_V1 = """
         CREATE INDEX IF NOT EXISTS idx_pipeline_stages_position ON pipeline_stages(position);
         CREATE INDEX IF NOT EXISTS idx_api_keys_user ON api_keys(user_id);
 
-        -- Sliding-window rate-limit hits, shared across workers via the same
-        -- sqlite file. In-process dicts would reset per uvicorn worker.
-        CREATE TABLE IF NOT EXISTS rate_limit_hits (
-            bucket TEXT NOT NULL,
-            hit_at REAL NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_rate_limit_hits_bucket_hit
-            ON rate_limit_hits (bucket, hit_at);
-
         -- MCP connector OAuth clients (RFC 7591). Codes and tokens
         -- are signed, not stored; client_id + redirect_uris must survive a
         -- restart or a registered client would 401 on refresh.
@@ -469,10 +467,45 @@ def migrate_002(db) -> None:
     backfill_campaign_tags(db)
 
 
+def migrate_003(db) -> None:
+    """Drop leftover rate_limit_hits; the limiter is in-memory.
+
+    Schema v1/v2 created this table for a sliding-window limiter that now
+    lives in `app.services.auth._rate_limit_hits`. New databases never
+    create it. DROP TABLE removes the index as well; DROP INDEX is here
+    in case a stripped file still has the index name.
+    """
+    db.execute("DROP INDEX IF EXISTS idx_rate_limit_hits_bucket_hit")
+    db.execute("DROP TABLE IF EXISTS rate_limit_hits")
+
+
+def migrate_004(db) -> None:
+    """Persist presented OAuth authorization-code jtis so codes are single-use.
+
+    Codes remain signed blobs; this table only stores used ids until they
+    expire (AUTH_CODE_MAX_AGE). CREATE TABLE IF NOT EXISTS is a no-op on
+    a database that already has the table.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mcp_oauth_used_codes (
+            jti TEXT PRIMARY KEY,
+            expires_at INTEGER NOT NULL
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mcp_oauth_used_codes_expires "
+        "ON mcp_oauth_used_codes (expires_at)"
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
+    3: migrate_003,
+    4: migrate_004,
 }
 
 

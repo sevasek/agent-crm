@@ -8,7 +8,7 @@ stage changes. Deleting a stage in use, or the last remaining stage, is
 refused rather than orphaning deals.
 """
 
-from app.database import get_db
+from app.database import get_db, row_to_dict
 from app.services.auth import sanitize_text
 import re
 
@@ -22,10 +22,6 @@ def is_valid_stage_key(key: str) -> bool:
     return bool(re.match(r"^[a-z0-9_-]+$", key))
 
 
-def _row(r):
-    return dict(r) if r else None
-
-
 def list_stages():
     with get_db() as db:
         rows = db.execute("SELECT * FROM pipeline_stages ORDER BY position, id").fetchall()
@@ -37,7 +33,7 @@ def get_stage(key: str):
         return None
     with get_db() as db:
         row = db.execute("SELECT * FROM pipeline_stages WHERE key = ?", (key,)).fetchone()
-        return _row(row)
+        return row_to_dict(row)
 
 
 def stage_keys() -> set:

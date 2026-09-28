@@ -1,3 +1,4 @@
+import errno
 import socket
 import threading
 import time
@@ -205,6 +206,40 @@ def _read_http_response(sock, timeout=2.0):
     return header + sep + body
 
 
+# send() raises one of these when the server has already closed after
+# rejecting the request. EPIPE is BrokenPipeError; a TCP RST is
+# ConnectionResetError. Both mean the socket is gone, not that the test hung.
+_PEER_CLOSED = (BrokenPipeError, ConnectionResetError, ConnectionAbortedError)
+_PEER_CLOSED_ERRNOS = {errno.EPIPE, errno.ECONNRESET, errno.ECONNABORTED}
+
+
+def _peer_closed(exc: BaseException) -> bool:
+    return isinstance(exc, _PEER_CLOSED) or (
+        isinstance(exc, OSError) and exc.errno in _PEER_CLOSED_ERRNOS
+    )
+
+
+def _send_http_request(sock, payload):
+    """Write a raw request.
+
+    The leads API rejects an oversized Content-Length before it reads the
+    body, then sends Connection: close. On a small socket buffer (or a slow
+    CI runner) that reset arrives while sendall is still writing the body.
+    The 413 is already in the receive buffer; the reset is not a failure.
+    """
+    try:
+        sock.sendall(payload)
+    except OSError as exc:
+        if _peer_closed(exc):
+            return
+        raise
+
+
+def _shrink_send_buffer(sock):
+    """Force the Content-Length race instead of hiding it in a large loopback buffer."""
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 2048)
+
+
 def _assert_reuse_does_not_hang(sock):
     sock.settimeout(2.0)
     second = (
@@ -266,8 +301,9 @@ def test_oversized_content_length_does_not_poison_keepalive(live_leads_port):
         + body
     )
     sock = socket.create_connection(("127.0.0.1", live_leads_port), timeout=2)
+    _shrink_send_buffer(sock)
     try:
-        sock.sendall(req)
+        _send_http_request(sock, req)
         resp = _read_http_response(sock)
         status = resp.split(b"\r\n", 1)[0]
         assert b"413" in status, resp[:200]
@@ -291,7 +327,7 @@ def test_wrong_content_type_does_not_poison_keepalive(live_leads_port):
     )
     sock = socket.create_connection(("127.0.0.1", live_leads_port), timeout=2)
     try:
-        sock.sendall(req)
+        _send_http_request(sock, req)
         resp = _read_http_response(sock)
         status = resp.split(b"\r\n", 1)[0]
         assert b"415" in status, resp[:200]
@@ -318,8 +354,9 @@ def test_mid_stream_body_cap_does_not_poison_keepalive(live_leads_port):
         + b"\r\n0\r\n\r\n"
     )
     sock = socket.create_connection(("127.0.0.1", live_leads_port), timeout=2)
+    _shrink_send_buffer(sock)
     try:
-        sock.sendall(req)
+        _send_http_request(sock, req)
         resp = _read_http_response(sock)
         status = resp.split(b"\r\n", 1)[0]
         assert b"413" in status, resp[:200]

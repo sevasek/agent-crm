@@ -94,7 +94,7 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `ingest_leads` | Bulk lead ingest. Email is optional. Matching order: email, then phone + name, then website + name, then name within the parent. Rows with a company and phone create a company partner and a deal. Optional `tags` on a lead are merged; omitting `tags` leaves the existing set alone. |
 | `create_partner` / `update_partner` | `update_partner` fills empty fields by default. |
 | `create_deal` / `update_deal` | `offer_id`, `owner_key` / `owner`, `external_ref`, `parent_deal_id` (same partner, cycles rejected), and tags. `create_deal` takes `tags`. `update_deal` takes `tags` (replace; `[]` clears) or `add_tags` / `remove_tags` (merge; remove wins if a tag is in both). A duplicate open deal from `create_deal` is returned unchanged — use `add_tags` or `ingest_leads` to merge. |
-| `set_deal_stage` | Move a deal to any configured stage. Entering a `triggers_nurture` stage fires the nurture webhook. |
+| `set_deal_stage` | Move a deal to any configured stage. Entering a `triggers_nurture` stage fires the nurture webhook. Entering an `is_won` stage from a non-won stage fires the deal-won webhook. |
 | `record_call_outcome` | One of `no_answer`, `interested`, `meeting_scheduled`, `won`, `not_interested`, with an optional note. Targets resolve by stage role, not by name; `no_answer` leaves the stage so the deal stays in today's queue. |
 | `log_activity` | Add a `call`, `email`, `meeting` or `note` to the timeline. |
 | `create_service` / `update_service` | Add or change a catalogue service (`slug` is idempotent on create; `active=false` hides it without deleting; `nurture_list_slug`). |
@@ -128,6 +128,16 @@ Moving a deal into a stage with the `triggers_nurture` role POSTs
 `nurture_list_slug`. The CRM does not run drip sequences: point the webhook at
 your mailing tool or automation. An unset URL, a missing list slug or a missing
 email is logged as a system activity and the stage change still succeeds.
+
+## Deal-won webhook
+
+Moving a deal into a stage with the `is_won` role (from a stage that is not
+already won) POSTs `{deal_id, stage, partner_id, partner_name, partner_email,
+service_id, service_name, service_slug, value_estimate, offer}` to
+`DEAL_WON_WEBHOOK_URL` (Bearer `DEAL_WON_WEBHOOK_TOKEN` if set). Point it at
+an invoicing tool or Zapier. An unset URL or a network failure is logged as
+a system activity and the stage change still succeeds. Invoice status is
+not written back into the CRM.
 
 ## Example calls
 

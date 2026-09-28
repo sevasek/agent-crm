@@ -27,7 +27,7 @@
     {% for d in deals %}
     <tr>
         <td><a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
-        <td>{{ d.service_name }}</td>
+        <td>{{ d.service_name }}{% if d.parent_deal_id %}<div class="muted">follow-on of #{{ d.parent_deal_id }}</div>{% endif %}</td>
         <td><span class="pill">{{ d.stage }}</span></td>
         <td>
             {% for tag in d.tags %}

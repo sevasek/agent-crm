@@ -36,12 +36,6 @@ def get_user_by_email(email: str):
         return dict(row) if row else None
 
 
-def get_user_by_id(user_id: int):
-    with get_db() as db:
-        row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-        return dict(row) if row else None
-
-
 def create_user(email: str, name: str, password: str) -> int:
     password_hash = hash_password(password)
     clean_name = sanitize_text(name, max_len=120) if name else None
@@ -229,12 +223,18 @@ RATE_LIMIT_MAX_BY_ACTION = {
     "oauth_authorize": 10,
     "default": 5,
 }
-# Authenticated ceilings (per key/token id, not IP). Larger than the guess cap
-# so a shared proxy IP does not throttle a busy agent.
+# Authenticated ceilings. Larger than the guess cap so a shared proxy IP
+# does not throttle a busy agent. MCP/API/token keys are per key/token id;
+# successful OAuth register is per IP (see oauth_register note below).
 RATE_LIMIT_MAX_AUTH_BY_ACTION = {
     "leads_api": 120,
     "stages_api": 120,
     "mcp_api": 600,
+    # Successful register is keyed on IP: each 201 mints a unique client_id.
+    # Successful token is keyed on oauth:{client_id}.
+    # Guess caps stay in RATE_LIMIT_MAX_BY_ACTION (register 10, token 20).
+    "oauth_register": 40,
+    "oauth_token": 80,
 }
 
 _rate_limit_hits: dict[str, deque[float]] = defaultdict(deque)

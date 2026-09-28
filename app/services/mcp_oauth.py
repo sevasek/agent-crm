@@ -2,8 +2,10 @@
 
 Grok.com's connector dialog speaks OAuth, not a static API-key field.
 Dynamic client registration (RFC 7591) lets Grok self-register. Codes and
-tokens are signed (itsdangerous) so we don't persist grants; registered
-clients live in sqlite so a restart doesn't drop Grok's client_id.
+tokens are signed (itsdangerous). Access and refresh tokens are not stored;
+authorization codes carry a unique jti persisted in sqlite after first
+presentation so a replay cannot succeed. Registered clients live in sqlite
+so a restart doesn't drop Grok's client_id.
 
 The operator secret is still CRM_MCP_API_KEY: authorize requires either
 that key or an existing admin session, and MCP is fail-closed if the key
@@ -21,7 +23,7 @@ from urllib.parse import urlparse
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from app.database import get_db
+from app.database import IntegrityConflict, get_db
 from app.services.auth import SECRET_KEY, check_env_api_key
 
 logger = logging.getLogger(__name__)
@@ -55,12 +57,6 @@ def resource_url(request) -> str:
 
 def _now_ts() -> int:
     return int(datetime.now(timezone.utc).timestamp())
-
-
-def list_clients():
-    with get_db() as db:
-        rows = db.execute("SELECT * FROM mcp_oauth_clients ORDER BY created_at").fetchall()
-        return [dict(r) for r in rows]
 
 
 def get_client(client_id: str):
@@ -102,19 +98,29 @@ def redirect_allowed(uri: str) -> bool:
     return True
 
 
-def register_client(body: dict):
-    """RFC 7591. Returns (payload, status_code)."""
+def validate_register_body(body: dict):
+    """Validate RFC 7591 metadata without inserting.
+
+    Returns ((cleaned_uris, client_name), None) on success, or
+    (None, (payload, status_code)) on failure.
+    """
     if not isinstance(body, dict):
-        return {"error": "invalid_client_metadata"}, 400
+        return None, ({"error": "invalid_client_metadata"}, 400)
     uris = body.get("redirect_uris")
     if not isinstance(uris, list) or not uris:
-        return {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"}, 400
+        return None, (
+            {"error": "invalid_redirect_uri", "error_description": "redirect_uris required"},
+            400,
+        )
     if len(uris) > MAX_REDIRECT_URIS:
-        return {"error": "invalid_redirect_uri", "error_description": "too many redirect_uris"}, 400
+        return None, (
+            {"error": "invalid_redirect_uri", "error_description": "too many redirect_uris"},
+            400,
+        )
     cleaned = []
     for uri in uris:
         if not isinstance(uri, str) or not redirect_allowed(uri):
-            return {"error": "invalid_redirect_uri"}, 400
+            return None, ({"error": "invalid_redirect_uri"}, 400)
         cleaned.append(uri)
 
     client_name = body.get("client_name")
@@ -122,6 +128,15 @@ def register_client(body: dict):
         client_name = None
     if isinstance(client_name, str):
         client_name = client_name.strip()[:120] or None
+    return (cleaned, client_name), None
+
+
+def register_client(body: dict):
+    """RFC 7591. Returns (payload, status_code)."""
+    parsed, error = validate_register_body(body)
+    if error:
+        return error
+    cleaned, client_name = parsed
 
     client_id = secrets.token_urlsafe(24)
     issued_at = _now_ts()
@@ -165,6 +180,7 @@ def issue_auth_code(client_id: str, redirect_uri: str, code_challenge: str, stat
         "uri": redirect_uri,
         "ch": code_challenge,
         "state": state or "",
+        "jti": secrets.token_urlsafe(16),
     })
 
 
@@ -176,6 +192,43 @@ def load_auth_code(code: str):
     if not isinstance(data, dict) or data.get("typ") != "mcp_code":
         return None
     return data
+
+
+def prune_used_auth_codes(now=None) -> int:
+    """Delete used-jti rows whose expiry has passed. Returns rows removed."""
+    ts = _now_ts() if now is None else int(now)
+    with get_db() as db:
+        cur = db.execute(
+            "DELETE FROM mcp_oauth_used_codes WHERE expires_at <= ?", (ts,)
+        )
+        db.commit()
+        return cur.rowcount
+
+
+def consume_auth_code_jti(jti: str) -> bool:
+    """Mark a code jti used. False if missing, already used, or insert fails.
+
+    Chosen policy: once a signed code is presented (load succeeded), burn it
+    even if later PKCE or client checks fail. Replay always returns
+    invalid_grant. Used rows expire after AUTH_CODE_MAX_AGE.
+    """
+    if not isinstance(jti, str) or not jti or len(jti) > 128:
+        return False
+    now = _now_ts()
+    with get_db() as db:
+        db.execute(
+            "DELETE FROM mcp_oauth_used_codes WHERE expires_at <= ?", (now,)
+        )
+        try:
+            db.execute(
+                "INSERT INTO mcp_oauth_used_codes (jti, expires_at) VALUES (?, ?)",
+                (jti, now + AUTH_CODE_MAX_AGE),
+            )
+        except IntegrityConflict:
+            db.commit()
+            return False
+        db.commit()
+        return True
 
 
 def issue_tokens(client_id: str):
@@ -218,6 +271,9 @@ def exchange_code(client_id: str, code: str, redirect_uri: str, code_verifier: s
         return None, "invalid_grant"
     data = load_auth_code(code)
     if not data:
+        return None, "invalid_grant"
+    # OAuth 2.1 single-use: burn on first successful load, before PKCE.
+    if not consume_auth_code_jti(data.get("jti")):
         return None, "invalid_grant"
     if data.get("cid") != client_id or data.get("uri") != redirect_uri:
         return None, "invalid_grant"

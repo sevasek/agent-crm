@@ -13,8 +13,8 @@ from app.services.partners import (
 from app.services.catalog import create_service, get_service, update_service, list_services
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
-    create_deal, get_deal, list_deals, set_deal_stage, update_deal_fields,
-    record_call_outcome, CALL_OUTCOMES,
+    create_deal, get_deal, list_deals, list_parent_candidates, set_deal_stage,
+    update_deal_fields, record_call_outcome, validate_parent_link, CALL_OUTCOMES,
 )
 from app.services import pipeline_stages
 from app.services.call_queue import (
@@ -64,17 +64,26 @@ def _safe_int(value):
 
 @router.get("/partners", response_class=HTMLResponse)
 async def dashboard(request: Request, q: str = "", user=Depends(require_login)):
-    return templates.TemplateResponse("admin/partners.html", {
+    return templates.TemplateResponse(request, "admin/partners.html", {
         "request": request, "user": user, "partners": list_partners(q), "q": q,
     })
 
 
-def _partner_form_context(request, user, partner, csrf_token):
+def _partner_form_context(request, user, partner, csrf_token, error=None):
     return {
         "request": request, "user": user, "companies": list_companies(),
         "partner": partner, "csrf_token": csrf_token,
         "social_fields": [(field, label) for field, label, _hosts in SOCIAL_PLATFORMS],
+        "error": error,
     }
+
+
+def _partner_form_response(request, user, partner, error, status_code=400):
+    return templates.TemplateResponse(
+        request, "admin/partner_form.html",
+        _partner_form_context(request, user, partner, generate_csrf_token(), error=error),
+        status_code=status_code,
+    )
 
 
 def _partner_fields_from_form(
@@ -109,7 +118,7 @@ def _partner_fields_from_form(
 # ==================== Partners ====================
 @router.get("/partners/new", response_class=HTMLResponse)
 async def new_partner_page(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/partner_form.html", _partner_form_context(
+    return templates.TemplateResponse(request, "admin/partner_form.html", _partner_form_context(
         request, user, None, generate_csrf_token(),
     ))
 
@@ -117,7 +126,7 @@ async def new_partner_page(request: Request, user=Depends(require_login)):
 @router.post("/partners/new")
 async def new_partner_submit(
     request: Request,
-    name: str = Form(...), is_company: str = Form(""), parent_id: str = Form(""),
+    name: str = Form(""), is_company: str = Form(""), parent_id: str = Form(""),
     email: str = Form(""), phone: str = Form(""), website: str = Form(""), title: str = Form(""),
     address: str = Form(""), preferred_channel: str = Form(""),
     industry: str = Form(""), team_size: str = Form(""),
@@ -128,6 +137,8 @@ async def new_partner_submit(
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/partners/new", status_code=303)
+    if not (name or "").strip():
+        return _partner_form_response(request, user, None, "Name is required.")
     partner_id = create_partner(**_partner_fields_from_form(
         name=name, is_company=is_company, parent_id=parent_id, email=email,
         phone=phone, website=website, title=title, address=address,
@@ -146,7 +157,7 @@ async def partner_detail(request: Request, partner_id: int, user=Depends(require
     activities = list_activities_for_partner(partner_id)
     for item in activities:
         item["display_body"] = activity_display_body(item.get("body") or "")
-    return templates.TemplateResponse("admin/partner_detail.html", {
+    return templates.TemplateResponse(request, "admin/partner_detail.html", {
         "request": request, "user": user, "partner": partner,
         "children": get_children(partner_id) if partner["is_company"] else [],
         "deals": annotate_deals(list_deals(partner_id=partner_id)),
@@ -163,7 +174,7 @@ async def edit_partner_page(request: Request, partner_id: int, user=Depends(requ
     partner = get_partner(partner_id)
     if not partner:
         return RedirectResponse("/partners", status_code=303)
-    return templates.TemplateResponse("admin/partner_form.html", _partner_form_context(
+    return templates.TemplateResponse(request, "admin/partner_form.html", _partner_form_context(
         request, user, partner, generate_csrf_token(),
     ))
 
@@ -171,7 +182,7 @@ async def edit_partner_page(request: Request, partner_id: int, user=Depends(requ
 @router.post("/partners/{partner_id}/edit")
 async def edit_partner_submit(
     request: Request, partner_id: int,
-    name: str = Form(...), is_company: str = Form(""), parent_id: str = Form(""),
+    name: str = Form(""), is_company: str = Form(""), parent_id: str = Form(""),
     email: str = Form(""), phone: str = Form(""), website: str = Form(""), title: str = Form(""),
     address: str = Form(""), preferred_channel: str = Form(""),
     industry: str = Form(""), team_size: str = Form(""),
@@ -182,6 +193,10 @@ async def edit_partner_submit(
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse(f"/partners/{partner_id}/edit", status_code=303)
+    if not (name or "").strip():
+        return _partner_form_response(
+            request, user, get_partner(partner_id), "Name is required.",
+        )
     fields = _partner_fields_from_form(
         name=name, is_company=is_company, parent_id=parent_id, email=email,
         phone=phone, website=website, title=title, address=address,
@@ -208,7 +223,7 @@ async def add_activity(
 # ==================== Services (catalog) ====================
 @router.get("/services", response_class=HTMLResponse)
 async def services_list(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/services.html", {
+    return templates.TemplateResponse(request, "admin/services.html", {
         "request": request, "user": user, "services": list_services(),
         "csrf_token": generate_csrf_token(),
     })
@@ -216,7 +231,7 @@ async def services_list(request: Request, user=Depends(require_login)):
 
 @router.get("/services/new", response_class=HTMLResponse)
 async def new_service_page(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/service_form.html", {
+    return templates.TemplateResponse(request, "admin/service_form.html", {
         "request": request, "user": user, "service": None, "csrf_token": generate_csrf_token(),
     })
 
@@ -224,17 +239,23 @@ async def new_service_page(request: Request, user=Depends(require_login)):
 @router.post("/services/new")
 async def new_service_submit(
     request: Request,
-    name: str = Form(...), slug: str = Form(...), description: str = Form(""),
+    name: str = Form(""), slug: str = Form(""), description: str = Form(""),
     nurture_list_slug: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token) or not is_valid_slug(slug):
-        return templates.TemplateResponse("admin/service_form.html", {
+        return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": None,
             "error": "Invalid submission or slug (lowercase letters, numbers, hyphens only).",
             "csrf_token": generate_csrf_token(),
         }, status_code=400)
+    if not (name or "").strip():
+        return templates.TemplateResponse(request, "admin/service_form.html", {
+            "request": request, "user": user, "service": None,
+            "error": "Name is required.",
+            "csrf_token": generate_csrf_token(),
+        }, status_code=400)
     if nurture_list_slug and not is_valid_slug(nurture_list_slug):
-        return templates.TemplateResponse("admin/service_form.html", {
+        return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": None,
             "error": "List slug must be lowercase letters, numbers, and hyphens.",
             "csrf_token": generate_csrf_token(),
@@ -248,7 +269,7 @@ async def edit_service_page(request: Request, service_id: int, user=Depends(requ
     service = get_service(service_id)
     if not service:
         return RedirectResponse("/services", status_code=303)
-    return templates.TemplateResponse("admin/service_form.html", {
+    return templates.TemplateResponse(request, "admin/service_form.html", {
         "request": request, "user": user, "service": service, "csrf_token": generate_csrf_token(),
     })
 
@@ -256,14 +277,20 @@ async def edit_service_page(request: Request, service_id: int, user=Depends(requ
 @router.post("/services/{service_id}/edit")
 async def edit_service_submit(
     request: Request, service_id: int,
-    name: str = Form(...), description: str = Form(""),
+    name: str = Form(""), description: str = Form(""),
     nurture_list_slug: str = Form(""), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/services", status_code=303)
+    if not (name or "").strip():
+        return templates.TemplateResponse(request, "admin/service_form.html", {
+            "request": request, "user": user, "service": get_service(service_id),
+            "error": "Name is required.",
+            "csrf_token": generate_csrf_token(),
+        }, status_code=400)
     if nurture_list_slug and not is_valid_slug(nurture_list_slug):
-        return templates.TemplateResponse("admin/service_form.html", {
+        return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": get_service(service_id),
             "error": "List slug must be lowercase letters, numbers, and hyphens.",
             "csrf_token": generate_csrf_token(),
@@ -278,7 +305,7 @@ async def edit_service_submit(
 # ==================== Today's calls ====================
 @router.get("/calls", response_class=HTMLResponse)
 async def todays_calls(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/calls.html", {
+    return templates.TemplateResponse(request, "admin/calls.html", {
         "request": request, "user": user,
         "calls": list_todays_calls(),
         "limit": CALL_QUEUE_LIMIT,
@@ -291,7 +318,7 @@ async def todays_calls(request: Request, user=Depends(require_login)):
 @router.post("/deals/{deal_id}/call-outcome")
 async def log_call_outcome(
     request: Request, deal_id: int,
-    outcome: str = Form(...), note: str = Form(""), next: str = Form("calls"),
+    outcome: str = Form(""), note: str = Form(""), next: str = Form("calls"),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if validate_csrf_token(csrf_token):
@@ -340,7 +367,7 @@ async def deal_call_view(request: Request, deal_id: int, user=Depends(require_lo
     offer = offers_service.get_offer(deal.get("offer_id"))
     offer_options = offers_service.list_offers(active_only=True)
 
-    return templates.TemplateResponse("admin/call_view.html", {
+    return templates.TemplateResponse(request, "admin/call_view.html", {
         "request": request, "user": user,
         "deal": deal, "partner": partner, "service": service,
         "activities": activities, "score": score, "score_max": SCORE_MAX,
@@ -375,7 +402,7 @@ async def set_deal_offer(
 @router.post("/deals/{deal_id}/offer/new")
 async def create_offer_for_deal(
     request: Request, deal_id: int,
-    name: str = Form(...), pitch: str = Form(""), proof_point: str = Form(""),
+    name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
     price_anchor: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
     """"Create a new offer" from the call view itself — no detour through
@@ -464,7 +491,7 @@ async def deals_list(
         deals = []
     else:
         deals = _deals_for_board(stage, due_filter, current_tag)
-    return templates.TemplateResponse("admin/deals.html", {
+    return templates.TemplateResponse(request, "admin/deals.html", {
         "request": request, "user": user,
         "deals": deals, "stages": pipeline_stages.list_stages(),
         "current_stage": stage, "current_due": due_filter,
@@ -473,47 +500,147 @@ async def deals_list(
     })
 
 
-@router.get("/deals/new", response_class=HTMLResponse)
-async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/deal_form.html", {
+_PARENT_FORM_ERRORS = {
+    "invalid_parent": "Pick a parent deal, or leave it unset.",
+    "parent_not_found": "That parent deal does not exist.",
+    "parent_partner_mismatch": "Parent deal must belong to the same partner.",
+    "parent_cycle": "That parent would create a cycle.",
+}
+
+
+def _parent_form_error(code):
+    return _PARENT_FORM_ERRORS.get(code, "Invalid parent deal.")
+
+
+def _group_parent_candidates(deals):
+    """Optgroups labelled by partner so an unfiltered picker is usable without JS."""
+    groups = {}
+    for d in deals:
+        pid = d["partner_id"]
+        if pid not in groups:
+            groups[pid] = {
+                "partner_id": pid,
+                "label": d.get("partner_name") or f"Partner #{pid}",
+                "candidates": [],
+            }
+        groups[pid]["candidates"].append(d)
+    return sorted(groups.values(), key=lambda g: (g["label"] or "").lower())
+
+
+def _deal_parent_context(deal=None, partner_id=0):
+    if deal:
+        return {
+            "parent_candidates": list_parent_candidates(
+                deal["partner_id"], exclude_deal_id=deal["id"],
+            ),
+            "parent_candidate_groups": None,
+            "child_deals": list_deals(parent_deal_id=deal["id"]),
+        }
+    if partner_id:
+        return {
+            "parent_candidates": list_parent_candidates(partner_id),
+            "parent_candidate_groups": None,
+            "child_deals": [],
+        }
+    candidates = list_deals()
+    return {
+        "parent_candidates": candidates,
+        "parent_candidate_groups": _group_parent_candidates(candidates),
+        "child_deals": [],
+    }
+
+
+def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal_id=None,
+                   error=None, status_code=200):
+    ctx = {
         "request": request, "user": user, "partners": list_partners(),
         "services": list_services(active_only=True), "preselect_partner_id": partner_id,
         "deal": None, "partner": None, "service": None,
         "csrf_token": generate_csrf_token(),
-        "form_tags": None, "error": None,
-    })
+        "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
+        "error": error,
+    }
+    ctx.update(_deal_parent_context(partner_id=partner_id))
+    return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
+
+
+def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
+                    form_parent_deal_id=None, error=None, status_code=200):
+    ctx = {
+        "request": request, "user": user, "deal": deal,
+        "partner": partner, "service": service,
+        "csrf_token": generate_csrf_token(),
+        "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
+        "error": error,
+    }
+    ctx.update(_deal_parent_context(deal))
+    return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
+
+
+def _annotate_child_counts(columns):
+    """Count every child, not only deals still visible after a tag filter."""
+    visible = [d for col in columns for d in col["deals"]]
+    counts = {}
+    for d in list_deals():
+        parent = d.get("parent_deal_id")
+        if parent:
+            counts[parent] = counts.get(parent, 0) + 1
+    for d in visible:
+        d["child_count"] = counts.get(d["id"], 0)
+    return columns
+
+
+@router.get("/deals/new", response_class=HTMLResponse)
+async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(require_login)):
+    return _new_deal_form(request, user, partner_id=partner_id)
 
 
 @router.post("/deals/new")
 async def new_deal_submit(
     request: Request,
-    partner_id: int = Form(...), service_id: int = Form(...), source: str = Form(""),
+    partner_id: str = Form(""), service_id: str = Form(""), source: str = Form(""),
     value_estimate: str = Form(""), pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
+    parent_deal_id: str = Form(""),
     tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token):
         return RedirectResponse("/deals/new", status_code=303)
+    parsed_partner_id = _safe_int(partner_id) or 0
+    parsed_service_id = _safe_int(service_id)
+    if not parsed_partner_id or not parsed_service_id:
+        return _new_deal_form(
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id,
+            error="Pick a partner and a service.", status_code=400,
+        )
     parsed_tags, tag_error = parse_tag_list(tags)
     if tag_error:
-        return templates.TemplateResponse("admin/deal_form.html", {
-            "request": request, "user": user, "partners": list_partners(),
-            "services": list_services(active_only=True), "preselect_partner_id": partner_id,
-            "deal": None, "partner": None, "service": None,
-            "csrf_token": generate_csrf_token(),
-            "form_tags": tags, "error": tag_error,
-        }, status_code=400)
+        return _new_deal_form(
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=tag_error, status_code=400,
+        )
+    cleaned_parent, parent_error = validate_parent_link(
+        None, parent_deal_id, parsed_partner_id,
+    )
+    if parent_error:
+        return _new_deal_form(
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=_parent_form_error(parent_error),
+            status_code=400,
+        )
     create_deal(
-        partner_id, service_id, source=source,
+        parsed_partner_id, parsed_service_id, source=source,
         value_estimate=float(value_estimate) if value_estimate else None,
         pain_points=pain_points, goals=goals,
         next_action=next_action, next_action_date=next_action_date or None,
         owner_key=owner_key, external_ref=external_ref,
+        parent_deal_id=cleaned_parent,
         tags=parsed_tags or None,
     )
-    return RedirectResponse(f"/partners/{partner_id}", status_code=303)
+    return RedirectResponse(f"/partners/{parsed_partner_id}", status_code=303)
 
 
 @router.get("/deals/{deal_id}/edit", response_class=HTMLResponse)
@@ -525,12 +652,7 @@ async def edit_deal_page(request: Request, deal_id: int, user=Depends(require_lo
     service = get_service(deal["service_id"])
     if not partner or not service:
         return RedirectResponse("/deals", status_code=303)
-    return templates.TemplateResponse("admin/deal_form.html", {
-        "request": request, "user": user, "deal": deal,
-        "partner": partner, "service": service,
-        "csrf_token": generate_csrf_token(),
-        "form_tags": None, "error": None,
-    })
+    return _edit_deal_form(request, user, deal, partner, service)
 
 
 @router.post("/deals/{deal_id}/edit")
@@ -540,6 +662,7 @@ async def edit_deal_submit(
     pain_points: str = Form(""), goals: str = Form(""),
     next_action: str = Form(""), next_action_date: str = Form(""),
     owner_key: str = Form(""), external_ref: str = Form(""),
+    parent_deal_id: str = Form(""),
     tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
@@ -554,12 +677,19 @@ async def edit_deal_submit(
         return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
     parsed_tags, tag_error = parse_tag_list(tags)
     if tag_error:
-        return templates.TemplateResponse("admin/deal_form.html", {
-            "request": request, "user": user, "deal": deal,
-            "partner": partner, "service": service,
-            "csrf_token": generate_csrf_token(),
-            "form_tags": tags, "error": tag_error,
-        }, status_code=400)
+        return _edit_deal_form(
+            request, user, deal, partner, service, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=tag_error, status_code=400,
+        )
+    cleaned_parent, parent_error = validate_parent_link(
+        deal_id, parent_deal_id, deal["partner_id"],
+    )
+    if parent_error:
+        return _edit_deal_form(
+            request, user, deal, partner, service, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, error=_parent_form_error(parent_error),
+            status_code=400,
+        )
     raw_value = value_estimate.strip()
     if not raw_value:
         value = None
@@ -578,6 +708,7 @@ async def edit_deal_submit(
         next_action_date=(next_action_date or "").strip()[:10] or None,
         owner_key=owner_key,
         external_ref=external_ref,
+        parent_deal_id=cleaned_parent,
     )
     apply_deal_tags(deal_id, replace=parsed_tags or [])
     return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
@@ -628,7 +759,8 @@ async def pipeline_board(request: Request, tag: str = "", user=Depends(require_l
         {"stage": s, "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter))}
         for s in stages
     ]
-    return templates.TemplateResponse("admin/pipeline.html", {
+    _annotate_child_counts(columns)
+    return templates.TemplateResponse(request, "admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,
         "csrf_token": generate_csrf_token(),
@@ -651,7 +783,7 @@ _STAGE_ERROR_MESSAGES = {
 
 @router.get("/stages", response_class=HTMLResponse)
 async def stages_settings(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/stages.html", {
+    return templates.TemplateResponse(request, "admin/stages.html", {
         "request": request, "user": user,
         "stages": pipeline_stages.list_stages(),
         "csrf_token": generate_csrf_token(),
@@ -661,7 +793,7 @@ async def stages_settings(request: Request, user=Depends(require_login)):
 @router.post("/stages/new")
 async def create_stage_submit(
     request: Request,
-    key: str = Form(...), label: str = Form(...),
+    key: str = Form(""), label: str = Form(""),
     is_default: str = Form(""), is_qualified_pool: str = Form(""),
     triggers_nurture: str = Form(""), is_won: str = Form(""), is_lost: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
@@ -674,7 +806,7 @@ async def create_stage_submit(
         triggers_nurture=bool(triggers_nurture), is_won=bool(is_won), is_lost=bool(is_lost),
     )
     if error:
-        return templates.TemplateResponse("admin/stages.html", {
+        return templates.TemplateResponse(request, "admin/stages.html", {
             "request": request, "user": user,
             "stages": pipeline_stages.list_stages(),
             "csrf_token": generate_csrf_token(),
@@ -686,7 +818,7 @@ async def create_stage_submit(
 @router.post("/stages/{key}/edit")
 async def edit_stage_submit(
     request: Request, key: str,
-    label: str = Form(...),
+    label: str = Form(""),
     is_default: str = Form(""), is_qualified_pool: str = Form(""),
     triggers_nurture: str = Form(""), is_won: str = Form(""), is_lost: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
@@ -699,7 +831,7 @@ async def edit_stage_submit(
         triggers_nurture=bool(triggers_nurture), is_won=bool(is_won), is_lost=bool(is_lost),
     )
     if error:
-        return templates.TemplateResponse("admin/stages.html", {
+        return templates.TemplateResponse(request, "admin/stages.html", {
             "request": request, "user": user,
             "stages": pipeline_stages.list_stages(),
             "csrf_token": generate_csrf_token(),
@@ -727,7 +859,7 @@ async def delete_stage_submit(
         return RedirectResponse("/stages", status_code=303)
     _, error = pipeline_stages.delete_stage(key)
     if error:
-        return templates.TemplateResponse("admin/stages.html", {
+        return templates.TemplateResponse(request, "admin/stages.html", {
             "request": request, "user": user,
             "stages": pipeline_stages.list_stages(),
             "csrf_token": generate_csrf_token(),
@@ -764,7 +896,7 @@ def _offer_form_price(price: str):
 
 @router.get("/offers", response_class=HTMLResponse)
 async def offers_settings(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/offers.html", {
+    return templates.TemplateResponse(request, "admin/offers.html", {
         "request": request, "user": user,
         "offers": offers_service.list_offers(),
         "services": list_services(),
@@ -775,7 +907,7 @@ async def offers_settings(request: Request, user=Depends(require_login)):
 @router.post("/offers/new")
 async def create_offer_submit(
     request: Request,
-    name: str = Form(...), pitch: str = Form(""), proof_point: str = Form(""),
+    name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
     price_anchor: str = Form(""), is_default: str = Form(""), active: str = Form(""),
     service_id: str = Form(""), price: str = Form(""), currency: str = Form("USD"),
     description: str = Form(""),
@@ -792,7 +924,7 @@ async def create_offer_submit(
         description=description,
     )
     if error:
-        return templates.TemplateResponse("admin/offers.html", {
+        return templates.TemplateResponse(request, "admin/offers.html", {
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
@@ -805,7 +937,7 @@ async def create_offer_submit(
 @router.post("/offers/{offer_id}/edit")
 async def edit_offer_submit(
     request: Request, offer_id: int,
-    name: str = Form(...), pitch: str = Form(""), proof_point: str = Form(""),
+    name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
     price_anchor: str = Form(""), is_default: str = Form(""), active: str = Form(""),
     service_id: str = Form(""), price: str = Form(""), currency: str = Form("USD"),
     description: str = Form(""),
@@ -822,7 +954,7 @@ async def edit_offer_submit(
         description=description,
     )
     if error:
-        return templates.TemplateResponse("admin/offers.html", {
+        return templates.TemplateResponse(request, "admin/offers.html", {
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
@@ -841,7 +973,7 @@ async def delete_offer_submit(
         return RedirectResponse("/offers", status_code=303)
     _, error = offers_service.delete_offer(offer_id)
     if error:
-        return templates.TemplateResponse("admin/offers.html", {
+        return templates.TemplateResponse(request, "admin/offers.html", {
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
@@ -863,7 +995,7 @@ _ICP_ERROR_MESSAGES = {
 
 @router.get("/icp", response_class=HTMLResponse)
 async def icp_settings(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/icp.html", {
+    return templates.TemplateResponse(request, "admin/icp.html", {
         "request": request, "user": user,
         "criteria": icp_service.list_criteria(),
         "fields": icp_service.MATCHABLE_FIELDS,
@@ -875,7 +1007,7 @@ async def icp_settings(request: Request, user=Depends(require_login)):
 @router.post("/icp/new")
 async def create_icp_criterion_submit(
     request: Request,
-    label: str = Form(""), field: str = Form(...), operator: str = Form(...),
+    label: str = Form(""), field: str = Form(""), operator: str = Form(""),
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
@@ -883,7 +1015,7 @@ async def create_icp_criterion_submit(
         return RedirectResponse("/icp", status_code=303)
     weight_int = _safe_int(weight)
     if weight_int is None:
-        return templates.TemplateResponse("admin/icp.html", {
+        return templates.TemplateResponse(request, "admin/icp.html", {
             "request": request, "user": user,
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
@@ -895,7 +1027,7 @@ async def create_icp_criterion_submit(
         field, operator, value, weight=weight_int, label=label, active=bool(active),
     )
     if error:
-        return templates.TemplateResponse("admin/icp.html", {
+        return templates.TemplateResponse(request, "admin/icp.html", {
             "request": request, "user": user,
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
@@ -909,7 +1041,7 @@ async def create_icp_criterion_submit(
 @router.post("/icp/{criterion_id}/edit")
 async def edit_icp_criterion_submit(
     request: Request, criterion_id: int,
-    label: str = Form(""), field: str = Form(...), operator: str = Form(...),
+    label: str = Form(""), field: str = Form(""), operator: str = Form(""),
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
@@ -917,7 +1049,7 @@ async def edit_icp_criterion_submit(
         return RedirectResponse("/icp", status_code=303)
     weight_int = _safe_int(weight)
     if weight_int is None:
-        return templates.TemplateResponse("admin/icp.html", {
+        return templates.TemplateResponse(request, "admin/icp.html", {
             "request": request, "user": user,
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
@@ -930,7 +1062,7 @@ async def edit_icp_criterion_submit(
         value=value, weight=weight_int, active=bool(active),
     )
     if error:
-        return templates.TemplateResponse("admin/icp.html", {
+        return templates.TemplateResponse(request, "admin/icp.html", {
             "request": request, "user": user,
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
@@ -954,7 +1086,7 @@ async def delete_icp_criterion_submit(
 # ==================== Account settings / API keys ====================
 @router.get("/settings", response_class=HTMLResponse)
 async def account_settings(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse("admin/settings.html", {
+    return templates.TemplateResponse(request, "admin/settings.html", {
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
         "csrf_token": generate_csrf_token(),
@@ -972,7 +1104,7 @@ async def create_api_key_submit(
     # Rendered directly (not redirected) so the plaintext key can be shown
     # once — it's never recoverable after this response, since only its hash
     # is stored.
-    return templates.TemplateResponse("admin/settings.html", {
+    return templates.TemplateResponse(request, "admin/settings.html", {
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
         "csrf_token": generate_csrf_token(),

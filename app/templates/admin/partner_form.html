@@ -2,6 +2,7 @@
 {% block title %}{{ "Edit partner" if partner else "New partner" }} — crm{% endblock %}
 {% block content %}
 <h1>{{ "Edit partner" if partner else "New partner" }}</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
 <form method="post" action="{{ '/partners/' ~ partner.id ~ '/edit' if partner else '/partners/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">

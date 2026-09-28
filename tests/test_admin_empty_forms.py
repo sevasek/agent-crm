@@ -25,6 +25,7 @@ def test_new_partner_empty_name_is_html_error_not_422(logged_in_client, db):
     })
     _html_client_error(resp)
     assert "New partner" in resp.text
+    assert "Name is required" in resp.text
     assert {p["id"] for p in list_partners()} == before
 
 
@@ -35,6 +36,7 @@ def test_edit_partner_empty_name_is_html_error_not_422(logged_in_client, db):
         "name": "",
     })
     _html_client_error(resp)
+    assert "Name is required" in resp.text
     assert get_partner(pid)["name"] == "Jane Doe"
 
 

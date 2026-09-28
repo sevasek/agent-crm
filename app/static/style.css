@@ -5,6 +5,22 @@
     --accent: #2c5aa0;
 }
 
+/* Pico.css primary tokens → existing brand blue. data-theme="light" is locked
+   in base.html so Pico's auto dark mode cannot override these. */
+:root,
+[data-theme="light"] {
+    --pico-primary: var(--accent);
+    --pico-primary-background: var(--accent);
+    --pico-primary-border: var(--accent);
+    --pico-primary-hover: #234a85;
+    --pico-primary-hover-background: #234a85;
+    --pico-primary-hover-border: #234a85;
+    --pico-primary-hover-underline: #234a85;
+    --pico-primary-underline: var(--accent);
+    --pico-primary-focus: rgba(44, 90, 160, 0.25);
+    --pico-primary-inverse: #fff;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -44,14 +60,12 @@ summary:focus-visible {
 }
 
 .topnav {
-    display: flex;
-    align-items: center;
-    gap: 1.5rem;
-    padding: 0.75rem 1.5rem;
-    border-bottom: 1px solid var(--border);
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start;
+    gap: 0.75rem 1.5rem; padding: 0.75rem 1.5rem;
+    border-bottom: 1px solid var(--border); background: #fff;
 }
-
 .topnav a { text-decoration: none; color: #222; }
+.topnav a:hover { color: var(--accent); }
 .topnav .brand { font-weight: 700; }
 .topnav .right { margin-left: auto; color: var(--muted); }
 .topnav a[aria-current="page"] {
@@ -62,8 +76,10 @@ summary:focus-visible {
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 /* Kanban needs the full window. The default 900px centre column is a form-page
-   width; seven stage columns cannot be read at a glance inside it. */
-.container-wide { max-width: none; }
+   width; seven stage columns cannot be read at a glance inside it.
+   Both classes are on the pipeline <main> so this beats Pico's .container
+   max-width media queries (same-origin, later, and more specific). */
+.container.container-wide { max-width: none; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
@@ -75,30 +91,33 @@ td.nowrap { white-space: nowrap; }
 
 .form-row { margin-bottom: 1rem; }
 .form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
-input[type=text], input[type=email], input[type=password], input[type=number], input[type=date],
-select, textarea {
-    width: 100%; padding: 0.5rem; border: 1px solid var(--border); border-radius: 4px; font-size: 1rem;
-}
 textarea { min-height: 5rem; }
 
-button, .btn {
-    display: inline-block;
-    padding: 0.5rem 1rem;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: #fff;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 0.95rem;
-    text-decoration: none;
+/* Pico already styles <button>. .btn is for <a> that should look like one;
+   .btn-secondary is also used on its own (deal stage filters). */
+button[type=submit] { width: auto; }
+.btn, .btn-secondary {
+    display: inline-block; margin: 0 0.2rem 0.35rem 0; padding: 0.5rem 1rem;
+    border: var(--pico-border-width, 1px) solid var(--pico-primary-border, var(--accent));
+    border-radius: var(--pico-border-radius, 0.25rem);
+    background: var(--pico-primary-background, var(--accent));
+    color: var(--pico-primary-inverse, #fff);
+    cursor: pointer; font-size: 0.95rem; line-height: 1.25;
+    text-decoration: none; white-space: nowrap;
 }
-.btn-secondary { background: #fff; color: var(--accent); }
+.btn:hover {
+    background: var(--pico-primary-hover-background, #234a85);
+    border-color: var(--pico-primary-hover-border, #234a85);
+    color: #fff; text-decoration: none;
+}
+.btn-secondary { background: #fff; color: var(--accent); border-color: var(--accent); }
+.btn-secondary:hover { background: #f0f4fa; color: var(--accent); text-decoration: none; }
 
 .error { color: #b00020; margin-bottom: 1rem; }
 .muted { color: var(--muted); }
 .pill {
-    display: inline-block; padding: 0.15rem 0.6rem; border-radius: 12px;
-    background: var(--bg-alt); font-size: 0.8rem; text-transform: capitalize;
+    display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px;
+    background: var(--bg-alt); font-size: 0.8rem; line-height: 1.3; text-transform: capitalize;
 }
 .pill-tag {
     text-transform: none;
@@ -116,13 +135,11 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .next-action-form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.5rem 0; }
 .next-action-form input[type=text] { width: auto; flex: 1; min-width: 12rem; }
 .next-action-form input[type=date] { width: auto; }
-.next-action-form button { padding: 0.35rem 0.75rem; }
-.deal-card { border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
+.next-action-form button { width: auto; padding: 0.35rem 0.75rem; }
+.deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
 .pill-due { background: #fff3cd; color: #856404; }
 .pill-overdue { background: #fdecea; color: #b00020; }
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
-details { margin-top: 1.5rem; }
-details summary { cursor: pointer; }
 
 .pipeline-board {
     display: flex;
@@ -147,10 +164,11 @@ details summary { cursor: pointer; }
 
 .call-outcome-form { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; min-width: 16rem; }
 .call-outcome-form input[type=text] { width: auto; flex: 1 1 8rem; min-width: 6rem; }
-.btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; }
+.call-outcome-form button { width: auto; }
+.btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; border: var(--pico-border-width, 1px) solid var(--border); }
 .btn-outcome-no_answer { background: #fff; color: var(--muted); border-color: var(--border); }
 .btn-outcome-not_interested { background: #fff; color: #b00020; border-color: #b00020; }
-.btn-outcome-won { background: #1e7e34; border-color: #1e7e34; }
+.btn-outcome-won { background: #1e7e34; color: #fff; border-color: #1e7e34; }
 
 /* Tap-to-call: a real <a href="tel:..."> (the link shape mobile browsers
    handle reliably), styled plain so it doesn't look like a random link. */

@@ -1,10 +1,12 @@
 """OAuth 2.1 endpoints for the MCP resource (Grok custom connectors).
 
 Well-known metadata is unlimited (Grok must discover it). Register and
-token count only failures toward the unauthenticated IP bucket; a
-successful exchange or refresh uses the larger oauth:{client_id} bucket.
-Authorize GET is a form view and is not counted. Authorize POST counts
-only failed auth (wrong key / CSRF), same rule as login.
+token count only failures toward the unauthenticated IP bucket. A
+successful token exchange or refresh uses the larger oauth:{client_id}
+bucket. Successful register uses the larger authenticated bucket keyed
+on IP — each 201 mints a unique client_id, so a per-client bucket cannot
+cap volume. Authorize GET is a form view and is not counted. Authorize
+POST counts only failed auth (wrong key / CSRF).
 """
 
 from urllib.parse import urlencode
@@ -50,8 +52,13 @@ def _oauth_error(error, status=400, description=None):
 
 
 def _rate_limited(request, action, *, identity=None, authenticated=False):
-    """Count one hit. Unauthenticated uses the client IP; success uses identity."""
-    key = identity if authenticated else get_rate_limit_key(get_client_ip(request))
+    """Count one hit. Unauthenticated uses the client IP; success uses identity.
+
+    When authenticated is True and identity is omitted, the IP is still the
+    bucket key (used for successful dynamic client registration).
+    """
+    ip_key = get_rate_limit_key(get_client_ip(request))
+    key = identity if (authenticated and identity) else ip_key
     allowed, retry_after = check_rate_limit_retry(
         key, action=action, authenticated=authenticated,
     )
@@ -75,6 +82,11 @@ def _client_limited(request, action, client_id):
         identity=oauth_rate_limit_identity(client_id),
         authenticated=True,
     )
+
+
+def _ip_auth_limited(request, action):
+    """Authenticated cap keyed on IP (no stable client id yet)."""
+    return _rate_limited(request, action, authenticated=True)
 
 
 def _metadata(request: Request):
@@ -138,17 +150,20 @@ async def oauth_register(request: Request):
         if limited:
             return limited
         return _oauth_error("invalid_client_metadata", 400, "JSON body required")
-    payload, status = mcp_oauth.register_client(body if isinstance(body, dict) else {})
-    if status >= 400:
+    body = body if isinstance(body, dict) else {}
+    parsed, error = mcp_oauth.validate_register_body(body)
+    if error:
         limited = _unauth_limited(request, "oauth_register")
         if limited:
             return limited
+        payload, status = error
         return _json(payload, status)
-    client_id = (payload.get("client_id") or "").strip()
-    if client_id:
-        limited = _client_limited(request, "oauth_register", client_id)
-        if limited:
-            return limited
+    # Cap successful DCR per IP before insert. A per-client bucket cannot
+    # work here: register_client mints a new client_id on every 201.
+    limited = _ip_auth_limited(request, "oauth_register")
+    if limited:
+        return limited
+    payload, status = mcp_oauth.register_client(body)
     return _json(payload, status)
 
 

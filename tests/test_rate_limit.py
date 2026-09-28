@@ -320,3 +320,14 @@ def test_authenticated_oauth_token_bucket_is_larger_than_unauth(client):
         assert check_rate_limit(identity, action="oauth_token", authenticated=True) is True, i
     assert check_rate_limit(identity, action="oauth_token", authenticated=True) is False
     assert check_rate_limit("10.0.0.33", action="oauth_token") is True
+
+
+def test_authenticated_oauth_register_bucket_is_per_ip(client):
+    key = "10.0.0.34"
+    unauth_cap = RATE_LIMIT_MAX_BY_ACTION["oauth_register"]
+    auth_cap = RATE_LIMIT_MAX_AUTH_BY_ACTION["oauth_register"]
+    assert auth_cap > unauth_cap
+    for i in range(auth_cap):
+        assert check_rate_limit(key, action="oauth_register", authenticated=True) is True, i
+    assert check_rate_limit(key, action="oauth_register", authenticated=True) is False
+    assert check_rate_limit(key, action="oauth_register") is True

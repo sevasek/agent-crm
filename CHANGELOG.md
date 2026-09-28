@@ -59,6 +59,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Unset `NURTURE_WEBHOOK_URL` / `DEAL_WON_WEBHOOK_URL` no longer writes a
   `system` activity that looks like a webhook failure. Real send failures
   still log.
+- Share `row_to_dict` from `app.database` instead of duplicate `_row`
+  helpers in pipeline, ICP, and offers services.
 - Production port bind is `127.0.0.1:${CRM_PORT:-8000}:8000` so a second
   instance on the same host can set `CRM_PORT` instead of a third compose file.
 - Base image is `python:3.12-slim` pinned by its multi-arch index digest.
@@ -82,6 +84,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Security
 
+- OAuth authorization codes are single-use (OAuth 2.1). Each code carries a
+  `jti`; the first presentation of a valid code persists it in
+  `mcp_oauth_used_codes` (schema v4) and a second exchange returns
+  `invalid_grant`. A failed PKCE or client check still burns the code.
 - CI `pip-audit` is now gating (leftover from #22). The FastAPI bump clears
   Starlette findings that blocked the job: PYSEC-2026-1943 (multipart DoS,
   0.40.0), PYSEC-2026-1941 (large multipart files, 0.47.2), PYSEC-2026-161

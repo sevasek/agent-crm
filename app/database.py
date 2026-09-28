@@ -15,7 +15,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class SchemaVersionError(RuntimeError):
@@ -69,6 +69,13 @@ def get_db(timeout=None):
         yield conn
     finally:
         conn.close()
+
+
+def row_to_dict(row):
+    """None stays None; sqlite3.Row or a mapping becomes a plain dict."""
+    if row is None:
+        return None
+    return dict(row)
 
 
 def get_user_version(conn) -> int:
@@ -472,11 +479,33 @@ def migrate_003(db) -> None:
     db.execute("DROP TABLE IF EXISTS rate_limit_hits")
 
 
+def migrate_004(db) -> None:
+    """Persist presented OAuth authorization-code jtis so codes are single-use.
+
+    Codes remain signed blobs; this table only stores used ids until they
+    expire (AUTH_CODE_MAX_AGE). CREATE TABLE IF NOT EXISTS is a no-op on
+    a database that already has the table.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mcp_oauth_used_codes (
+            jti TEXT PRIMARY KEY,
+            expires_at INTEGER NOT NULL
+        )
+        """
+    )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mcp_oauth_used_codes_expires "
+        "ON mcp_oauth_used_codes (expires_at)"
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
     3: migrate_003,
+    4: migrate_004,
 }
 
 

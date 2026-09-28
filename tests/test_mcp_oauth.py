@@ -172,6 +172,77 @@ def test_oauth_clients_table_exists(db):
     assert row is not None
 
 
+def test_auth_code_cannot_be_exchanged_twice(client, db, monkeypatch):
+    verifier, challenge = _pkce()
+    registered, redirect = _register(client, monkeypatch)
+    code = mcp_oauth.issue_auth_code(registered["client_id"], redirect, challenge)
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": registered["client_id"],
+        "code": code,
+        "redirect_uri": redirect,
+        "code_verifier": verifier,
+    }
+    first = client.post("/oauth/token", data=payload)
+    assert first.status_code == 200, first.text
+    assert first.json()["access_token"]
+    second = client.post("/oauth/token", data=payload)
+    assert second.status_code == 400
+    assert second.json()["error"] == "invalid_grant"
+
+
+def test_auth_code_is_burned_even_when_first_exchange_fails(db, monkeypatch):
+    """Once presented, the code is spent even if PKCE fails (stricter OAuth 2.1)."""
+    _enable(monkeypatch)
+    verifier, challenge = _pkce()
+    registered, status = mcp_oauth.register_client({
+        "client_name": "Grok",
+        "redirect_uris": ["http://127.0.0.1:9/cb"],
+        "token_endpoint_auth_method": "none",
+    })
+    assert status == 201
+    redirect = "http://127.0.0.1:9/cb"
+    code = mcp_oauth.issue_auth_code(registered["client_id"], redirect, challenge)
+    tokens, error = mcp_oauth.exchange_code(
+        registered["client_id"],
+        code,
+        redirect,
+        "not-the-verifier-and-long-enough-to-look-real-xxxxx",
+    )
+    assert tokens is None
+    assert error == "invalid_grant"
+    tokens, error = mcp_oauth.exchange_code(
+        registered["client_id"], code, redirect, verifier
+    )
+    assert tokens is None
+    assert error == "invalid_grant"
+
+
+def test_expired_used_auth_code_jtis_can_be_pruned(db):
+    from app.database import get_db
+
+    past = mcp_oauth._now_ts() - 1
+    future = mcp_oauth._now_ts() + mcp_oauth.AUTH_CODE_MAX_AGE
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO mcp_oauth_used_codes (jti, expires_at) VALUES (?, ?)",
+            ("expired-jti", past),
+        )
+        conn.execute(
+            "INSERT INTO mcp_oauth_used_codes (jti, expires_at) VALUES (?, ?)",
+            ("live-jti", future),
+        )
+        conn.commit()
+    deleted = mcp_oauth.prune_used_auth_codes()
+    assert deleted == 1
+    with get_db() as conn:
+        rows = {
+            row["jti"]
+            for row in conn.execute("SELECT jti FROM mcp_oauth_used_codes")
+        }
+    assert rows == {"live-jti"}
+
+
 def _authorize_form(registered, redirect, challenge, api_key="test-mcp-key", csrf=None):
     return {
         "csrf_token": csrf if csrf is not None else generate_csrf_token(),

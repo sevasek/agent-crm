@@ -29,6 +29,8 @@ tests/
 docs/
 .github/
 *.md
+# Note: this also strips app/static/vendor/VENDOR.md from the built image.
+# That's fine, it's a changelog for humans, never served — not a bug.
 .gitleaks.toml
 
 # IDE / OS / local overrides

@@ -41,6 +41,10 @@ must not live inside `app/` or run automatically at startup.
 - **Email inside the CRM.** Log interactions manually or via your agent.
 - **Native mobile app.** The web app is responsive and the call view is built
   for a phone browser.
+- **Dark mode.** Locked to light regardless of OS/browser preference for the
+  launch (see `docs/UI_UPGRADE_PLAN.md` Phase 1). The app's hand-picked pill
+  and badge colors assume a light background; redoing them as proper
+  light/dark pairs is deferred, tracked in #47.
 - **Roles and permissions.** Single operator; session auth and CSRF are the
   right amount for one user. Revisit if a second person needs a login.
 - **Reports and analytics.** The board and the filterable deals list are enough

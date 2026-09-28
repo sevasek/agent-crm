@@ -257,7 +257,8 @@ markdown files, see `scripts/import_clients.py`.
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
-[`RELEASE.md`](docs/RELEASE.md) how to cut a version tag
+[`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
+[`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) pre-launch UI phases
 
 ## Contributing
 

@@ -105,6 +105,15 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Security
 
+- CSRF tokens are now bound to the session cookie they were minted for
+  (`generate_csrf_token`/`validate_csrf_token` in `app/services/auth.py`).
+  Previously the token only proved recency, not which session issued it, so
+  a token minted from a logged-out `GET /auth/login` could be replayed
+  against a separately-authenticated session. Cookie-authenticated
+  POST/PUT/PATCH/DELETE requests are also now rejected with 403 if their
+  `Origin`/`Referer` names a different host than the request's own `Host`
+  (defense-in-depth; requests that send neither are unaffected).
+  `GET /auth/logout` is now `POST /auth/logout`.
 - OAuth authorization codes are single-use (OAuth 2.1). Each code carries a
   `jti`; the first presentation of a valid code persists it in
   `mcp_oauth_used_codes` (schema v4) and a second exchange returns

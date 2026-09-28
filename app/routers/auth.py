@@ -99,8 +99,11 @@ async def login_submit(
     }, status_code=400)
 
 
-@router.get("/logout")
+@router.post("/logout")
 async def logout():
+    # POST, not GET: a GET route is fetchable via a plain <img>/<a> and was a
+    # state-changing GET (forced-logout CSRF). The cross-origin POST guard in
+    # app.main's middleware covers this without needing a CSRF token too.
     response = RedirectResponse("/auth/login", status_code=303)
     response.delete_cookie("session")
     return response

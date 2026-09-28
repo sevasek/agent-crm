@@ -230,7 +230,7 @@ def test_login_succeeds_after_failed_attempts(client):
             data={
                 "email": "op@example.com",
                 "password": "wrong-password",
-                "csrf_token": generate_csrf_token(),
+                "csrf_token": generate_csrf_token(client.cookies.get("session")),
             },
         )
         assert resp.status_code == 400
@@ -240,7 +240,7 @@ def test_login_succeeds_after_failed_attempts(client):
         data={
             "email": "op@example.com",
             "password": "correct-horse",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(client.cookies.get("session")),
         },
         follow_redirects=False,
     )
@@ -258,7 +258,7 @@ def test_sixth_failed_login_is_429(client):
             data={
                 "email": "op@example.com",
                 "password": "wrong-password",
-                "csrf_token": generate_csrf_token(),
+                "csrf_token": generate_csrf_token(client.cookies.get("session")),
             },
         )
         assert resp.status_code == 400
@@ -267,7 +267,7 @@ def test_sixth_failed_login_is_429(client):
         data={
             "email": "op@example.com",
             "password": "wrong-password",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(client.cookies.get("session")),
         },
     )
     assert blocked.status_code == 429

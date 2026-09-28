@@ -24,7 +24,7 @@ def test_offers_settings_requires_login(client, db):
 
 def test_create_offer_via_admin_form(logged_in_client, db):
     resp = logged_in_client.post("/offers/new", data={
-        "name": "Starter", "pitch": "A free review", "csrf_token": generate_csrf_token(),
+        "name": "Starter", "pitch": "A free review", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert any(o["name"] == "Starter" for o in offers.list_offers())
@@ -32,7 +32,7 @@ def test_create_offer_via_admin_form(logged_in_client, db):
 
 def test_create_offer_missing_name_shows_error(logged_in_client, db):
     resp = logged_in_client.post("/offers/new", data={
-        "name": "", "csrf_token": generate_csrf_token(),
+        "name": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert "Name is required" in resp.text
@@ -43,7 +43,7 @@ def test_create_offer_unchecked_active_is_inactive(logged_in_client, db):
     # (unchecked, not just missing from a raw POST) still created an active
     # offer — there was no way to add an inactive one from this form.
     resp = logged_in_client.post("/offers/new", data={
-        "name": "Retired pitch", "csrf_token": generate_csrf_token(),
+        "name": "Retired pitch", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         # "active" omitted entirely, as an unchecked checkbox would send
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -54,7 +54,7 @@ def test_create_offer_unchecked_active_is_inactive(logged_in_client, db):
 def test_edit_offer_via_admin_form(logged_in_client, db):
     offer, _ = offers.create_offer("Starter")
     resp = logged_in_client.post(f"/offers/{offer['id']}/edit", data={
-        "name": "Starter Plus", "pitch": "New pitch", "csrf_token": generate_csrf_token(),
+        "name": "Starter Plus", "pitch": "New pitch", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert offers.get_offer(offer["id"])["name"] == "Starter Plus"
@@ -66,7 +66,7 @@ def test_delete_offer_in_use_shows_error(logged_in_client, db):
     sid = create_service("Consulting", "consulting")
     create_deal(pid, sid, offer_id=offer["id"])
     resp = logged_in_client.post(f"/offers/{offer['id']}/delete", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert offers.get_offer(offer["id"]) is not None
@@ -75,7 +75,7 @@ def test_delete_offer_in_use_shows_error(logged_in_client, db):
 def test_delete_unused_offer(logged_in_client, db):
     offer, _ = offers.create_offer("Starter")
     resp = logged_in_client.post(f"/offers/{offer['id']}/delete", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert offers.get_offer(offer["id"]) is None
@@ -92,7 +92,7 @@ def test_icp_settings_requires_login(client, db):
 def test_create_icp_criterion_via_admin_form(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
         "label": "Enterprise-sized", "field": "team_size", "operator": "gt", "value": "10",
-        "weight": "5", "csrf_token": generate_csrf_token(),
+        "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     criteria = icp.list_criteria()
@@ -103,7 +103,7 @@ def test_create_icp_criterion_via_admin_form(logged_in_client, db):
 def test_create_icp_criterion_invalid_value_shows_error(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "not-a-number",
-        "weight": "5", "csrf_token": generate_csrf_token(),
+        "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert icp.list_criteria() == []
@@ -112,7 +112,7 @@ def test_create_icp_criterion_invalid_value_shows_error(logged_in_client, db):
 def test_create_icp_criterion_bad_weight_does_not_500(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "10",
-        "weight": "not-a-number", "csrf_token": generate_csrf_token(),
+        "weight": "not-a-number", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert "Weight must be a whole number" in resp.text
@@ -122,7 +122,7 @@ def test_create_icp_criterion_bad_weight_does_not_500(logged_in_client, db):
 def test_create_icp_criterion_out_of_range_weight_does_not_500(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "10",
-        "weight": str(2 ** 63), "csrf_token": generate_csrf_token(),
+        "weight": str(2 ** 63), "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert icp.list_criteria() == []
@@ -131,7 +131,7 @@ def test_create_icp_criterion_out_of_range_weight_does_not_500(logged_in_client,
 def test_create_icp_criterion_unchecked_active_is_inactive(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "10",
-        "weight": "5", "csrf_token": generate_csrf_token(),
+        "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert icp.list_criteria()[0]["active"] == 0
@@ -142,7 +142,7 @@ def test_create_icp_criterion_rejects_infinite_value(logged_in_client, db):
     # (unlike JSON, no raw-bytes trick needed to exercise this).
     resp = logged_in_client.post("/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "Infinity",
-        "weight": "5", "csrf_token": generate_csrf_token(),
+        "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert icp.list_criteria() == []
@@ -152,7 +152,7 @@ def test_edit_icp_criterion(logged_in_client, db):
     c, _ = icp.create_criterion("team_size", "gt", "10", weight=5)
     resp = logged_in_client.post(f"/icp/{c['id']}/edit", data={
         "label": "Big teams", "field": "team_size", "operator": "gt", "value": "10",
-        "weight": "8", "csrf_token": generate_csrf_token(),
+        "weight": "8", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert icp.get_criterion(c["id"])["weight"] == 8
@@ -161,7 +161,7 @@ def test_edit_icp_criterion(logged_in_client, db):
 def test_delete_icp_criterion(logged_in_client, db):
     c, _ = icp.create_criterion("team_size", "gt", "10")
     resp = logged_in_client.post(f"/icp/{c['id']}/delete", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert icp.get_criterion(c["id"]) is None
@@ -203,7 +203,7 @@ def test_set_deal_offer(logged_in_client, db):
     offer2, _ = offers.create_offer("Premium")
     pid, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
-        "offer_id": str(offer2["id"]), "csrf_token": generate_csrf_token(),
+        "offer_id": str(offer2["id"]), "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == f"/deals/{deal_id}/call"
@@ -220,7 +220,7 @@ def test_set_deal_offer_garbage_value_leaves_existing_offer(logged_in_client, db
     update_deal_fields(deal_id, offer_id=offer["id"])
 
     resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
-        "offer_id": "not-a-number", "csrf_token": generate_csrf_token(),
+        "offer_id": "not-a-number", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert get_deal(deal_id)["offer_id"] == offer["id"]
@@ -233,7 +233,7 @@ def test_set_deal_offer_out_of_range_value_leaves_existing_offer(logged_in_clien
     update_deal_fields(deal_id, offer_id=offer["id"])
 
     resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
-        "offer_id": str(2 ** 63), "csrf_token": generate_csrf_token(),
+        "offer_id": str(2 ** 63), "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert get_deal(deal_id)["offer_id"] == offer["id"]
@@ -246,7 +246,7 @@ def test_set_deal_offer_explicit_none_clears_offer(logged_in_client, db):
     update_deal_fields(deal_id, offer_id=offer["id"])
 
     resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
-        "offer_id": "", "csrf_token": generate_csrf_token(),
+        "offer_id": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert get_deal(deal_id)["offer_id"] is None
@@ -263,7 +263,7 @@ def test_call_view_offer_select_has_submit_button_for_no_js(logged_in_client, db
 def test_create_offer_from_call_view(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(f"/deals/{deal_id}/offer/new", data={
-        "name": "On-the-spot Offer", "pitch": "New pitch", "csrf_token": generate_csrf_token(),
+        "name": "On-the-spot Offer", "pitch": "New pitch", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
     from app.services.deals import get_deal

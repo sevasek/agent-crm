@@ -63,6 +63,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Changed
 
+- Custom admin CSS sits on Pico's primitives: drop duplicate input/`<button>`/
+  `<details>` rules, keep `.btn` for link-buttons, make `.btn-secondary` a
+  full outlined chip so deal-stage filters match Pico's scale (closes #44).
 - Unset `NURTURE_WEBHOOK_URL` / `DEAL_WON_WEBHOOK_URL` no longer writes a
   `system` activity that looks like a webhook failure. Real send failures
   still log.

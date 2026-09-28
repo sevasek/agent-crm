@@ -15,7 +15,21 @@ from app.database import (
     migrate_002,
     migrate_003,
     migrate_004,
+    row_to_dict,
 )
+
+
+def test_row_to_dict_none_row_or_mapping():
+    assert row_to_dict(None) is None
+    assert row_to_dict({"id": 1, "name": "a"}) == {"id": 1, "name": "a"}
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("CREATE TABLE t (id INTEGER, name TEXT)")
+    conn.execute("INSERT INTO t VALUES (1, 'a')")
+    row = conn.execute("SELECT * FROM t").fetchone()
+    conn.close()
+    assert row_to_dict(row) == {"id": 1, "name": "a"}
+    assert isinstance(row_to_dict(row), dict)
 
 
 def test_get_db_uses_sqlite_default_timeout(db, monkeypatch):

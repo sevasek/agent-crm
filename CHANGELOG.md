@@ -70,9 +70,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   reaches handler validation (Starlette 1.x treats `name=` as missing).
 - Rate limits: failed login, lead/stages ingest, MCP, and OAuth
   register/token/authorize-POST count toward a per-IP guessing bucket. A
-  valid key or OAuth client uses a larger bucket keyed on the key/token
-  id (`env:CRM_*`, `userkey:{id}`, `oauth:{client_id}`), so a flood of
-  bad keys cannot lock out the agent. Authorize GET (the form) and
+  valid key or OAuth token uses a larger bucket keyed on the key/token
+  id (`env:CRM_*`, `userkey:{id}`, `oauth:{client_id}`). Successful
+  dynamic client registration uses the larger authenticated bucket
+  keyed on IP (each 201 mints a unique `client_id`). A flood of bad
+  keys cannot lock out the agent. Authorize GET (the form) and
   well-known metadata are not counted.
 
 ### Security

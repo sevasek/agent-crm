@@ -329,6 +329,32 @@ def test_successful_register_does_not_fill_ip_failure_bucket(client, db, monkeyp
     assert failed.status_code == 400
 
 
+def test_successful_register_is_rate_limited_per_ip(client, db, monkeypatch):
+    from app.database import get_db
+    from app.services.auth import RATE_LIMIT_MAX_AUTH_BY_ACTION
+
+    _enable(monkeypatch)
+    cap = RATE_LIMIT_MAX_AUTH_BY_ACTION["oauth_register"]
+    payload = {
+        "client_name": "Grok",
+        "redirect_uris": ["http://127.0.0.1:9/cb"],
+        "token_endpoint_auth_method": "none",
+    }
+    for i in range(cap):
+        resp = client.post("/oauth/register", json={**payload, "client_name": f"Grok-{i}"})
+        assert resp.status_code == 201, resp.text
+    blocked = client.post("/oauth/register", json=payload)
+    assert blocked.status_code == 429
+    assert blocked.json() == {"error": "rate_limited"}
+    with get_db() as conn:
+        n = conn.execute("SELECT COUNT(*) AS n FROM mcp_oauth_clients").fetchone()["n"]
+    assert n == cap
+    failed = client.post("/oauth/register", json={
+        "redirect_uris": ["http://evil.example/cb"],
+    })
+    assert failed.status_code == 400
+
+
 def test_failed_token_does_not_lock_out_valid_refresh(client, db, monkeypatch):
     from app.services.auth import RATE_LIMIT_MAX_BY_ACTION
 

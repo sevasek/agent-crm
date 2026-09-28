@@ -39,6 +39,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   examples ship beside the scripts.
 - Operator notes for cutting the first `v*` tag and what the GHCR
   workflow publishes, in [`docs/RELEASE.md`](docs/RELEASE.md).
+- Optional `DEAL_WON_WEBHOOK_URL` / `DEAL_WON_WEBHOOK_TOKEN`: when
+  `set_deal_stage` first moves a deal into an `is_won` stage, the CRM POSTs
+  partner, service, offer and value to an invoicing tool. Unset is a no-op.
+  Invoice status is not written back.
 
 ### Removed
 

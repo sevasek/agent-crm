@@ -31,8 +31,8 @@ must not live inside `app/` or run automatically at startup.
   daily check that logs each due follow-up.
 - **Calling**: a ranked call queue (fixed formula) and a phone-first call view.
 - **Agent interface**: `POST /mcp`, with a separate key per capability.
-- **Optional outbound webhooks**: nurture enrollment on a stage change, and
-  delegated-task notifications. Unset means no-op.
+- **Optional outbound webhooks**: nurture enrollment on a stage change,
+  delegated-task notifications, and deal-won invoice hand-off. Unset means no-op.
 
 ## Out of scope
 
@@ -46,4 +46,6 @@ must not live inside `app/` or run automatically at startup.
 - **Built-in AI.** No learned scoring or forecasting. Judgement belongs in the
   agent that talks to the MCP endpoint. The call ranking and fit scores are
   fixed formulas with visible weights.
-- **A general integration platform.** Two optional webhooks, nothing more.
+- **A general integration platform.** Three optional webhooks (nurture,
+  delegated-task, deal-won), nothing more. Invoice status is not written
+  back into the CRM.

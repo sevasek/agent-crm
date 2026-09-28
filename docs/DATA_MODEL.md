@@ -278,11 +278,11 @@ Authorization: Bearer {NURTURE_WEBHOOK_TOKEN}      (only if set)
 ```
 
 The CRM does not run drip sequences. Point the webhook at a mailing tool, an
-automation platform or an agent. Skips are logged as a `system` activity and
-never block the stage change: `NURTURE_WEBHOOK_URL` unset, the service has no
-valid `nurture_list_slug`, or the partner has no email. A network failure or a
-non-2xx response is caught the same way, since this is a network boundary.
-Leaving the stage does not undo anything on the receiving side.
+automation platform or an agent. An unset `NURTURE_WEBHOOK_URL` is a silent
+no-op (no timeline note). Missing or invalid `nurture_list_slug`, a partner
+with no email, a network failure, or a non-2xx response is logged as a
+`system` activity and never blocks the stage change. Leaving the stage does
+not undo anything on the receiving side.
 
 ## Deal-won invoice hand-off
 
@@ -310,10 +310,10 @@ Authorization: Bearer {DEAL_WON_WEBHOOK_TOKEN}      (only if set)
 The payload is small and stable: enough for an invoicing tool or Zapier to
 raise an invoice, and no secrets. `offer` and `partner_email` are null when
 absent; a missing email still fires. The CRM does not create invoices itself
-and does not ingest invoice status back. Skips are logged as a `system`
-activity and never block the stage change: `DEAL_WON_WEBHOOK_URL` unset, or
-a network failure / non-2xx. Re-saving an already-won deal, moving between
-two `is_won` stages, or entering `is_lost` does not fire.
+and does not ingest invoice status back. An unset `DEAL_WON_WEBHOOK_URL` is a
+silent no-op (no timeline note). A network failure or non-2xx is logged as a
+`system` activity and never blocks the stage change. Re-saving an already-won
+deal, moving between two `is_won` stages, or entering `is_lost` does not fire.
 
 ## Lead ingest
 

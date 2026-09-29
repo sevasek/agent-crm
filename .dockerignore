@@ -29,6 +29,13 @@ tests/
 docs/
 .github/
 *.md
+# Eleventy docs pipeline (build-time only, never imported by the app)
+node_modules/
+package.json
+package-lock.json
+eleventy.config.js
+check-docs.js
+/_site/
 # Note: this also strips app/static/vendor/VENDOR.md from the built image.
 # That's fine, it's a changelog for humans, never served — not a bug.
 .gitleaks.toml

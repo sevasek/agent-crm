@@ -260,6 +260,20 @@ markdown files, see `scripts/import_clients.py`.
 [`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
 [`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) pre-launch UI phases
 
+`docs/*.md` also builds into a static manual site, styled with the app's own
+`app/static/style.css` and Pico.css so it looks like the app. This is a
+doc-build-time tool only — it needs Node, but the app itself never does (see
+[`docs/UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md)); nothing it adds
+(`node_modules/`, `package.json`, `eleventy.config.js`, `_site/`) is in the
+Docker image.
+
+```bash
+npm ci
+npm run docs:build   # writes ./_site
+npm run docs:serve   # live-reload at http://localhost:8080
+npm run docs:test    # build + smoke-check the output
+```
+
 ## Contributing
 
 Planned work, known gaps and deferred ideas are tracked in

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import logging
 import os
+import shutil
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, Depends
@@ -8,19 +9,34 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.database import get_db, init_db
+from app.database import get_db, get_db_path, init_db
 from app.routers import admin, auth, api, mcp, oauth
 from app.routers.auth import get_current_user
 from app.services.auth import maybe_bootstrap_admin, should_use_secure_cookies
 from app.services.client_ip import warn_if_non_ip_trusted_proxies
 
 _health_db_warned = False
+_health_disk_warned = False
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 _INSECURE_SECRET_KEYS = {"dev-secret-change-in-prod"}
 _API_KEY_ENVS = ("CRM_API_KEY", "CRM_STAGES_API_KEY", "CRM_MCP_API_KEY")
+
+# BEGIN IMMEDIATE + rollback (the DB probe in /health) never dirties a page,
+# so it stays healthy on a full disk right up until a real write fails.
+# Check free space on the DB's filesystem directly instead of waiting for
+# that write.
+HEALTH_MIN_FREE_MB = int(os.getenv("HEALTH_MIN_FREE_MB", "200"))
+
+
+def _low_disk_space() -> bool:
+    try:
+        free_bytes = shutil.disk_usage(os.path.dirname(get_db_path()) or ".").free
+    except OSError:
+        return False
+    return free_bytes < HEALTH_MIN_FREE_MB * 1024 * 1024
 
 
 def _production_intent() -> bool:
@@ -196,6 +212,14 @@ def create_app() -> FastAPI:
                 _health_db_warned = True
             return JSONResponse({"status": "unavailable"}, status_code=503)
         _health_db_warned = False
+
+        global _health_disk_warned
+        if _low_disk_space():
+            if not _health_disk_warned:
+                logger.warning("health: free disk space below HEALTH_MIN_FREE_MB=%s", HEALTH_MIN_FREE_MB)
+                _health_disk_warned = True
+            return JSONResponse({"status": "low_disk_space"}, status_code=503)
+        _health_disk_warned = False
         return {"status": "ok"}
 
     # Compat redirects: every page used to live under /admin/*. Old bookmarks

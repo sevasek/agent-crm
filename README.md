@@ -115,7 +115,10 @@ stages and MCP keys are separate, and each endpoint refuses all requests until
 its key is set. Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_FILE`
 (preferred; wins over `BOOTSTRAP_ADMIN_PASSWORD`) once to create the first
 admin without shell access — the file is not visible in `docker inspect`.
-`/health` checks that sqlite is writable and returns 503 if it is not.
+`/health` checks that sqlite is writable and returns 503 if it is not, and
+also 503s (`{"status": "low_disk_space"}`) once free space on the DB's
+filesystem drops below `HEALTH_MIN_FREE_MB` (default 200), ahead of an
+actual write failure.
 
 The `staleness-cron` service runs the follow-up check on start and daily at 08:00.
 
@@ -257,6 +260,7 @@ markdown files, see `scripts/import_clients.py`.
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
+[`OFFBOARDING.md`](docs/OFFBOARDING.md) removing a cancelled customer's instance ·
 [`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
 [`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) pre-launch UI phases
 

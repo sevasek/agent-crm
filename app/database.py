@@ -15,7 +15,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class SchemaVersionError(RuntimeError):
@@ -500,12 +500,24 @@ def migrate_004(db) -> None:
     )
 
 
+def migrate_005(db) -> None:
+    """Add users.session_version so a password change or an explicit
+    "log out everywhere" can invalidate every other outstanding session
+    cookie (they carry the version they were issued with; get_current_user
+    rejects a mismatch) without a server-side session store.
+    """
+    _add_column_if_missing(
+        db, "users", "session_version", "session_version INTEGER NOT NULL DEFAULT 0"
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
     3: migrate_003,
     4: migrate_004,
+    5: migrate_005,
 }
 
 

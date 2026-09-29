@@ -33,7 +33,11 @@ def get_current_user(request: Request):
         if user_id:
             with get_db() as db:
                 row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-                if row:
+                # A stolen cookie is normally valid for the full SESSION_MAX_AGE with
+                # no remediation short of rotating SECRET_KEY for everyone. Comparing
+                # the cookie's "sv" against the live column lets a password change or
+                # "log out everywhere" revoke it immediately instead.
+                if row and data.get("sv") == row["session_version"]:
                     return dict(row)
     except Exception:
         pass
@@ -47,8 +51,8 @@ def require_login(request: Request):
     return user
 
 
-def set_session_cookie(response: RedirectResponse, user_id: int):
-    token = cookie_signer.dumps({"user_id": user_id})
+def set_session_cookie(response: RedirectResponse, user_id: int, session_version: int = 0):
+    token = cookie_signer.dumps({"user_id": user_id, "sv": session_version})
     response.set_cookie(
         "session", token,
         httponly=True, samesite="lax",
@@ -81,7 +85,7 @@ async def login_submit(
     if user:
         response = RedirectResponse("/partners", status_code=303)
         response.delete_cookie("session")
-        set_session_cookie(response, user["id"])
+        set_session_cookie(response, user["id"], user["session_version"])
         return response
 
     # Count only failed passwords. A correct password after failures still

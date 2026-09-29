@@ -4,8 +4,11 @@ from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.routers.auth import require_login
-from app.services.auth import generate_csrf_token, validate_csrf_token, is_valid_slug
+from app.routers.auth import require_login, set_session_cookie
+from app.services.auth import (
+    bump_session_version, change_password, generate_csrf_token, is_valid_slug,
+    validate_csrf_token,
+)
 from app.services.partners import (
     create_partner, get_partner, update_partner, list_partners, list_companies, get_children,
     SOCIAL_PLATFORMS, listed_social_links, primary_social_url,
@@ -1189,3 +1192,44 @@ async def delete_api_key_submit(
     if validate_csrf_token(csrf_token):
         api_keys_service.delete_api_key(user["id"], key_id)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/password")
+async def change_password_submit(
+    request: Request,
+    current_password: str = Form(""), new_password: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token):
+        return RedirectResponse("/settings", status_code=303)
+    ok, error = change_password(user["id"], current_password, new_password)
+    if not ok:
+        return templates.TemplateResponse(request, "admin/settings.html", {
+            "request": request, "user": user,
+            "api_keys": api_keys_service.list_api_keys(user["id"]),
+            "csrf_token": generate_csrf_token(),
+            "password_error": error,
+        }, status_code=400)
+    response = templates.TemplateResponse(request, "admin/settings.html", {
+        "request": request, "user": user,
+        "api_keys": api_keys_service.list_api_keys(user["id"]),
+        "csrf_token": generate_csrf_token(),
+        "password_changed": True,
+    })
+    # Every other outstanding session cookie is now invalid (session_version
+    # bumped); reissue this one so the browser that just changed it stays in.
+    set_session_cookie(response, user["id"], user["session_version"] + 1)
+    return response
+
+
+@router.post("/settings/logout-everywhere")
+async def logout_everywhere_submit(
+    request: Request,
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token):
+        return RedirectResponse("/settings", status_code=303)
+    new_version = bump_session_version(user["id"])
+    response = RedirectResponse("/settings", status_code=303)
+    set_session_cookie(response, user["id"], new_version)
+    return response

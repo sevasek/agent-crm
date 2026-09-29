@@ -150,7 +150,7 @@ def test_logged_in_operator_can_authorize_without_pasting_key(client, db, monkey
     from app.routers.auth import cookie_signer
 
     user_id = create_user("test@example.com", "Test User", "password123")
-    client.cookies.set("session", cookie_signer.dumps({"user_id": user_id}))
+    client.cookies.set("session", cookie_signer.dumps({"user_id": user_id, "sv": 0}))
     verifier, challenge = _pkce()
     registered, redirect = _register(client, monkeypatch)
     submitted = client.post("/oauth/authorize", data={

@@ -62,6 +62,6 @@ def logged_in_client(client):
     from app.routers.auth import cookie_signer
 
     user_id = create_user("test@example.com", "Test User", "password123")
-    token = cookie_signer.dumps({"user_id": user_id})
+    token = cookie_signer.dumps({"user_id": user_id, "sv": 0})
     client.cookies.set("session", token)
     return client

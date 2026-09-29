@@ -3,6 +3,30 @@
 {% block content %}
 <h1>Account settings</h1>
 
+<h2>Password</h2>
+{% if password_error %}<p class="error">{{ password_error }}</p>{% endif %}
+{% if password_changed %}<p>Password changed. Other devices' sessions are now logged out.</p>{% endif %}
+<form method="post" action="/settings/password">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required>
+    </div>
+    <div class="form-row">
+        <label for="new_password">New password</label>
+        <input type="password" id="new_password" name="new_password" minlength="8" required>
+    </div>
+    <button type="submit">Change password</button>
+</form>
+
+<form method="post" action="/settings/logout-everywhere">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn-secondary"
+        onclick="return confirm('Log out every other session on this account? This browser stays logged in.')">
+        Log out of all other sessions
+    </button>
+</form>
+
 <h2>API keys</h2>
 <p class="muted">
     Give a bot or script access to the <code>/api/v1/leads</code> endpoint by creating a key

@@ -59,29 +59,8 @@ def qualified_pool_keys() -> set:
     return _keys_with_role("is_qualified_pool")
 
 
-def nurture_trigger_keys() -> set:
-    """Stages flagged `triggers_nurture`. More than one is allowed, but only
-    one is ever *acted on* per call outcome: deals.py's
-    `_resolve_call_outcome_target` picks the first by `position` order. If
-    you configure more than one, the earlier one in the pipeline wins —
-    treat that as the contract, not an implementation detail."""
-    return _keys_with_role("triggers_nurture")
-
-
-def won_keys() -> set:
-    """See nurture_trigger_keys()'s docstring — same first-by-position
-    contract applies when resolving the "won" call outcome."""
-    return _keys_with_role("is_won")
-
-
-def lost_keys() -> set:
-    """See nurture_trigger_keys()'s docstring — same first-by-position
-    contract applies when resolving the "not interested" call outcome."""
-    return _keys_with_role("is_lost")
-
-
 def closed_stage_keys() -> set:
-    return won_keys() | lost_keys()
+    return _keys_with_role("is_won") | _keys_with_role("is_lost")
 
 
 def create_stage(key: str, label: str, *, position=None, is_default=False,

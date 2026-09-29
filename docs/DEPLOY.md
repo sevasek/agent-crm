@@ -29,6 +29,17 @@ entrypoint needs to chown `./data` and `gosu` to `APP_UID` (`CHOWN`,
 read-only root filesystem with `tmpfs` on `/tmp`. The sqlite volume
 stays writable.
 
+**Known issue (#70):** dropping `CAP_DAC_OVERRIDE` means the entrypoint's own
+ownership repair can lock itself out on the *second* boot — the first
+successful start chowns/chmods `./data` to `APP_UID:APP_GID` `0700`, and every
+boot after that, root (without `CAP_DAC_OVERRIDE`) can no longer read that
+directory to redo the chown. Confirmed: a `stop`+`start` (or `restart`, or a
+host reboot) after a healthy first boot crash-loops the container
+permanently, with `chown: cannot read directory '/app/data': Permission
+denied` in the logs. Do not rely on this hardening surviving a restart until
+#70 is fixed — recovery today requires a manual `chown`/`chmod` on the host's
+`./data` before the container will start again.
+
 **Never set a cookie `Domain=` for the session cookie**, and never configure
 the proxy to rewrite it in. The session cookie is host-only by default
 (scoped to the exact hostname), which is what stops a session or CSRF token
@@ -88,6 +99,16 @@ If you set `CRM_PORT` to something other than 8000, change the upstream to
 match (`127.0.0.1:8001`, …). Recreate the CRM container after editing `.env`
 so `BASE_URL` and `TRUSTED_PROXIES` take effect.
 
+**Recreate, not `restart`, after any `.env` change** — including rotating
+`SECRET_KEY` or any `CRM_*_KEY`. Compose only interpolates `.env` into the
+container at creation time; `docker restart <container>` reuses the already-
+materialized environment and silently keeps the old value. Use
+`docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
+(no `--build` needed for a config-only change) so the container is recreated.
+Rotating `SECRET_KEY` this way immediately invalidates every existing session
+cookie and CSRF token for that instance — expected, and the reason to warn
+users first if you're doing it outside a compromise response.
+
 Do not wrap `/mcp` or `/oauth/*` in `basicauth` or `@denied` remote-IP
 matchers.
 
@@ -125,3 +146,38 @@ server {
 
 Change `proxy_pass` if `CRM_PORT` is not 8000. Reload nginx after edits:
 `sudo nginx -t && sudo systemctl reload nginx`.
+
+## Offboarding a customer
+
+There is no export or delete route in the app — only pipeline stages, offers,
+ICP criteria, and a user's own API keys have delete endpoints. Deleting a
+customer's data end to end is a manual operator checklist today:
+
+1. Stop the instance's containers (`docker compose -p crm-<name> down`).
+2. Delete the instance's data directory (`./instances/<name>/data`, or
+   wherever `CRM_DB_PATH`/the bind mount points).
+3. Delete the instance's local backups (`scripts/backup.sh`'s output
+   directory for that instance).
+4. Purge the instance's off-host backup destination — S3, `rclone`, `restic`,
+   or whatever was configured. **The app has zero visibility into this
+   step**; it is easy to forget and there is no in-app guardrail.
+5. Delete the instance's `.env` (`./instances/<name>/.env`).
+6. Remove the instance's reverse-proxy site block and any DNS/registry entry.
+
+If any backup of the instance was ever taken with an older image build that
+predates a `.dockerignore` (see the note on baked-in secrets), also check
+whether that image was ever pushed anywhere retrievable — deleting the
+running instance and its data does not delete a copy that shipped inside an
+image layer.
+
+## Monitoring (substantiating "99.9% uptime")
+
+Nothing external watches an instance today. To make the uptime promise
+defensible rather than aspirational, run an external probe (not on the same
+host) against `https://<name>.../health` — the DB-aware check, not just a
+TCP connect — every 60 seconds per customer, alerting on 2 consecutive
+failures. Also alert on: backup age > 26h, off-host backup age (if tracked),
+disk usage > 80%, container restart count, the staleness-cron gap (no run
+logged in 25h), and TLS certificate expiry < 14 days. The probe's monthly
+uptime report is the only evidence that would hold up if a customer asked
+for one.

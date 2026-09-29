@@ -1,5 +1,6 @@
 import sqlite3
 import os
+import secrets
 import time
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -15,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class SchemaVersionError(RuntimeError):
@@ -500,13 +501,58 @@ def migrate_004(db) -> None:
     )
 
 
+def migrate_005(db) -> None:
+    """Per-database install_id mixed into the session cookie signer.
+
+    A copied SECRET_KEY used to make instance A's session valid on instance B
+    for the same numeric user_id. install_id is unique per sqlite file, so
+    mixing it into the signing key stops that replay.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS app_install (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            install_id TEXT NOT NULL
+        )
+        """
+    )
+    row = db.execute("SELECT install_id FROM app_install WHERE id = 1").fetchone()
+    if not row:
+        db.execute(
+            "INSERT INTO app_install (id, install_id) VALUES (1, ?)",
+            (secrets.token_hex(32),),
+        )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
     3: migrate_003,
     4: migrate_004,
+    5: migrate_005,
 }
+
+
+def get_install_id() -> str:
+    """Stable per-database id used as extra session-signing material.
+
+    Returns "uninitialized" if the table or file is missing (tests that dump a
+    cookie without init_db, or a process that has not migrated yet). After
+    init_db() the row always exists. Does not create a sqlite file.
+    """
+    if not os.path.exists(DB_PATH):
+        return "uninitialized"
+    try:
+        with get_db() as db:
+            row = db.execute(
+                "SELECT install_id FROM app_install WHERE id = 1"
+            ).fetchone()
+            if row:
+                return row["install_id"]
+    except Exception:
+        pass
+    return "uninitialized"
 
 
 def _seed_runtime_data() -> None:

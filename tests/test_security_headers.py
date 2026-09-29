@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app.services.catalog import create_service
@@ -35,6 +36,64 @@ def test_docs_disabled_when_secure_cookies_false_but_https_base_url(db, monkeypa
     from app.main import create_app
     with TestClient(create_app()) as c:
         _assert_docs_are_404(c)
+
+
+def test_docs_disabled_when_crm_api_key_set(db, monkeypatch):
+    monkeypatch.setenv("CRM_API_KEY", "not-empty")
+    monkeypatch.delenv("SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("BASE_URL", "http://localhost:8000")
+    from app.main import create_app
+    with TestClient(create_app()) as c:
+        _assert_docs_are_404(c)
+
+
+def test_docs_disabled_when_disable_docs_true(db, monkeypatch):
+    monkeypatch.setenv("DISABLE_DOCS", "true")
+    monkeypatch.delenv("SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("BASE_URL", "http://localhost:8000")
+    from app.main import create_app
+    with TestClient(create_app()) as c:
+        _assert_docs_are_404(c)
+
+
+def test_docs_available_when_disable_docs_false_even_with_https(db, monkeypatch):
+    monkeypatch.setenv("DISABLE_DOCS", "false")
+    monkeypatch.setenv("BASE_URL", "https://crm.example.com")
+    from app.main import create_app
+    with TestClient(create_app()) as c:
+        assert c.get("/docs").status_code == 200
+
+
+def test_refuses_insecure_secret_when_secure_cookies(db, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "dev-secret-change-in-prod")
+    monkeypatch.setenv("SECURE_COOKIES", "true")
+    from app.main import create_app
+    with pytest.raises(RuntimeError, match="insecure default"):
+        with TestClient(create_app()):
+            pass
+
+
+def test_refuses_insecure_secret_when_https_base_url(db, monkeypatch):
+    monkeypatch.setenv("SECRET_KEY", "dev-secret-change-in-prod")
+    monkeypatch.delenv("SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("BASE_URL", "https://crm.example.com")
+    from app.main import create_app
+    with pytest.raises(RuntimeError, match="insecure default"):
+        with TestClient(create_app()):
+            pass
+
+
+def test_insecure_secret_warns_in_local_dev(db, monkeypatch, caplog):
+    import logging
+
+    monkeypatch.setenv("SECRET_KEY", "dev-secret-change-in-prod")
+    monkeypatch.delenv("SECURE_COOKIES", raising=False)
+    monkeypatch.delenv("BASE_URL", raising=False)
+    from app.main import create_app
+    with caplog.at_level(logging.WARNING, logger="app.main"):
+        with TestClient(create_app()) as c:
+            assert c.get("/health").status_code == 200
+    assert "insecure default" in caplog.text
 
 
 def test_health_includes_nosniff_and_does_not_require_login(client):

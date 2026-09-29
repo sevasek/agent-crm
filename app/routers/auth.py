@@ -1,3 +1,4 @@
+import hashlib
 import os
 
 from fastapi import APIRouter, Request, Form, HTTPException
@@ -5,7 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import URLSafeTimedSerializer
 
-from app.database import get_db
+from app.database import get_db, get_install_id
 from app.services.auth import (
     authenticate_user, generate_csrf_token, validate_csrf_token,
     check_rate_limit, get_rate_limit_key, should_use_secure_cookies,
@@ -20,7 +21,46 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
 # expiry: a stolen token is rejected after this many seconds even if the
 # browser still sends it. Untimed cookies from before this change fail loads.
 SESSION_MAX_AGE = 60 * 60 * 24 * 30
-cookie_signer = URLSafeTimedSerializer(SECRET_KEY, salt="session")
+
+
+def _session_signing_secret() -> str:
+    """SECRET_KEY mixed with this database's install_id.
+
+    Two instances that share a copied SECRET_KEY still cannot verify each
+    other's session cookies, because each sqlite file has its own install_id.
+    """
+    secret = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
+    install_id = get_install_id()
+    return hashlib.sha256(f"{secret}\0{install_id}".encode()).hexdigest()
+
+
+class _LazyCookieSigner:
+    """dumps/loads like URLSafeTimedSerializer, rebuilt when DB or key changes.
+
+    Tests (and per-test DB_PATH) must not keep a signer cached from another
+    database. Reading install_id on each use keeps dumps/loads working for
+    callers that imported `cookie_signer` at module load.
+    """
+
+    def __init__(self):
+        self._signer = None
+        self._material = None
+
+    def _get(self):
+        material = _session_signing_secret()
+        if self._signer is None or self._material != material:
+            self._material = material
+            self._signer = URLSafeTimedSerializer(material, salt="session")
+        return self._signer
+
+    def dumps(self, *args, **kwargs):
+        return self._get().dumps(*args, **kwargs)
+
+    def loads(self, *args, **kwargs):
+        return self._get().loads(*args, **kwargs)
+
+
+cookie_signer = _LazyCookieSigner()
 
 
 def get_current_user(request: Request):

@@ -5,6 +5,9 @@
 #   docker compose --env-file instances/acme/.env \
 #     -f docker-compose.yml -f docker-compose.prod.yml \
 #     -f docker-compose.port.yml -f docker-compose.instance.yml up -d
+#
+# Only env_file / volumes / ports are overridden here. cap_drop, tmpfs,
+# read_only, and security_opt stay inherited from docker-compose.prod.yml.
 
 services:
   app:

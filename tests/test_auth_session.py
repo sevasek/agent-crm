@@ -20,7 +20,7 @@ def test_untimed_session_cookie_is_rejected(client):
     assert resp.headers["location"] == "/auth/login"
 
 
-def test_session_token_rejected_when_past_max_age():
+def test_session_token_rejected_when_past_max_age(db):
     token = cookie_signer.dumps({"user_id": 1})
     with pytest.raises(SignatureExpired):
         cookie_signer.loads(token, max_age=-1)
@@ -66,3 +66,46 @@ def test_login_missing_csrf_still_422(client):
     })
     assert resp.status_code == 422
     assert "application/json" in resp.headers.get("content-type", "")
+
+
+def test_session_cookie_from_another_database_is_rejected(tmp_path, monkeypatch):
+    """Same SECRET_KEY + same numeric user_id must not authenticate on another DB."""
+    from fastapi.testclient import TestClient
+
+    from app import database
+    from app.main import create_app
+    from app.routers import auth as auth_mod
+    from app.services.auth import create_user
+
+    monkeypatch.setenv("SECRET_KEY", "shared-copied-secret")
+    db_a = tmp_path / "a.db"
+    db_b = tmp_path / "b.db"
+
+    monkeypatch.setattr(database, "DB_PATH", str(db_a))
+    database.init_db()
+    user_a = create_user("a@example.com", "A", "password123")
+    token = auth_mod.cookie_signer.dumps({"user_id": user_a})
+
+    monkeypatch.setattr(database, "DB_PATH", str(db_b))
+    database.init_db()
+    create_user("b@example.com", "B", "password123")
+    with TestClient(create_app()) as c:
+        c.cookies.set("session", token)
+        resp = c.get("/pipeline", follow_redirects=False)
+        assert resp.status_code == 303
+        assert resp.headers["location"] == "/auth/login"
+
+
+def test_fresh_databases_get_distinct_install_ids(tmp_path, monkeypatch):
+    from app.database import get_install_id, init_db
+    from app import database
+
+    monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "one.db"))
+    init_db()
+    first = get_install_id()
+    monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "two.db"))
+    init_db()
+    second = get_install_id()
+    assert len(first) == 64
+    assert len(second) == 64
+    assert first != second

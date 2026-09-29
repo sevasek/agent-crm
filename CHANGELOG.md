@@ -60,6 +60,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Call-outcome buttons on the queue and call view swap a fragment
   instead of reloading the page (closes #45). Plain POST still
   redirects.
+- `DISABLE_DOCS` plus hiding `/docs`, `/redoc`, and `/openapi.json` when
+  any `CRM_*_KEY` is set, not only when `BASE_URL` is https (issue 59).
+- Per-database `install_id` (schema v5) mixed into the session cookie
+  signer. `scripts/new-instance.sh` refuses a `SECRET_KEY` that matches
+  a sibling instance or the `.env.example` default. Production intent
+  (https `BASE_URL` or `SECURE_COOKIES=true`) refuses to boot on that
+  default (issue 55).
 
 ### Removed
 
@@ -90,6 +97,12 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   `TemplateResponse` calls use the Starlette 1.x `(request, name, context)`
   order. Offer name fields use `Form("")` so an empty HTML input still
   reaches handler validation (Starlette 1.x treats `name=` as missing).
+- Image build upgrades `pip` before installing requirements, and sets
+  `PYTHONDONTWRITEBYTECODE=1` so a read-only rootfs does not try to write
+  `.pyc` (issue 58).
+- Production compose: `cap_drop: ALL` with the four caps the entrypoint
+  needs for chown + `gosu`, `no-new-privileges`, read-only rootfs, and
+  `tmpfs` `/tmp` on `app` and `staleness-cron` (issue 60).
 - Remaining admin HTML required fields (partner/service name, stage
   key/label, ICP field/operator, login email/password, new-deal
   partner/service) also use `Form("")` so an empty posted control hits

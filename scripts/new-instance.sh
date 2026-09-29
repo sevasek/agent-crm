@@ -61,6 +61,7 @@ fi
 
 export INSTANCE_SCRIPT_DIR="$SCRIPT_DIR"
 export INSTANCE_REGISTRY="$REGISTRY"
+export INSTANCE_ROOT
 export INSTANCE_NAME="$NAME"
 export INSTANCE_TZ="$TZ_NAME"
 export INSTANCE_EMAIL="$EMAIL"
@@ -85,7 +86,9 @@ export INSTANCE_ENV_FILE="$ENV_FILE"
 python3 -c '
 import os, sys
 sys.path.insert(0, os.environ["INSTANCE_SCRIPT_DIR"])
-from instance_lib import render_env, write_env_file
+from instance_lib import (
+    assert_unique_secret_key, load_secret_key, render_env, write_env_file,
+)
 text = render_env(
     name=os.environ["INSTANCE_NAME"],
     tz=os.environ["INSTANCE_TZ"],
@@ -93,6 +96,10 @@ text = render_env(
     port=int(os.environ["INSTANCE_PORT"]),
     trusted_proxies=os.environ["INSTANCE_TRUSTED_PROXIES"],
     base_url=os.environ["INSTANCE_BASE_URL"],
+)
+secret = load_secret_key(text)
+assert_unique_secret_key(
+    os.environ["INSTANCE_ROOT"], os.environ["INSTANCE_NAME"], secret or "",
 )
 write_env_file(os.environ["INSTANCE_ENV_FILE"], text)
 '

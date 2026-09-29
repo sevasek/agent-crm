@@ -53,6 +53,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   baseline: one `<link>` in `base.html`, `--pico-primary*` mapped to the
   existing brand blue, `data-theme="light"` locked so Pico's auto dark mode
   does not clash with hand-picked pill colors (closes #43).
+- Vendored htmx 2.0.11. Pipeline stage-move returns the two affected
+  columns as `hx-swap-oob` fragments when the request has `HX-Request`,
+  so a card jumps columns without a full reload. No-JS still POSTs the
+  same form.
+- Call-outcome buttons on the queue and call view swap a fragment
+  instead of reloading the page (closes #45). Plain POST still
+  redirects.
 
 ### Removed
 
@@ -114,6 +121,14 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   `Origin`/`Referer` names a different host than the request's own `Host`
   (defense-in-depth; requests that send neither are unaffected).
   `GET /auth/logout` is now `POST /auth/logout`.
+- Self-service password change (`/settings`, `POST /settings/password`) and
+  session revocation. `users.session_version` (schema v5) is embedded in the
+  session cookie and checked on every request; changing your password or
+  using the new "Log out of all other sessions" button
+  (`POST /settings/logout-everywhere`) bumps it, so a stolen or leaked
+  session cookie stops working immediately instead of staying valid for the
+  full 30-day cookie lifetime. The browser that made the change stays
+  logged in; every other outstanding cookie is invalidated.
 - OAuth authorization codes are single-use (OAuth 2.1). Each code carries a
   `jti`; the first presentation of a valid code persists it in
   `mcp_oauth_used_codes` (schema v4) and a second exchange returns

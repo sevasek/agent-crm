@@ -53,6 +53,41 @@ def count_users() -> int:
         return db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
 
 
+def bump_session_version(user_id: int) -> int:
+    """Invalidate every outstanding session cookie for this user (each one
+    carries the version it was issued with; get_current_user rejects a
+    mismatch). Returns the new version."""
+    with get_db() as db:
+        db.execute(
+            "UPDATE users SET session_version = session_version + 1 WHERE id = ?",
+            (user_id,),
+        )
+        db.commit()
+        return db.execute(
+            "SELECT session_version FROM users WHERE id = ?", (user_id,)
+        ).fetchone()["session_version"]
+
+
+def change_password(user_id: int, current_password: str, new_password: str):
+    """Verify current_password, set new_password, and bump session_version so
+    every other outstanding session cookie is invalidated. Returns (ok, error)
+    with a user-facing error message on failure."""
+    with get_db() as db:
+        row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row or not verify_password(current_password, row["password_hash"]):
+        return False, "Current password is incorrect."
+    if len(new_password) < 8:
+        return False, "New password must be at least 8 characters."
+    with get_db() as db:
+        db.execute(
+            "UPDATE users SET password_hash = ?, session_version = session_version + 1 "
+            "WHERE id = ?",
+            (hash_password(new_password), user_id),
+        )
+        db.commit()
+    return True, ""
+
+
 def _read_bootstrap_admin_password() -> tuple[str, str]:
     """Return (password, source) for the first-admin bootstrap.
 

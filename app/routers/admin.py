@@ -4,8 +4,11 @@ from fastapi import APIRouter, Request, Form, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.routers.auth import require_login
-from app.services.auth import generate_csrf_token, validate_csrf_token, is_valid_slug
+from app.routers.auth import require_login, set_session_cookie
+from app.services.auth import (
+    bump_session_version, change_password, generate_csrf_token, is_valid_slug,
+    validate_csrf_token,
+)
 from app.services.partners import (
     create_partner, get_partner, update_partner, list_partners, list_companies, get_children,
     SOCIAL_PLATFORMS, listed_social_links, primary_social_url,
@@ -37,6 +40,14 @@ templates.env.tests["dialable"] = has_callable_phone
 # validation here. Same bounds/shape as api.py's _safe_int for /api/v1/stages.
 _SQLITE_INT_MIN = -(2**63)
 _SQLITE_INT_MAX = 2**63 - 1
+
+
+def _is_htmx(request: Request) -> bool:
+    return request.headers.get("HX-Request", "").lower() == "true"
+
+
+def _render_partial(name, **context):
+    return templates.env.get_template(name).render(context)
 
 
 def _safe_int(value):
@@ -323,23 +334,36 @@ async def log_call_outcome(
 ):
     if validate_csrf_token(csrf_token, request.cookies.get("session")):
         record_call_outcome(deal_id, outcome, note)
+    if _is_htmx(request):
+        if next == "call_view":
+            ctx = _call_view_context(request, user, deal_id)
+            if not ctx:
+                response = HTMLResponse("")
+                response.headers["HX-Redirect"] = "/calls"
+                return response
+            return HTMLResponse(_render_partial("admin/_call_view_body.html", **ctx))
+        return HTMLResponse(_render_partial(
+            "admin/_calls_table.html",
+            request=request, user=user,
+            calls=list_todays_calls(),
+            limit=CALL_QUEUE_LIMIT,
+            score_max=SCORE_MAX,
+            outcomes=CALL_OUTCOMES,
+            csrf_token=generate_csrf_token(request.cookies.get("session")),
+        ))
     if next == "call_view":
         return RedirectResponse(f"/deals/{deal_id}/call", status_code=303)
     return RedirectResponse("/calls", status_code=303)
 
 
-@router.get("/deals/{deal_id}/call", response_class=HTMLResponse)
-async def deal_call_view(request: Request, deal_id: int, user=Depends(require_login)):
-    """The phone-in-hand view: just what a rep needs mid-call — the number,
-    the talk track (pain points/goals/next action), recent history, and the
-    outcome buttons. Everything else on the full partner page is noise here."""
+def _call_view_context(request, user, deal_id):
     deal = get_deal(deal_id)
     if not deal:
-        return RedirectResponse("/calls", status_code=303)
+        return None
     partner = get_partner(deal["partner_id"])
     service = get_service(deal["service_id"])
     if not partner or not service:
-        return RedirectResponse("/calls", status_code=303)
+        return None
 
     activities = list_activities_for_deal(deal_id)[:5]
     for item in activities:
@@ -367,14 +391,25 @@ async def deal_call_view(request: Request, deal_id: int, user=Depends(require_lo
     offer = offers_service.get_offer(deal.get("offer_id"))
     offer_options = offers_service.list_offers(active_only=True)
 
-    return templates.TemplateResponse(request, "admin/call_view.html", {
+    return {
         "request": request, "user": user,
         "deal": deal, "partner": partner, "service": service,
         "activities": activities, "score": score, "score_max": SCORE_MAX,
         "fit": fit, "offer": offer, "offer_options": offer_options,
         "outcomes": CALL_OUTCOMES,
         "csrf_token": generate_csrf_token(request.cookies.get("session")),
-    })
+    }
+
+
+@router.get("/deals/{deal_id}/call", response_class=HTMLResponse)
+async def deal_call_view(request: Request, deal_id: int, user=Depends(require_login)):
+    """The phone-in-hand view: just what a rep needs mid-call — the number,
+    the talk track (pain points/goals/next action), recent history, and the
+    outcome buttons. Everything else on the full partner page is noise here."""
+    ctx = _call_view_context(request, user, deal_id)
+    if not ctx:
+        return RedirectResponse("/calls", status_code=303)
+    return templates.TemplateResponse(request, "admin/call_view.html", ctx)
 
 
 @router.post("/deals/{deal_id}/offer")
@@ -590,6 +625,41 @@ def _annotate_child_counts(columns):
     return columns
 
 
+def _pipeline_board_data(current_tag="", tag_error=""):
+    stages = pipeline_stages.list_stages()
+    tag_filter = [current_tag] if current_tag else None
+    columns = [
+        {
+            "stage": s,
+            "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter)),
+        }
+        for s in stages
+    ]
+    _annotate_child_counts(columns)
+    return stages, columns
+
+
+def _pipeline_columns_fragment(request, user, keys, current_tag="", tag_error=""):
+    stages, columns = _pipeline_board_data(current_tag, tag_error)
+    by_key = {c["stage"]["key"]: c for c in columns}
+    csrf_token = generate_csrf_token(request.cookies.get("session"))
+    parts = []
+    seen = set()
+    for key in keys:
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        col = by_key.get(key)
+        if not col:
+            continue
+        parts.append(_render_partial(
+            "admin/_pipeline_column.html",
+            request=request, user=user, col=col, stages=stages,
+            csrf_token=csrf_token, current_tag=current_tag, oob=True,
+        ))
+    return "".join(parts)
+
+
 @router.get("/deals/new", response_class=HTMLResponse)
 async def new_deal_page(request: Request, partner_id: int = 0, user=Depends(require_login)):
     return _new_deal_form(request, user, partner_id=partner_id)
@@ -737,11 +807,19 @@ async def save_deal_next_action(
 async def change_deal_stage(
     request: Request, deal_id: int,
     stage: str = Form(...), next: str = Form("partner"),
+    tag: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
+    old_stage = deal["stage"] if deal else None
     if deal and validate_csrf_token(csrf_token, request.cookies.get("session")):
         set_deal_stage(deal_id, stage)
+    if _is_htmx(request) and next == "pipeline":
+        current_tag, tag_error = _tag_query(tag)
+        html = _pipeline_columns_fragment(
+            request, user, [old_stage, stage], current_tag, tag_error,
+        )
+        return HTMLResponse(html)
     if next == "pipeline":
         return RedirectResponse("/pipeline", status_code=303)
     if deal:
@@ -752,14 +830,8 @@ async def change_deal_stage(
 # ==================== Pipeline (Kanban board) ====================
 @router.get("/pipeline", response_class=HTMLResponse)
 async def pipeline_board(request: Request, tag: str = "", user=Depends(require_login)):
-    stages = pipeline_stages.list_stages()
     current_tag, tag_error = _tag_query(tag)
-    tag_filter = [current_tag] if current_tag else None
-    columns = [
-        {"stage": s, "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter))}
-        for s in stages
-    ]
-    _annotate_child_counts(columns)
+    stages, columns = _pipeline_board_data(current_tag, tag_error)
     return templates.TemplateResponse(request, "admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,
@@ -1120,3 +1192,44 @@ async def delete_api_key_submit(
     if validate_csrf_token(csrf_token, request.cookies.get("session")):
         api_keys_service.delete_api_key(user["id"], key_id)
     return RedirectResponse("/settings", status_code=303)
+
+
+@router.post("/settings/password")
+async def change_password_submit(
+    request: Request,
+    current_password: str = Form(""), new_password: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
+        return RedirectResponse("/settings", status_code=303)
+    ok, error = change_password(user["id"], current_password, new_password)
+    if not ok:
+        return templates.TemplateResponse(request, "admin/settings.html", {
+            "request": request, "user": user,
+            "api_keys": api_keys_service.list_api_keys(user["id"]),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
+            "password_error": error,
+        }, status_code=400)
+    response = templates.TemplateResponse(request, "admin/settings.html", {
+        "request": request, "user": user,
+        "api_keys": api_keys_service.list_api_keys(user["id"]),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
+        "password_changed": True,
+    })
+    # Every other outstanding session cookie is now invalid (session_version
+    # bumped); reissue this one so the browser that just changed it stays in.
+    set_session_cookie(response, user["id"], user["session_version"] + 1)
+    return response
+
+
+@router.post("/settings/logout-everywhere")
+async def logout_everywhere_submit(
+    request: Request,
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
+        return RedirectResponse("/settings", status_code=303)
+    new_version = bump_session_version(user["id"])
+    response = RedirectResponse("/settings", status_code=303)
+    set_session_cookie(response, user["id"], new_version)
+    return response

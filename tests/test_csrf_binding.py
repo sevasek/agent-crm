@@ -11,7 +11,7 @@ def test_token_minted_logged_out_is_rejected_against_a_logged_in_session(client)
     logged_out_token = generate_csrf_token(client.cookies.get("session"))
 
     user_id = create_user("victim@example.com", "Victim", "password123")
-    client.cookies.set("session", cookie_signer.dumps({"user_id": user_id}))
+    client.cookies.set("session", cookie_signer.dumps({"user_id": user_id, "sv": 0}))
 
     resp = client.post("/partners/new", data={
         "name": "Forged Partner", "csrf_token": logged_out_token,

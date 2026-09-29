@@ -1,0 +1,39 @@
+<div id="pipeline-col-{{ col.stage.key }}" class="pipeline-column"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+    <h2>{{ col.stage.label }} <span class="muted">({{ col.deals|length }})</span></h2>
+    {% for d in col.deals %}
+    <div class="pipeline-card">
+        <a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>
+        <div class="muted">{{ d.service_name }}</div>
+        {% if d.tags %}
+        <div class="tag-filters">
+            {% for tag in d.tags %}
+            <a class="pill pill-tag" href="/deals?tag={{ tag }}">{{ tag }}</a>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if d.parent_deal_id or d.child_count %}
+        <div class="muted">{% if d.parent_deal_id %}follow-on of #{{ d.parent_deal_id }}{% endif %}{% if d.parent_deal_id and d.child_count %} · {% endif %}{% if d.child_count %}{{ d.child_count }} child{% if d.child_count != 1 %}ren{% endif %}{% endif %}</div>
+        {% endif %}
+        {% if d.value_estimate %}<div class="muted">${{ "%.0f"|format(d.value_estimate) }}</div>{% endif %}
+        {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
+        {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
+        <form method="post" action="/deals/{{ d.id }}/stage" class="stage-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="next" value="pipeline">
+            {% if current_tag %}<input type="hidden" name="tag" value="{{ current_tag }}">{% endif %}
+            <select name="stage"
+                    hx-post="/deals/{{ d.id }}/stage"
+                    hx-include="closest form"
+                    hx-swap="none"
+                    hx-trigger="change"
+                    onchange="if (!window.htmx) this.form.submit()">
+                {% for s in stages %}
+                <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+    {% else %}
+    <p class="muted">No deals.</p>
+    {% endfor %}
+</div>

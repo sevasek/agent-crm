@@ -15,6 +15,7 @@ from app.database import (
     migrate_002,
     migrate_003,
     migrate_004,
+    migrate_005,
     row_to_dict,
 )
 
@@ -87,12 +88,13 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 4
-    assert set(MIGRATIONS) == {1, 2, 3, 4}
+    assert SCHEMA_VERSION == 5
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
     assert MIGRATIONS[4] is migrate_004
+    assert MIGRATIONS[5] is migrate_005
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):

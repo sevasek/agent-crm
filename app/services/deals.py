@@ -59,6 +59,9 @@ def stage_changed_to_like(new_stage: str) -> str:
 
 
 def _resolve_call_outcome_target(target):
+    # More than one stage may share a role (nurture/won/lost); the first by
+    # `position` order wins — that's the contract, not an implementation
+    # detail, if you ever configure more than one.
     if not target:
         return None
     if "key" in target:

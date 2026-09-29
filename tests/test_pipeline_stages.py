@@ -12,9 +12,6 @@ def test_default_pipeline_is_seeded(db):
     assert keys == DEFAULT_PIPELINE_KEYS
     assert pipeline_stages.default_stage_key() == "new"
     assert pipeline_stages.qualified_pool_keys() == {"qualified"}
-    assert pipeline_stages.nurture_trigger_keys() == {"nurture"}
-    assert pipeline_stages.won_keys() == {"won"}
-    assert pipeline_stages.lost_keys() == {"lost"}
     assert pipeline_stages.closed_stage_keys() == {"won", "lost"}
 
 

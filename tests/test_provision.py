@@ -10,6 +10,7 @@ import pytest
 from scripts.instance_lib import (
     ProvisionError,
     allocate_port,
+    assert_unique_secret_key,
     generate_secret,
     render_env,
     validate_name,
@@ -71,6 +72,19 @@ def test_write_env_is_mode_600_with_fresh_secrets(tmp_path):
     assert generate_secret() != secret
 
 
+def test_assert_unique_secret_key_rejects_copied_env(tmp_path):
+    write_env_file(tmp_path / "acme" / ".env", "SECRET_KEY=copied-from-acme\n")
+    with pytest.raises(ProvisionError, match="acme"):
+        assert_unique_secret_key(tmp_path, "beta", "copied-from-acme")
+    assert_unique_secret_key(tmp_path, "acme", "copied-from-acme")
+    assert_unique_secret_key(tmp_path, "beta", "a-different-key")
+
+
+def test_assert_unique_secret_key_rejects_example_default():
+    with pytest.raises(ProvisionError, match="env.example"):
+        assert_unique_secret_key("/tmp", "acme", "dev-secret-change-in-prod")
+
+
 def test_write_env_refuses_overwrite(tmp_path):
     path = tmp_path / ".env"
     write_env_file(path, "SECRET_KEY=one\n")
@@ -107,12 +121,15 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert env_path.stat().st_mode & stat.S_IRWXO == 0
     assert env_path.stat().st_mode & 0o777 == 0o600
     body = env_path.read_text()
-    assert "CRM_PORT=8000" in body
+    port_match = re.search(r"^CRM_PORT=(\d+)$", body, re.M)
+    assert port_match, body
+    port = port_match.group(1)
+    assert int(port) >= 8000
     assert "COMPOSE_PROJECT_NAME=crm-acme" in body
     assert "TZ=Australia/Sydney" in body
     assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
-    assert (tmp_path / "ports.tsv").read_text().startswith("acme\t8000")
-    assert "reverse_proxy 127.0.0.1:8000" in proc.stdout
+    assert (tmp_path / "ports.tsv").read_text().startswith(f"acme\t{port}")
+    assert f"reverse_proxy 127.0.0.1:{port}" in proc.stdout
     assert "Dry-run" in proc.stdout
 
 

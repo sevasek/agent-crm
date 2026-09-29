@@ -117,6 +117,54 @@ def generate_secret() -> str:
     return secrets.token_hex(32)
 
 
+def load_secret_key(env_text: str) -> str | None:
+    match = re.search(r"^SECRET_KEY=(.*)$", env_text, re.M)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def sibling_secret_keys(
+    instances_root: str | Path, skip_name: str | None = None
+) -> dict[str, str]:
+    """SECRET_KEY values from instances/*/ .env, excluding skip_name."""
+    root = Path(instances_root)
+    found: dict[str, str] = {}
+    if not root.is_dir():
+        return found
+    for child in sorted(root.iterdir()):
+        if not child.is_dir() or child.name == skip_name:
+            continue
+        env = child / ".env"
+        if not env.is_file():
+            continue
+        try:
+            key = load_secret_key(env.read_text())
+        except OSError:
+            continue
+        if key:
+            found[child.name] = key
+    return found
+
+
+def assert_unique_secret_key(
+    instances_root: str | Path,
+    name: str,
+    secret: str,
+) -> None:
+    """Refuse a SECRET_KEY that matches another tenant or the example default."""
+    if not secret or secret in {"dev-secret-change-in-prod"}:
+        raise ProvisionError(
+            "SECRET_KEY must be a unique random value, not the .env.example default"
+        )
+    for other, other_secret in sibling_secret_keys(instances_root, skip_name=name).items():
+        if other_secret == secret:
+            raise ProvisionError(
+                f"SECRET_KEY collides with instance {other}. "
+                "Each instance needs its own key; do not copy .env between tenants."
+            )
+
+
 def generate_password() -> str:
     # 24 url-safe chars, printed once by new-instance.sh
     return secrets.token_urlsafe(18)

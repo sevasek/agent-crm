@@ -19,6 +19,7 @@ A database newer than the running code refuses to start. No ORM.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
 - `users`, `api_keys`, `mcp_oauth_clients`, `mcp_oauth_used_codes`: auth plumbing.
+- `app_install`: single-row per-database `install_id` mixed into the session cookie signer so a copied `SECRET_KEY` cannot replay sessions onto another instance.
 
 ### Why one `partners` table
 

@@ -20,22 +20,59 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 _INSECURE_SECRET_KEYS = {"dev-secret-change-in-prod"}
+_API_KEY_ENVS = ("CRM_API_KEY", "CRM_STAGES_API_KEY", "CRM_MCP_API_KEY")
+
+
+def _production_intent() -> bool:
+    """True when Secure cookies would be on, or BASE_URL is https.
+
+    `should_use_secure_cookies()` already treats unset SECURE_COOKIES +
+    https BASE_URL as production. The extra BASE_URL check covers
+    SECURE_COOKIES=false with an https BASE_URL so /docs still stays off.
+    """
+    return should_use_secure_cookies() or os.getenv("BASE_URL", "").startswith("https://")
+
+
+def _api_keys_configured() -> bool:
+    return any(os.getenv(name, "").strip() for name in _API_KEY_ENVS)
+
+
+def _explicit_disable_docs() -> bool | None:
+    raw = os.getenv("DISABLE_DOCS")
+    if raw is None or not raw.strip():
+        return None
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _docs_disabled() -> bool:
+    """Hide Swagger/ReDoc/OpenAPI unless this is clearly local-only.
+
+    DISABLE_DOCS=true always hides; DISABLE_DOCS=false always shows.
+    Unset: hide when production-intent (Secure cookies / https BASE_URL)
+    or any CRM_*_KEY is set — an http BASE_URL leftover must not keep
+    the schema public on a box that already has API keys.
+    """
+    explicit = _explicit_disable_docs()
+    if explicit is not None:
+        return explicit
+    return _production_intent() or _api_keys_configured()
 
 
 def _check_secret_key():
     # This app has no public-facing surface (no signup, no email links), but
     # the session cookie is still forgeable with a known SECRET_KEY, so the
     # same warn-in-dev / refuse-in-prod split applies. "Production
-    # intent" here is inferred from SECURE_COOKIES rather than an SMTP flag
-    # (this app has no SMTP concept).
+    # intent" is https BASE_URL or Secure cookies — not only SECURE_COOKIES=true,
+    # so an https deploy that left the example default in .env still refuses.
     secret_key = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
     if secret_key not in _INSECURE_SECRET_KEYS:
         return
-    if os.getenv("SECURE_COOKIES", "false").lower() == "true":
+    if _production_intent():
         raise RuntimeError(
-            "SECRET_KEY is still the insecure default, but SECURE_COOKIES=true (production "
-            "intent). Refusing to start: this would let anyone forge session/CSRF cookies. "
-            "Set a real SECRET_KEY: python -c \"import secrets; print(secrets.token_hex(32))\""
+            "SECRET_KEY is still the insecure default, but this process looks like "
+            "a real deployment (SECURE_COOKIES=true or https BASE_URL). Refusing to "
+            "start: this would let anyone forge session/CSRF cookies. Set a real "
+            "SECRET_KEY: python -c \"import secrets; print(secrets.token_hex(32))\""
         )
     logger.warning(
         "SECRET_KEY is still the insecure default. Fine for local dev, but must be a "
@@ -92,16 +129,6 @@ def _cross_site_cookie_request(request: Request) -> bool:
     return False
 
 
-def _production_intent() -> bool:
-    """True when Secure cookies would be on, or BASE_URL is https.
-
-    `should_use_secure_cookies()` already treats unset SECURE_COOKIES +
-    https BASE_URL as production. The extra BASE_URL check covers
-    SECURE_COOKIES=false with an https BASE_URL so /docs still stays off.
-    """
-    return should_use_secure_cookies() or os.getenv("BASE_URL", "").startswith("https://")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _check_secret_key()
@@ -112,7 +139,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    disable_docs = _production_intent()
+    disable_docs = _docs_disabled()
     application = FastAPI(
         title="crm",
         lifespan=lifespan,

@@ -11,6 +11,23 @@ proxy. Hosted MCP connectors have no stable CIDR; allowlisting `/mcp` will
 break them.
 
 Set `BASE_URL=https://your.domain` and `SECURE_COOKIES=true` in `.env`.
+`SECRET_KEY` must be a unique random value per instance — not the
+`.env.example` default, and not copied from another tenant's `.env`.
+`scripts/new-instance.sh` generates a fresh key and refuses to start if
+that key already belongs to a sibling instance. Session cookies are also
+bound to a per-database `install_id`, so a copied key alone is not enough
+to replay a session onto another sqlite file.
+
+`/docs`, `/redoc`, and `/openapi.json` are hidden when `SECURE_COOKIES=true`,
+`BASE_URL` is https, or any `CRM_*_KEY` is set. Force the hide with
+`DISABLE_DOCS=true`; `DISABLE_DOCS=false` is an explicit show (including
+on https).
+
+Production compose drops all Linux capabilities except the four the
+entrypoint needs to chown `./data` and `gosu` to `APP_UID` (`CHOWN`,
+`FOWNER`, `SETUID`, `SETGID`), sets `no-new-privileges`, and runs a
+read-only root filesystem with `tmpfs` on `/tmp`. The sqlite volume
+stays writable.
 
 **Never set a cookie `Domain=` for the session cookie**, and never configure
 the proxy to rewrite it in. The session cookie is host-only by default

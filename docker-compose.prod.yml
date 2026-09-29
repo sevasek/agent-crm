@@ -30,6 +30,21 @@ services:
     # chown ./data, then drops to APP_UID/APP_GID. Setting `user:` skips the
     # chown and can leave sqlite read-only.
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    # Entrypoint starts as root, chowns the data volume, then gosu. Keep
+    # CHOWN/FOWNER for that repair and SETUID/SETGID for gosu; drop everything
+    # else. no-new-privileges stops a later exec from regaining caps.
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
 
   # Daily follow-up check: logs each due follow-up on the contact's timeline.
   staleness-cron:
@@ -50,3 +65,15 @@ services:
       options:
         max-size: 10m
         max-file: "5"
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777

@@ -35,6 +35,11 @@ jobs:
           grep -qF 'exec gosu' docker-entrypoint.sh
           grep -qF 'umask 077' docker-entrypoint.sh
           grep -qF 'chmod 600' docker-entrypoint.sh
+          grep -qF 'cap_drop' docker-compose.prod.yml
+          grep -qF 'no-new-privileges:true' docker-compose.prod.yml
+          grep -qF 'read_only: true' docker-compose.prod.yml
+          grep -qF 'PYTHONDONTWRITEBYTECODE=1' Dockerfile
+          grep -qF 'pip install --no-cache-dir --upgrade pip' Dockerfile
 
   secrets-scan:
     runs-on: ubuntu-latest

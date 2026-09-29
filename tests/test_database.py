@@ -16,6 +16,7 @@ from app.database import (
     migrate_003,
     migrate_004,
     migrate_005,
+    migrate_006,
     row_to_dict,
 )
 
@@ -88,13 +89,14 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 5
-    assert set(MIGRATIONS) == {1, 2, 3, 4, 5}
+    assert SCHEMA_VERSION == 6
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
     assert MIGRATIONS[4] is migrate_004
     assert MIGRATIONS[5] is migrate_005
+    assert MIGRATIONS[6] is migrate_006
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -145,6 +147,7 @@ def test_init_db_migrates_legacy_version_0(tmp_path, monkeypatch):
         assert "users" in tables
         assert "deal_tags" in tables
         assert "mcp_oauth_used_codes" in tables
+        assert "app_install" in tables
         assert not any(name.startswith("rate_limit_") for name in tables)
     pre = list((tmp_path / "backups").glob("pre-migrate-v0-to-*.db"))
     assert pre, "expected an online backup next to data/ before migrating"
@@ -235,6 +238,37 @@ def test_init_db_migrates_v3_adds_used_oauth_codes(tmp_path, monkeypatch):
         assert cols == {"jti", "expires_at"}
     pre = list((tmp_path / "backups").glob("pre-migrate-v3-to-*.db"))
     assert pre, "expected an online backup before migrating a live v3 DB"
+
+
+def test_init_db_migrates_v4_adds_install_id(tmp_path, monkeypatch):
+    """A live v4 file gets app_install by the time it reaches SCHEMA_VERSION."""
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        migrate_001(db)
+        migrate_002(db)
+        migrate_003(db)
+        migrate_004(db)
+        db.execute("PRAGMA user_version = 4")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert "app_install" in tables
+        row = conn.execute("SELECT id, install_id FROM app_install WHERE id = 1").fetchone()
+        assert row is not None
+        assert row["id"] == 1
+        assert len(row["install_id"]) == 64
+    pre = list((tmp_path / "backups").glob("pre-migrate-v4-to-*.db"))
+    assert pre, "expected an online backup before migrating a live v4 DB"
 
 
 def test_init_db_skips_backup_on_fresh_empty_db(tmp_path, monkeypatch):

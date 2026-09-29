@@ -38,7 +38,7 @@ def test_login_error_is_announced(client):
         data={
             "email": "nobody@example.com",
             "password": "wrong-password",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(client.cookies.get("session")),
         },
     )
     assert resp.status_code == 400

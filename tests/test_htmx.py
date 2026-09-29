@@ -38,7 +38,7 @@ def test_stage_change_without_hx_still_redirects(logged_in_client, db):
         data={
             "stage": "contacted",
             "next": "pipeline",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         },
         follow_redirects=False,
     )
@@ -54,7 +54,7 @@ def test_stage_change_htmx_returns_column_fragments(logged_in_client, db):
         data={
             "stage": "contacted",
             "next": "pipeline",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         },
         headers={"HX-Request": "true"},
         follow_redirects=False,
@@ -94,7 +94,7 @@ def test_call_outcome_without_hx_still_redirects(logged_in_client, db):
         f"/deals/{deal_id}/call-outcome",
         data={
             "outcome": "no_answer",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         },
         follow_redirects=False,
     )
@@ -109,7 +109,7 @@ def test_call_outcome_htmx_from_calls_returns_table(logged_in_client, db):
         data={
             "outcome": "no_answer",
             "note": "Voicemail",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         },
         headers={"HX-Request": "true"},
         follow_redirects=False,
@@ -130,7 +130,7 @@ def test_call_outcome_htmx_from_call_view_returns_fragment(logged_in_client, db)
             "outcome": "won",
             "note": "Signed today",
             "next": "call_view",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         },
         headers={"HX-Request": "true"},
         follow_redirects=False,

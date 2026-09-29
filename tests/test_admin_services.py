@@ -14,7 +14,7 @@ def test_new_service_rejects_path_nurture_slug(logged_in_client):
         "slug": "bad-nurture",
         "description": "",
         "nurture_list_slug": "../admin",
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert "List slug" in resp.text
@@ -30,7 +30,7 @@ def test_edit_service_rejects_path_nurture_slug_and_keeps_existing(logged_in_cli
         "description": "",
         "nurture_list_slug": "../admin",
         "active": "1",
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
     assert get_service(sid)["nurture_list_slug"] == "automation-interest"

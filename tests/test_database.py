@@ -16,6 +16,7 @@ from app.database import (
     migrate_003,
     migrate_004,
     migrate_005,
+    migrate_006,
     row_to_dict,
 )
 
@@ -88,13 +89,14 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 5
-    assert set(MIGRATIONS) == {1, 2, 3, 4, 5}
+    assert SCHEMA_VERSION == 6
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
     assert MIGRATIONS[4] is migrate_004
     assert MIGRATIONS[5] is migrate_005
+    assert MIGRATIONS[6] is migrate_006
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -239,7 +241,7 @@ def test_init_db_migrates_v3_adds_used_oauth_codes(tmp_path, monkeypatch):
 
 
 def test_init_db_migrates_v4_adds_install_id(tmp_path, monkeypatch):
-    """A live v4 file gets app_install at v5."""
+    """A live v4 file gets app_install by the time it reaches SCHEMA_VERSION."""
     path = tmp_path / "data" / "crm.db"
     path.parent.mkdir()
     monkeypatch.setattr("app.database.DB_PATH", str(path))

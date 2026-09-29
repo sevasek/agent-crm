@@ -53,6 +53,41 @@ def count_users() -> int:
         return db.execute("SELECT COUNT(*) AS n FROM users").fetchone()["n"]
 
 
+def bump_session_version(user_id: int) -> int:
+    """Invalidate every outstanding session cookie for this user (each one
+    carries the version it was issued with; get_current_user rejects a
+    mismatch). Returns the new version."""
+    with get_db() as db:
+        db.execute(
+            "UPDATE users SET session_version = session_version + 1 WHERE id = ?",
+            (user_id,),
+        )
+        db.commit()
+        return db.execute(
+            "SELECT session_version FROM users WHERE id = ?", (user_id,)
+        ).fetchone()["session_version"]
+
+
+def change_password(user_id: int, current_password: str, new_password: str):
+    """Verify current_password, set new_password, and bump session_version so
+    every other outstanding session cookie is invalidated. Returns (ok, error)
+    with a user-facing error message on failure."""
+    with get_db() as db:
+        row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row or not verify_password(current_password, row["password_hash"]):
+        return False, "Current password is incorrect."
+    if len(new_password) < 8:
+        return False, "New password must be at least 8 characters."
+    with get_db() as db:
+        db.execute(
+            "UPDATE users SET password_hash = ?, session_version = session_version + 1 "
+            "WHERE id = ?",
+            (hash_password(new_password), user_id),
+        )
+        db.commit()
+    return True, ""
+
+
 def _read_bootstrap_admin_password() -> tuple[str, str]:
     """Return (password, source) for the first-admin bootstrap.
 
@@ -194,16 +229,28 @@ def authenticate_user(email: str, password: str):
 
 
 # ==================== CSRF ====================
-def generate_csrf_token() -> str:
-    return csrf_serializer.dumps({"t": datetime.utcnow().isoformat()})
+def _csrf_binding(session_token: str | None) -> str:
+    """Hash of the session cookie a CSRF token is scoped to (empty-string
+    sentinel when logged out), so a token minted in one session state can't
+    be replayed once the session state differs (CVE-class: unscoped CSRF)."""
+    return hashlib.sha256((session_token or "").encode()).hexdigest()
 
 
-def validate_csrf_token(token: str) -> bool:
+def generate_csrf_token(session_token: str | None = None) -> str:
+    return csrf_serializer.dumps({
+        "t": datetime.utcnow().isoformat(),
+        "s": _csrf_binding(session_token),
+    })
+
+
+def validate_csrf_token(token: str, session_token: str | None = None) -> bool:
     try:
-        csrf_serializer.loads(token, max_age=3600 * 8)
-        return True
+        data = csrf_serializer.loads(token, max_age=3600 * 8)
     except Exception:
         return False
+    if not isinstance(data, dict):
+        return False
+    return secrets_module.compare_digest(data.get("s", ""), _csrf_binding(session_token))
 
 
 # ==================== Rate limiting (in-memory; one uvicorn worker) ====================

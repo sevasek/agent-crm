@@ -46,7 +46,7 @@ def test_edit_deal_saves_and_returns_to_partner(logged_in_client, db):
     resp = logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "website",
             "value_estimate": "1500",
             "pain_points": "Updated pain point",
@@ -78,7 +78,7 @@ def test_edit_deal_can_clear_optional_fields(logged_in_client, db):
     logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
             "value_estimate": "",
             "pain_points": "",
@@ -126,7 +126,7 @@ def test_edit_deal_invalid_value_keeps_existing(logged_in_client, db):
     logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "website",
             "value_estimate": "not-a-number",
             "pain_points": "keep me",
@@ -162,7 +162,7 @@ def test_edit_deal_zero_value_displays_and_persists(logged_in_client, db):
     logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
             "value_estimate": "0",
             "pain_points": "",
@@ -184,7 +184,7 @@ def test_edit_deal_orphan_partner_post_does_not_save(logged_in_client, db):
     resp = logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "website",
             "value_estimate": "1",
             "pain_points": "should not land",
@@ -229,9 +229,9 @@ def _two_deals(db):
     return pid, consulting, support, parent_id, child_id
 
 
-def _edit_payload(parent_deal_id="", **extra):
+def _edit_payload(client, parent_deal_id="", **extra):
     data = {
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(client.cookies.get("session")),
         "source": "referral",
         "value_estimate": "",
         "pain_points": "",
@@ -311,7 +311,7 @@ def test_edit_deal_sets_parent(logged_in_client, db):
     pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     resp = logged_in_client.post(
         f"/deals/{child_id}/edit",
-        data=_edit_payload(str(parent_id)),
+        data=_edit_payload(logged_in_client, str(parent_id)),
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -324,7 +324,7 @@ def test_edit_deal_clears_parent(logged_in_client, db):
     update_deal_fields(child_id, parent_deal_id=parent_id)
     resp = logged_in_client.post(
         f"/deals/{child_id}/edit",
-        data=_edit_payload(""),
+        data=_edit_payload(logged_in_client, ""),
         follow_redirects=False,
     )
     assert resp.status_code == 303
@@ -338,7 +338,7 @@ def test_edit_deal_rejects_other_partner_parent(logged_in_client, db):
 
     resp = logged_in_client.post(
         f"/deals/{child_id}/edit",
-        data=_edit_payload(str(stranger_id)),
+        data=_edit_payload(logged_in_client, str(stranger_id)),
         follow_redirects=False,
     )
     assert resp.status_code == 400
@@ -351,7 +351,7 @@ def test_edit_deal_rejects_parent_cycle(logged_in_client, db):
     update_deal_fields(child_id, parent_deal_id=parent_id)
     resp = logged_in_client.post(
         f"/deals/{parent_id}/edit",
-        data=_edit_payload(str(child_id)),
+        data=_edit_payload(logged_in_client, str(child_id)),
         follow_redirects=False,
     )
     assert resp.status_code == 400
@@ -365,7 +365,7 @@ def test_new_deal_sets_parent(logged_in_client, db):
     resp = logged_in_client.post(
         "/deals/new",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "partner_id": str(pid),
             "service_id": str(support),
             "source": "repeat",
@@ -392,7 +392,7 @@ def test_new_deal_rejects_other_partner_parent(logged_in_client, db):
     resp = logged_in_client.post(
         "/deals/new",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "partner_id": str(pid),
             "service_id": str(consulting),
             "source": "",

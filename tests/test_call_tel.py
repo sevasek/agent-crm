@@ -36,7 +36,7 @@ def test_deal_call_tel_logs(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db, phone="0400 111 222")
     resp = logged_in_client.post(
         f"/deals/{deal_id}/call-tel",
-        data={"csrf_token": generate_csrf_token()},
+        data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
     activities = list_activities_for_deal(deal_id)
@@ -65,7 +65,7 @@ def test_deal_call_tel_missing_phone_does_not_log(logged_in_client, db):
     deal_id = create_deal(pid, sid)
     resp = logged_in_client.post(
         f"/deals/{deal_id}/call-tel",
-        data={"csrf_token": generate_csrf_token()},
+        data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
     assert not any(a["type"] == "call" for a in list_activities_for_deal(deal_id))
@@ -75,7 +75,7 @@ def test_deal_call_tel_unparseable_phone_does_not_log(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db, phone="---")
     resp = logged_in_client.post(
         f"/deals/{deal_id}/call-tel",
-        data={"csrf_token": generate_csrf_token()},
+        data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
     assert not any(a["type"] == "call" for a in list_activities_for_deal(deal_id))
@@ -85,7 +85,7 @@ def test_partner_call_tel_logs_without_deal(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@x.example", phone="0400 111 222")
     resp = logged_in_client.post(
         f"/partners/{pid}/call-tel",
-        data={"csrf_token": generate_csrf_token()},
+        data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
     activities = list_activities_for_partner(pid)
@@ -183,7 +183,7 @@ def test_call_outcome_from_call_view_redirects_back_to_call_view(logged_in_clien
     pid, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(
         f"/deals/{deal_id}/call-outcome",
-        data={"outcome": "no_answer", "next": "call_view", "csrf_token": generate_csrf_token()},
+        data={"outcome": "no_answer", "next": "call_view", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
     assert resp.status_code == 303

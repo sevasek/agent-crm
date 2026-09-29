@@ -12,6 +12,13 @@ break them.
 
 Set `BASE_URL=https://your.domain` and `SECURE_COOKIES=true` in `.env`.
 
+**Never set a cookie `Domain=` for the session cookie**, and never configure
+the proxy to rewrite it in. The session cookie is host-only by default
+(scoped to the exact hostname), which is what stops a session or CSRF token
+from one customer's subdomain being replayable against a sibling subdomain
+on a multi-tenant host. Widening it to a parent domain removes that
+protection silently.
+
 ## `TRUSTED_PROXIES`
 
 Rate limits key on the client IP. Behind a proxy, uvicorn sees the proxy (or

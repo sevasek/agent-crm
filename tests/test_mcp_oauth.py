@@ -73,7 +73,7 @@ def test_pkce_round_trip_can_call_mcp(client, db, monkeypatch):
     assert 'class="error"' not in page.text
 
     submitted = client.post("/oauth/authorize", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(client.cookies.get("session")),
         "api_key": "test-mcp-key",
         "client_id": client_id,
         "redirect_uri": redirect,
@@ -154,7 +154,7 @@ def test_logged_in_operator_can_authorize_without_pasting_key(client, db, monkey
     verifier, challenge = _pkce()
     registered, redirect = _register(client, monkeypatch)
     submitted = client.post("/oauth/authorize", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(client.cookies.get("session")),
         "client_id": registered["client_id"],
         "redirect_uri": redirect,
         "code_challenge": challenge,
@@ -244,9 +244,9 @@ def test_expired_used_auth_code_jtis_can_be_pruned(db):
     assert rows == {"live-jti"}
 
 
-def _authorize_form(registered, redirect, challenge, api_key="test-mcp-key", csrf=None):
+def _authorize_form(client, registered, redirect, challenge, api_key="test-mcp-key", csrf=None):
     return {
-        "csrf_token": csrf if csrf is not None else generate_csrf_token(),
+        "csrf_token": csrf if csrf is not None else generate_csrf_token(client.cookies.get("session")),
         "api_key": api_key,
         "client_id": registered["client_id"],
         "redirect_uri": redirect,
@@ -262,7 +262,7 @@ def _handshake(client, monkeypatch):
     registered, redirect = _register(client, monkeypatch)
     submitted = client.post(
         "/oauth/authorize",
-        data=_authorize_form(registered, redirect, challenge),
+        data=_authorize_form(client, registered, redirect, challenge),
         follow_redirects=False,
     )
     assert submitted.status_code == 302, submitted.text
@@ -297,7 +297,7 @@ def test_authorize_get_does_not_count_toward_rate_limit(client, db, monkeypatch)
         assert page.status_code == 200, page.text
     wrong = client.post(
         "/oauth/authorize",
-        data=_authorize_form(registered, redirect, challenge, api_key="wrong"),
+        data=_authorize_form(client, registered, redirect, challenge, api_key="wrong"),
     )
     assert wrong.status_code == 401
 
@@ -311,12 +311,12 @@ def test_authorize_post_wrong_key_is_rate_limited(client, db, monkeypatch):
     for _ in range(cap):
         resp = client.post(
             "/oauth/authorize",
-            data=_authorize_form(registered, redirect, challenge, api_key="wrong"),
+            data=_authorize_form(client, registered, redirect, challenge, api_key="wrong"),
         )
         assert resp.status_code == 401, resp.text
     blocked = client.post(
         "/oauth/authorize",
-        data=_authorize_form(registered, redirect, challenge, api_key="wrong"),
+        data=_authorize_form(client, registered, redirect, challenge, api_key="wrong"),
     )
     assert blocked.status_code == 429
     page = client.get("/oauth/authorize", params={
@@ -328,7 +328,7 @@ def test_authorize_post_wrong_key_is_rate_limited(client, db, monkeypatch):
     assert page.status_code == 200
     ok = client.post(
         "/oauth/authorize",
-        data=_authorize_form(registered, redirect, challenge),
+        data=_authorize_form(client, registered, redirect, challenge),
         follow_redirects=False,
     )
     assert ok.status_code == 302
@@ -344,20 +344,20 @@ def test_authorize_post_bad_csrf_is_rate_limited(client, db, monkeypatch):
         resp = client.post(
             "/oauth/authorize",
             data=_authorize_form(
-                registered, redirect, challenge, csrf="not-a-csrf-token",
+                client, registered, redirect, challenge, csrf="not-a-csrf-token",
             ),
         )
         assert resp.status_code == 400, resp.text
     blocked = client.post(
         "/oauth/authorize",
         data=_authorize_form(
-            registered, redirect, challenge, csrf="not-a-csrf-token",
+            client, registered, redirect, challenge, csrf="not-a-csrf-token",
         ),
     )
     assert blocked.status_code == 429
     ok = client.post(
         "/oauth/authorize",
-        data=_authorize_form(registered, redirect, challenge),
+        data=_authorize_form(client, registered, redirect, challenge),
         follow_redirects=False,
     )
     assert ok.status_code == 302

@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 import logging
 import os
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI, Request, Depends
 from fastapi.staticfiles import StaticFiles
@@ -65,6 +66,32 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
     return target
 
 
+_STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _cross_site_cookie_request(request: Request) -> bool:
+    """True for a cookie-authenticated, state-changing request whose
+    Origin/Referer names a different host than the one it was sent to.
+
+    Defense-in-depth alongside the session-bound CSRF token (a token minted
+    outside the target session already fails validation on its own); this
+    only rejects when the browser *did* send Origin or Referer and it
+    disagrees with Host, so it never breaks a client that omits both.
+    """
+    if request.method not in _STATE_CHANGING_METHODS:
+        return False
+    if not request.cookies.get("session"):
+        return False
+    host = request.headers.get("host", "")
+    for header in ("origin", "referer"):
+        value = request.headers.get(header)
+        if not value:
+            continue
+        if urlsplit(value).netloc != host:
+            return True
+    return False
+
+
 def _production_intent() -> bool:
     """True when Secure cookies would be on, or BASE_URL is https.
 
@@ -103,6 +130,8 @@ def create_app() -> FastAPI:
 
     @application.middleware("http")
     async def security_headers(request: Request, call_next):
+        if _cross_site_cookie_request(request):
+            return Response("Cross-origin request blocked", status_code=403)
         try:
             response = await call_next(request)
         except Exception:

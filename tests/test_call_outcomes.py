@@ -92,7 +92,7 @@ def test_call_outcome_route_logs_and_redirects(logged_in_client, db):
     _, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(
         f"/deals/{deal_id}/call-outcome",
-        data={"outcome": "won", "note": "Signed", "csrf_token": generate_csrf_token()},
+        data={"outcome": "won", "note": "Signed", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
     assert resp.status_code == 303

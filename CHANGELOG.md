@@ -112,6 +112,15 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Security
 
+- CSRF tokens are now bound to the session cookie they were minted for
+  (`generate_csrf_token`/`validate_csrf_token` in `app/services/auth.py`).
+  Previously the token only proved recency, not which session issued it, so
+  a token minted from a logged-out `GET /auth/login` could be replayed
+  against a separately-authenticated session. Cookie-authenticated
+  POST/PUT/PATCH/DELETE requests are also now rejected with 403 if their
+  `Origin`/`Referer` names a different host than the request's own `Host`
+  (defense-in-depth; requests that send neither are unaffected).
+  `GET /auth/logout` is now `POST /auth/logout`.
 - Self-service password change (`/settings`, `POST /settings/password`) and
   session revocation. `users.session_version` (schema v5) is embedded in the
   session cookie and checked on every request; changing your password or

@@ -303,7 +303,7 @@ def test_deals_page_shows_tags_and_filters(logged_in_client, db):
     saved = logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
             "value_estimate": "",
             "pain_points": "",
@@ -320,7 +320,7 @@ def test_deals_page_shows_tags_and_filters(logged_in_client, db):
     rejected = logged_in_client.post(
         f"/deals/{deal_id}/edit",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
             "value_estimate": "",
             "pain_points": "",

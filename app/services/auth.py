@@ -229,16 +229,28 @@ def authenticate_user(email: str, password: str):
 
 
 # ==================== CSRF ====================
-def generate_csrf_token() -> str:
-    return csrf_serializer.dumps({"t": datetime.utcnow().isoformat()})
+def _csrf_binding(session_token: str | None) -> str:
+    """Hash of the session cookie a CSRF token is scoped to (empty-string
+    sentinel when logged out), so a token minted in one session state can't
+    be replayed once the session state differs (CVE-class: unscoped CSRF)."""
+    return hashlib.sha256((session_token or "").encode()).hexdigest()
 
 
-def validate_csrf_token(token: str) -> bool:
+def generate_csrf_token(session_token: str | None = None) -> str:
+    return csrf_serializer.dumps({
+        "t": datetime.utcnow().isoformat(),
+        "s": _csrf_binding(session_token),
+    })
+
+
+def validate_csrf_token(token: str, session_token: str | None = None) -> bool:
     try:
-        csrf_serializer.loads(token, max_age=3600 * 8)
-        return True
+        data = csrf_serializer.loads(token, max_age=3600 * 8)
     except Exception:
         return False
+    if not isinstance(data, dict):
+        return False
+    return secrets_module.compare_digest(data.get("s", ""), _csrf_binding(session_token))
 
 
 # ==================== Rate limiting (in-memory; one uvicorn worker) ====================

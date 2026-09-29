@@ -92,7 +92,7 @@ def _partner_form_context(request, user, partner, csrf_token, error=None):
 def _partner_form_response(request, user, partner, error, status_code=400):
     return templates.TemplateResponse(
         request, "admin/partner_form.html",
-        _partner_form_context(request, user, partner, generate_csrf_token(), error=error),
+        _partner_form_context(request, user, partner, generate_csrf_token(request.cookies.get("session")), error=error),
         status_code=status_code,
     )
 
@@ -130,7 +130,7 @@ def _partner_fields_from_form(
 @router.get("/partners/new", response_class=HTMLResponse)
 async def new_partner_page(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/partner_form.html", _partner_form_context(
-        request, user, None, generate_csrf_token(),
+        request, user, None, generate_csrf_token(request.cookies.get("session")),
     ))
 
 
@@ -146,7 +146,7 @@ async def new_partner_submit(
     owner_key: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/partners/new", status_code=303)
     if not (name or "").strip():
         return _partner_form_response(request, user, None, "Name is required.")
@@ -176,7 +176,7 @@ async def partner_detail(request: Request, partner_id: int, user=Depends(require
         "services": list_services(active_only=True),
         "stages": pipeline_stages.list_stages(),
         "social_links": listed_social_links(partner),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -186,7 +186,7 @@ async def edit_partner_page(request: Request, partner_id: int, user=Depends(requ
     if not partner:
         return RedirectResponse("/partners", status_code=303)
     return templates.TemplateResponse(request, "admin/partner_form.html", _partner_form_context(
-        request, user, partner, generate_csrf_token(),
+        request, user, partner, generate_csrf_token(request.cookies.get("session")),
     ))
 
 
@@ -202,7 +202,7 @@ async def edit_partner_submit(
     owner_key: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse(f"/partners/{partner_id}/edit", status_code=303)
     if not (name or "").strip():
         return _partner_form_response(
@@ -226,7 +226,7 @@ async def add_activity(
     type: str = Form("note"), body: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if validate_csrf_token(csrf_token) and body.strip():
+    if validate_csrf_token(csrf_token, request.cookies.get("session")) and body.strip():
         log_activity(partner_id, type, body)
     return RedirectResponse(f"/partners/{partner_id}", status_code=303)
 
@@ -236,14 +236,14 @@ async def add_activity(
 async def services_list(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/services.html", {
         "request": request, "user": user, "services": list_services(),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
 @router.get("/services/new", response_class=HTMLResponse)
 async def new_service_page(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/service_form.html", {
-        "request": request, "user": user, "service": None, "csrf_token": generate_csrf_token(),
+        "request": request, "user": user, "service": None, "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -253,23 +253,23 @@ async def new_service_submit(
     name: str = Form(""), slug: str = Form(""), description: str = Form(""),
     nurture_list_slug: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token) or not is_valid_slug(slug):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")) or not is_valid_slug(slug):
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": None,
             "error": "Invalid submission or slug (lowercase letters, numbers, hyphens only).",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
         }, status_code=400)
     if not (name or "").strip():
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": None,
             "error": "Name is required.",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
         }, status_code=400)
     if nurture_list_slug and not is_valid_slug(nurture_list_slug):
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": None,
             "error": "List slug must be lowercase letters, numbers, and hyphens.",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
         }, status_code=400)
     create_service(name, slug, description, nurture_list_slug)
     return RedirectResponse("/services", status_code=303)
@@ -281,7 +281,7 @@ async def edit_service_page(request: Request, service_id: int, user=Depends(requ
     if not service:
         return RedirectResponse("/services", status_code=303)
     return templates.TemplateResponse(request, "admin/service_form.html", {
-        "request": request, "user": user, "service": service, "csrf_token": generate_csrf_token(),
+        "request": request, "user": user, "service": service, "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -292,19 +292,19 @@ async def edit_service_submit(
     nurture_list_slug: str = Form(""), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/services", status_code=303)
     if not (name or "").strip():
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": get_service(service_id),
             "error": "Name is required.",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
         }, status_code=400)
     if nurture_list_slug and not is_valid_slug(nurture_list_slug):
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": get_service(service_id),
             "error": "List slug must be lowercase letters, numbers, and hyphens.",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
         }, status_code=400)
     update_service(
         service_id, name=name, description=description,
@@ -322,7 +322,7 @@ async def todays_calls(request: Request, user=Depends(require_login)):
         "limit": CALL_QUEUE_LIMIT,
         "score_max": SCORE_MAX,
         "outcomes": CALL_OUTCOMES,
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -332,7 +332,7 @@ async def log_call_outcome(
     outcome: str = Form(""), note: str = Form(""), next: str = Form("calls"),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if validate_csrf_token(csrf_token):
+    if validate_csrf_token(csrf_token, request.cookies.get("session")):
         record_call_outcome(deal_id, outcome, note)
     if _is_htmx(request):
         if next == "call_view":
@@ -349,7 +349,7 @@ async def log_call_outcome(
             limit=CALL_QUEUE_LIMIT,
             score_max=SCORE_MAX,
             outcomes=CALL_OUTCOMES,
-            csrf_token=generate_csrf_token(),
+            csrf_token=generate_csrf_token(request.cookies.get("session")),
         ))
     if next == "call_view":
         return RedirectResponse(f"/deals/{deal_id}/call", status_code=303)
@@ -397,7 +397,7 @@ def _call_view_context(request, user, deal_id):
         "activities": activities, "score": score, "score_max": SCORE_MAX,
         "fit": fit, "offer": offer, "offer_options": offer_options,
         "outcomes": CALL_OUTCOMES,
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     }
 
 
@@ -418,7 +418,7 @@ async def set_deal_offer(
     offer_id: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
-    if deal and validate_csrf_token(csrf_token):
+    if deal and validate_csrf_token(csrf_token, request.cookies.get("session")):
         if not offer_id.strip():
             # The select's "— none —" option: an explicit clear.
             update_deal_fields(deal_id, offer_id=None)
@@ -443,7 +443,7 @@ async def create_offer_for_deal(
     """"Create a new offer" from the call view itself — no detour through
     /offers when you think of a better pitch mid-prep."""
     deal = get_deal(deal_id)
-    if not deal or not validate_csrf_token(csrf_token):
+    if not deal or not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse(f"/deals/{deal_id}/call", status_code=303)
     offer, error = offers_service.create_offer(
         name, pitch=pitch, proof_point=proof_point, price_anchor=price_anchor,
@@ -469,7 +469,7 @@ async def deal_call_tel(
     rather than surfaced anywhere the user would see them.
     """
     deal = get_deal(deal_id)
-    if not deal or not validate_csrf_token(csrf_token):
+    if not deal or not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return Response(status_code=204)
     partner = get_partner(deal["partner_id"])
     phone = (partner or {}).get("phone") or ""
@@ -486,7 +486,7 @@ async def partner_call_tel(
 ):
     partner = get_partner(partner_id)
     phone = (partner or {}).get("phone") or ""
-    if not partner or not validate_csrf_token(csrf_token) or not has_callable_phone(phone):
+    if not partner or not validate_csrf_token(csrf_token, request.cookies.get("session")) or not has_callable_phone(phone):
         return Response(status_code=204)
     log_activity(partner_id, "call", "Called (tapped phone number)")
     return Response(status_code=204)
@@ -591,7 +591,7 @@ def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal
         "request": request, "user": user, "partners": list_partners(),
         "services": list_services(active_only=True), "preselect_partner_id": partner_id,
         "deal": None, "partner": None, "service": None,
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
         "error": error,
     }
@@ -604,7 +604,7 @@ def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
     ctx = {
         "request": request, "user": user, "deal": deal,
         "partner": partner, "service": service,
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
         "error": error,
     }
@@ -642,7 +642,7 @@ def _pipeline_board_data(current_tag="", tag_error=""):
 def _pipeline_columns_fragment(request, user, keys, current_tag="", tag_error=""):
     stages, columns = _pipeline_board_data(current_tag, tag_error)
     by_key = {c["stage"]["key"]: c for c in columns}
-    csrf_token = generate_csrf_token()
+    csrf_token = generate_csrf_token(request.cookies.get("session"))
     parts = []
     seen = set()
     for key in keys:
@@ -676,7 +676,7 @@ async def new_deal_submit(
     tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/deals/new", status_code=303)
     parsed_partner_id = _safe_int(partner_id) or 0
     parsed_service_id = _safe_int(service_id)
@@ -743,7 +743,7 @@ async def edit_deal_submit(
     service = get_service(deal["service_id"])
     if not partner or not service:
         return RedirectResponse("/deals", status_code=303)
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
     parsed_tags, tag_error = parse_tag_list(tags)
     if tag_error:
@@ -791,7 +791,7 @@ async def save_deal_next_action(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
-    if deal and validate_csrf_token(csrf_token):
+    if deal and validate_csrf_token(csrf_token, request.cookies.get("session")):
         parsed = parse_action_date(next_action_date)
         update_deal_fields(
             deal_id,
@@ -812,7 +812,7 @@ async def change_deal_stage(
 ):
     deal = get_deal(deal_id)
     old_stage = deal["stage"] if deal else None
-    if deal and validate_csrf_token(csrf_token):
+    if deal and validate_csrf_token(csrf_token, request.cookies.get("session")):
         set_deal_stage(deal_id, stage)
     if _is_htmx(request) and next == "pipeline":
         current_tag, tag_error = _tag_query(tag)
@@ -835,7 +835,7 @@ async def pipeline_board(request: Request, tag: str = "", user=Depends(require_l
     return templates.TemplateResponse(request, "admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
         "current_tag": current_tag, "tag_error": tag_error,
         "tags_in_use": list_tags(),
     })
@@ -858,7 +858,7 @@ async def stages_settings(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/stages.html", {
         "request": request, "user": user,
         "stages": pipeline_stages.list_stages(),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -870,7 +870,7 @@ async def create_stage_submit(
     triggers_nurture: str = Form(""), is_won: str = Form(""), is_lost: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/stages", status_code=303)
     _, error = pipeline_stages.create_stage(
         key, label,
@@ -881,7 +881,7 @@ async def create_stage_submit(
         return templates.TemplateResponse(request, "admin/stages.html", {
             "request": request, "user": user,
             "stages": pipeline_stages.list_stages(),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _STAGE_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/stages", status_code=303)
@@ -895,7 +895,7 @@ async def edit_stage_submit(
     triggers_nurture: str = Form(""), is_won: str = Form(""), is_lost: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/stages", status_code=303)
     _, error = pipeline_stages.update_stage(
         key, label=label,
@@ -906,7 +906,7 @@ async def edit_stage_submit(
         return templates.TemplateResponse(request, "admin/stages.html", {
             "request": request, "user": user,
             "stages": pipeline_stages.list_stages(),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _STAGE_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/stages", status_code=303)
@@ -917,7 +917,7 @@ async def move_stage_submit(
     request: Request, key: str,
     direction: str = Form(...), csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if validate_csrf_token(csrf_token) and direction in ("up", "down"):
+    if validate_csrf_token(csrf_token, request.cookies.get("session")) and direction in ("up", "down"):
         pipeline_stages.move_stage(key, direction)
     return RedirectResponse("/stages", status_code=303)
 
@@ -927,14 +927,14 @@ async def delete_stage_submit(
     request: Request, key: str,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/stages", status_code=303)
     _, error = pipeline_stages.delete_stage(key)
     if error:
         return templates.TemplateResponse(request, "admin/stages.html", {
             "request": request, "user": user,
             "stages": pipeline_stages.list_stages(),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _STAGE_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/stages", status_code=303)
@@ -972,7 +972,7 @@ async def offers_settings(request: Request, user=Depends(require_login)):
         "request": request, "user": user,
         "offers": offers_service.list_offers(),
         "services": list_services(),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -985,7 +985,7 @@ async def create_offer_submit(
     description: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/offers", status_code=303)
     _, error = offers_service.create_offer(
         name, pitch=pitch, proof_point=proof_point, price_anchor=price_anchor,
@@ -1000,7 +1000,7 @@ async def create_offer_submit(
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/offers", status_code=303)
@@ -1015,7 +1015,7 @@ async def edit_offer_submit(
     description: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/offers", status_code=303)
     _, error = offers_service.update_offer(
         offer_id, name=name, pitch=pitch, proof_point=proof_point, price_anchor=price_anchor,
@@ -1030,7 +1030,7 @@ async def edit_offer_submit(
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/offers", status_code=303)
@@ -1041,7 +1041,7 @@ async def delete_offer_submit(
     request: Request, offer_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/offers", status_code=303)
     _, error = offers_service.delete_offer(offer_id)
     if error:
@@ -1049,7 +1049,7 @@ async def delete_offer_submit(
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/offers", status_code=303)
@@ -1072,7 +1072,7 @@ async def icp_settings(request: Request, user=Depends(require_login)):
         "criteria": icp_service.list_criteria(),
         "fields": icp_service.MATCHABLE_FIELDS,
         "operators": icp_service.OPERATORS,
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -1083,7 +1083,7 @@ async def create_icp_criterion_submit(
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/icp", status_code=303)
     weight_int = _safe_int(weight)
     if weight_int is None:
@@ -1092,7 +1092,7 @@ async def create_icp_criterion_submit(
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
             "operators": icp_service.OPERATORS,
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _ICP_ERROR_MESSAGES.get("invalid_weight"),
         }, status_code=400)
     _, error = icp_service.create_criterion(
@@ -1104,7 +1104,7 @@ async def create_icp_criterion_submit(
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
             "operators": icp_service.OPERATORS,
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _ICP_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/icp", status_code=303)
@@ -1117,7 +1117,7 @@ async def edit_icp_criterion_submit(
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/icp", status_code=303)
     weight_int = _safe_int(weight)
     if weight_int is None:
@@ -1126,7 +1126,7 @@ async def edit_icp_criterion_submit(
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
             "operators": icp_service.OPERATORS,
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _ICP_ERROR_MESSAGES.get("invalid_weight"),
         }, status_code=400)
     _, error = icp_service.update_criterion(
@@ -1139,7 +1139,7 @@ async def edit_icp_criterion_submit(
             "criteria": icp_service.list_criteria(),
             "fields": icp_service.MATCHABLE_FIELDS,
             "operators": icp_service.OPERATORS,
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "error": _ICP_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
     return RedirectResponse("/icp", status_code=303)
@@ -1150,7 +1150,7 @@ async def delete_icp_criterion_submit(
     request: Request, criterion_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if validate_csrf_token(csrf_token):
+    if validate_csrf_token(csrf_token, request.cookies.get("session")):
         icp_service.delete_criterion(criterion_id)
     return RedirectResponse("/icp", status_code=303)
 
@@ -1161,7 +1161,7 @@ async def account_settings(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/settings.html", {
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
     })
 
 
@@ -1170,7 +1170,7 @@ async def create_api_key_submit(
     request: Request,
     label: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/settings", status_code=303)
     _, new_key = api_keys_service.create_api_key(user["id"], label)
     # Rendered directly (not redirected) so the plaintext key can be shown
@@ -1179,7 +1179,7 @@ async def create_api_key_submit(
     return templates.TemplateResponse(request, "admin/settings.html", {
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
         "new_key": new_key,
     })
 
@@ -1189,7 +1189,7 @@ async def delete_api_key_submit(
     request: Request, key_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if validate_csrf_token(csrf_token):
+    if validate_csrf_token(csrf_token, request.cookies.get("session")):
         api_keys_service.delete_api_key(user["id"], key_id)
     return RedirectResponse("/settings", status_code=303)
 
@@ -1200,20 +1200,20 @@ async def change_password_submit(
     current_password: str = Form(""), new_password: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/settings", status_code=303)
     ok, error = change_password(user["id"], current_password, new_password)
     if not ok:
         return templates.TemplateResponse(request, "admin/settings.html", {
             "request": request, "user": user,
             "api_keys": api_keys_service.list_api_keys(user["id"]),
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(request.cookies.get("session")),
             "password_error": error,
         }, status_code=400)
     response = templates.TemplateResponse(request, "admin/settings.html", {
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(request.cookies.get("session")),
         "password_changed": True,
     })
     # Every other outstanding session cookie is now invalid (session_version
@@ -1227,7 +1227,7 @@ async def logout_everywhere_submit(
     request: Request,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
-    if not validate_csrf_token(csrf_token):
+    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
         return RedirectResponse("/settings", status_code=303)
     new_version = bump_session_version(user["id"])
     response = RedirectResponse("/settings", status_code=303)

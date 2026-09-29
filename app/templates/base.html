@@ -22,7 +22,7 @@
         <a href="/offers"{% if path == "/offers" or path.startswith("/offers/") %} aria-current="page"{% endif %}>Offers</a>
         <a href="/icp"{% if path == "/icp" or path.startswith("/icp/") %} aria-current="page"{% endif %}>ICP</a>
         <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>
-        <a href="/auth/logout">Logout</a>
+        <form class="topnav-logout" method="post" action="/auth/logout"><button type="submit">Logout</button></form>
     </nav>
     {% endif %}
     <main id="main" class="{% block main_class %}container{% endblock %}">

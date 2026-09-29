@@ -97,7 +97,7 @@ def test_create_company_via_form_drops_person_fields(logged_in_client, db):
     resp = logged_in_client.post(
         "/partners/new",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "name": "Acme Childcare",
             "is_company": "1",
             "parent_id": str(company_id),
@@ -124,7 +124,7 @@ def test_create_person_via_form_drops_team_size(logged_in_client, db):
     resp = logged_in_client.post(
         "/partners/new",
         data={
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "name": "Jane Doe",
             "parent_id": str(company_id),
             "title": "Director",

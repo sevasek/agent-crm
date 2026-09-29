@@ -20,7 +20,7 @@ def _html_client_error(resp, status=400):
 def test_new_partner_empty_name_is_html_error_not_422(logged_in_client, db):
     before = {p["id"] for p in list_partners()}
     resp = logged_in_client.post("/partners/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
     })
     _html_client_error(resp)
@@ -32,7 +32,7 @@ def test_new_partner_empty_name_is_html_error_not_422(logged_in_client, db):
 def test_edit_partner_empty_name_is_html_error_not_422(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example")
     resp = logged_in_client.post(f"/partners/{pid}/edit", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
     })
     _html_client_error(resp)
@@ -48,7 +48,7 @@ def test_partner_missing_csrf_still_422(logged_in_client, db):
 
 def test_new_service_empty_name_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/services/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
         "slug": "consulting",
         "description": "",
@@ -60,7 +60,7 @@ def test_new_service_empty_name_is_html_error_not_422(logged_in_client, db):
 
 def test_new_service_empty_slug_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/services/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "Consulting",
         "slug": "",
         "description": "",
@@ -73,7 +73,7 @@ def test_new_service_empty_slug_is_html_error_not_422(logged_in_client, db):
 def test_edit_service_empty_name_is_html_error_not_422(logged_in_client, db):
     sid = create_service("Consulting", "consulting")
     resp = logged_in_client.post(f"/services/{sid}/edit", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
         "description": "",
         "active": "1",
@@ -85,7 +85,7 @@ def test_edit_service_empty_name_is_html_error_not_422(logged_in_client, db):
 
 def test_create_stage_empty_key_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/stages/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "key": "",
         "label": "Demo scheduled",
     })
@@ -95,7 +95,7 @@ def test_create_stage_empty_key_is_html_error_not_422(logged_in_client, db):
 
 def test_create_stage_empty_label_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/stages/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "key": "demo-scheduled",
         "label": "",
     })
@@ -106,7 +106,7 @@ def test_create_stage_empty_label_is_html_error_not_422(logged_in_client, db):
 
 def test_edit_stage_empty_label_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/stages/proposal/edit", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "label": "",
     })
     _html_client_error(resp)
@@ -116,7 +116,7 @@ def test_edit_stage_empty_label_is_html_error_not_422(logged_in_client, db):
 
 def test_create_icp_empty_field_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "label": "",
         "field": "",
         "operator": "gt",
@@ -130,7 +130,7 @@ def test_create_icp_empty_field_is_html_error_not_422(logged_in_client, db):
 
 def test_create_icp_empty_operator_is_html_error_not_422(logged_in_client, db):
     resp = logged_in_client.post("/icp/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "label": "",
         "field": "team_size",
         "operator": "",
@@ -146,7 +146,7 @@ def test_new_deal_empty_partner_and_service_is_html_error_not_422(logged_in_clie
     pid = create_partner("Jane Doe", email="jane@acme.example")
     sid = create_service("Consulting", "consulting")
     resp = logged_in_client.post("/deals/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "partner_id": "",
         "service_id": "",
         "source": "",
@@ -161,7 +161,7 @@ def test_new_deal_empty_partner_and_service_is_html_error_not_422(logged_in_clie
     assert list_deals() == []
 
     resp = logged_in_client.post("/deals/new", data={
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "partner_id": str(pid),
         "service_id": "",
         "source": "",
@@ -187,7 +187,7 @@ def test_call_outcome_empty_does_not_422(logged_in_client, db):
     set_deal_stage(deal_id, "qualified")
     resp = logged_in_client.post(
         f"/deals/{deal_id}/call-outcome",
-        data={"outcome": "", "csrf_token": generate_csrf_token()},
+        data={"outcome": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
     assert resp.status_code != 422
@@ -201,7 +201,7 @@ def test_call_view_empty_offer_name_does_not_422(logged_in_client, db):
     deal_id = create_deal(pid, sid)
     resp = logged_in_client.post(
         f"/deals/{deal_id}/offer/new",
-        data={"name": "", "csrf_token": generate_csrf_token()},
+        data={"name": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
     assert resp.status_code != 422

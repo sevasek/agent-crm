@@ -205,7 +205,7 @@ def test_bootstrapped_user_can_log_in_over_http(db, monkeypatch):
             data={
                 "email": "admin@example.com",
                 "password": "longenough",
-                "csrf_token": generate_csrf_token(),
+                "csrf_token": generate_csrf_token(client.cookies.get("session")),
             },
             follow_redirects=False,
         )

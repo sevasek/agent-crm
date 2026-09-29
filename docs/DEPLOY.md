@@ -24,10 +24,32 @@ to replay a session onto another sqlite file.
 on https).
 
 Production compose drops all Linux capabilities except the four the
-entrypoint needs to chown `./data` and `gosu` to `APP_UID` (`CHOWN`,
-`FOWNER`, `SETUID`, `SETGID`), sets `no-new-privileges`, and runs a
-read-only root filesystem with `tmpfs` on `/tmp`. The sqlite volume
-stays writable.
+entrypoint needs to chown a still-root-owned `./data` and `gosu` to
+`APP_UID` (`CHOWN`, `FOWNER`, `SETUID`, `SETGID`), sets
+`no-new-privileges`, and runs a read-only root filesystem with `tmpfs`
+on `/tmp`. The sqlite volume stays writable. `CAP_DAC_OVERRIDE` is not
+granted.
+
+The entrypoint only repairs ownership and mode of `/app/data` when it
+can traverse that directory and it is not already owned by `APP_UID`.
+After the first successful boot the volume is `APP_UID` mode `0700`;
+later restarts skip the repair and drop privileges, so
+`docker compose restart`, crash recovery (`restart: unless-stopped`),
+and host reboots keep working.
+
+If the bind-mount is already `0700` and owned by a *different* uid,
+root cannot traverse it without `CAP_DAC_OVERRIDE`. The entrypoint
+exits with an error instead of crash-looping on `chown: Permission
+denied`. Fix the host directory, then start the container:
+
+```bash
+chown -R 1000:1000 ./data   # or whatever APP_UID:APP_GID you set
+chmod 700 ./data
+```
+
+`scripts/new-instance.sh` chowns the instance data dir to
+`APP_UID`/`APP_GID` (default 1000:1000) on the host before the
+container starts, so first boot does not need `CAP_DAC_OVERRIDE`.
 
 **Never set a cookie `Domain=` for the session cookie**, and never configure
 the proxy to rewrite it in. The session cookie is host-only by default

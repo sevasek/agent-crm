@@ -106,6 +106,16 @@ write_env_file(os.environ["INSTANCE_ENV_FILE"], text)
 chmod 600 "$ENV_FILE"
 mkdir -p "$DATA_DIR"
 chmod 700 "$INSTANCE_DIR" "$DATA_DIR" 2>/dev/null || true
+# Own the bind-mount as APP_UID *before* the container starts. Production
+# compose drops CAP_DAC_OVERRIDE, so the entrypoint cannot chown a 0700
+# directory it does not already own (issue 70).
+app_uid="${APP_UID:-1000}"
+app_gid="${APP_GID:-1000}"
+if ! chown "${app_uid}:${app_gid}" "$DATA_DIR" 2>/dev/null; then
+  echo "WARNING: could not chown $DATA_DIR to ${app_uid}:${app_gid}." >&2
+  echo "Fix this on the host before the container starts:" >&2
+  echo "  chown -R ${app_uid}:${app_gid} $DATA_DIR && chmod 700 $DATA_DIR" >&2
+fi
 
 # Relative paths from repo root for compose interpolation
 REL_ENV="instances/${NAME}/.env"

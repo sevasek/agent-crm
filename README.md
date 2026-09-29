@@ -186,7 +186,10 @@ Restore (stops the stack, drops WAL/SHM, copies the snapshot, starts):
 ./scripts/restore.sh backups/crm-YYYY-MM-DDTHHMMSSZ.db
 ```
 
-The entrypoint fixes ownership of `./data` on start. Check `docker compose ps`
+The entrypoint repairs ownership of `./data` on first boot when it can
+traverse the volume; later restarts skip that step so `cap_drop: ALL`
+survives a restart. If start fails on an unreadable bind-mount, `chown`
+the host `./data` to `APP_UID` (see `docs/DEPLOY.md`). Check `docker compose ps`
 shows `healthy` and you can log in.
 
 Optional sub-minute RPO: run [Litestream](https://litestream.io/) beside the

@@ -133,7 +133,15 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   POST/PUT/PATCH/DELETE requests are also now rejected with 403 if their
   `Origin`/`Referer` names a different host than the request's own `Host`
   (defense-in-depth; requests that send neither are unaffected).
-  `GET /auth/logout` is now `POST /auth/logout`.
+  `GET /auth/logout` is now `POST /auth/logout`, and that POST validates
+  the session-bound CSRF token (the nav form includes the hidden field).
+- `Content-Security-Policy` allows same-origin scripts and styles only
+  (vendored Pico + htmx under `/static/vendor/`; `call-tap.js` / `app.js`
+  replace the former inline `<script>` so `script-src` does not need
+  `'unsafe-inline'`). `Strict-Transport-Security` is sent only when
+  cookies are Secure or `BASE_URL` is https, not on plain http localhost.
+  Production session cookies are named `__Host-session` (Secure, Path=/,
+  no Domain); local http keeps `session`.
 - Self-service password change (`/settings`, `POST /settings/password`) and
   session revocation. `users.session_version` (schema v5) is embedded in the
   session cookie and checked on every request; changing your password or

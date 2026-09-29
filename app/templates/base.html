@@ -22,25 +22,14 @@
         <a href="/offers"{% if path == "/offers" or path.startswith("/offers/") %} aria-current="page"{% endif %}>Offers</a>
         <a href="/icp"{% if path == "/icp" or path.startswith("/icp/") %} aria-current="page"{% endif %}>ICP</a>
         <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>
-        <form class="topnav-logout" method="post" action="/auth/logout"><button type="submit">Logout</button></form>
+        <form class="topnav-logout" method="post" action="/auth/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token | default(request.state.csrf_token) }}"><button type="submit">Logout</button></form>
     </nav>
     {% endif %}
     <main id="main" class="{% block main_class %}container{% endblock %}">
         {% block content %}{% endblock %}
     </main>
     <script src="/static/vendor/htmx.min.js"></script>
-    <script>
-        // Fired alongside a real <a href="tel:..."> tap. The dial itself
-        // goes through the browser's native, reliable tel: link handling;
-        // this is just a fire-and-forget log of the tap, so it can't ever
-        // block or delay the actual call (sendBeacon queues and returns
-        // immediately, unlike a redirect the browser has to resolve first).
-        function logCallTap(url, csrfToken) {
-            if (!navigator.sendBeacon) return;
-            var fd = new FormData();
-            fd.append("csrf_token", csrfToken);
-            navigator.sendBeacon(url, fd);
-        }
-    </script>
+    <script src="/static/call-tap.js"></script>
+    <script src="/static/app.js"></script>
 </body>
 </html>

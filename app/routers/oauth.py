@@ -15,7 +15,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.routers.auth import get_current_user
+from app.routers.auth import get_current_user, get_session_cookie
 from app.services.auth import (
     check_rate_limit_retry,
     generate_csrf_token,
@@ -184,7 +184,7 @@ async def oauth_authorize_page(request: Request):
     return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
         "request": request,
         "error": error,
-        "csrf_token": generate_csrf_token(request.cookies.get("session")),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form": form,
         "client_name": client_name,
         "mcp_enabled": mcp_oauth.mcp_enabled(),
@@ -215,14 +215,14 @@ async def oauth_authorize_submit(
         "resource": resource,
     }
 
-    if not validate_csrf_token(csrf_token, request.cookies.get("session")):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
         # Failed auth (CSRF) counts toward the IP bucket, like a wrong key.
         limited = _unauth_limited(request, "oauth_authorize")
         if limited:
             return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
                 "request": request,
                 "error": "Too many attempts. Wait a minute and try again.",
-                "csrf_token": generate_csrf_token(request.cookies.get("session")),
+                "csrf_token": generate_csrf_token(get_session_cookie(request)),
                 "form": form,
                 "client_name": "",
                 "mcp_enabled": mcp_oauth.mcp_enabled(),
@@ -231,7 +231,7 @@ async def oauth_authorize_submit(
         return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": "Invalid form submission. Please try again.",
-            "csrf_token": generate_csrf_token(request.cookies.get("session")),
+            "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "form": form,
             "client_name": "",
             "mcp_enabled": mcp_oauth.mcp_enabled(),
@@ -243,7 +243,7 @@ async def oauth_authorize_submit(
         return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": error,
-            "csrf_token": generate_csrf_token(request.cookies.get("session")),
+            "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "form": form,
             "client_name": client_name,
             "mcp_enabled": mcp_oauth.mcp_enabled(),
@@ -259,7 +259,7 @@ async def oauth_authorize_submit(
             return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
                 "request": request,
                 "error": "Too many attempts. Wait a minute and try again.",
-                "csrf_token": generate_csrf_token(request.cookies.get("session")),
+                "csrf_token": generate_csrf_token(get_session_cookie(request)),
                 "form": form,
                 "client_name": client_name,
                 "mcp_enabled": mcp_oauth.mcp_enabled(),
@@ -271,7 +271,7 @@ async def oauth_authorize_submit(
                 "MCP is disabled." if not mcp_oauth.mcp_enabled()
                 else "Wrong API key. Use CRM_MCP_API_KEY, or log in to the CRM first."
             ),
-            "csrf_token": generate_csrf_token(request.cookies.get("session")),
+            "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "form": form,
             "client_name": client_name,
             "mcp_enabled": mcp_oauth.mcp_enabled(),

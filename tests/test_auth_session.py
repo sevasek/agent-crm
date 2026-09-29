@@ -42,6 +42,93 @@ def test_session_cookie_max_age_matches_loads_constant():
     assert SESSION_MAX_AGE == 60 * 60 * 24 * 30
 
 
+def _cookie_flags(header: str) -> dict:
+    flags = {}
+    parts = [p.strip() for p in header.split(";")[1:]]
+    for part in parts:
+        if "=" in part:
+            key, value = part.split("=", 1)
+            flags[key.lower()] = value
+        else:
+            flags[part.lower()] = True
+    return flags
+
+
+def _set_cookie_headers(resp):
+    return resp.headers.get_list("set-cookie")
+
+
+def test_local_login_sets_unprefixed_session_cookie(client):
+    from app.services.auth import create_user, generate_csrf_token
+
+    create_user("cookie@example.com", "Cookie", "password123")
+    csrf = generate_csrf_token()
+    resp = client.post("/auth/login", data={
+        "email": "cookie@example.com", "password": "password123", "csrf_token": csrf,
+    }, follow_redirects=False)
+    cookies = _set_cookie_headers(resp)
+    assert any(h.startswith("session=") for h in cookies)
+    assert not any(h.startswith("__Host-session=") for h in cookies)
+    session = [h for h in cookies if h.startswith("session=") and "Max-Age=0" not in h][-1]
+    flags = _cookie_flags(session)
+    assert flags.get("httponly") is True
+    assert flags.get("samesite", "").lower() == "lax"
+    assert "secure" not in flags
+    assert "domain" not in flags
+
+
+def test_secure_login_sets_host_prefixed_session_cookie(db, monkeypatch):
+    monkeypatch.setenv("SECURE_COOKIES", "true")
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.services.auth import create_user, generate_csrf_token
+
+    create_user("hostcookie@example.com", "Host", "password123")
+    with TestClient(create_app(), base_url="https://crm.example.com") as c:
+        csrf = generate_csrf_token()
+        resp = c.post("/auth/login", data={
+            "email": "hostcookie@example.com", "password": "password123",
+            "csrf_token": csrf,
+        }, follow_redirects=False)
+    cookies = _set_cookie_headers(resp)
+    host = [h for h in cookies if h.startswith("__Host-session=")]
+    assert host
+    header = host[-1]
+    assert "Max-Age=0" not in header
+    flags = _cookie_flags(header)
+    assert flags.get("secure") is True
+    assert flags.get("httponly") is True
+    assert flags.get("path") == "/"
+    assert "domain" not in flags
+    assert not any(h.startswith("session=") for h in cookies)
+
+
+def test_secure_logout_clears_host_prefixed_cookie(db, monkeypatch):
+    monkeypatch.setenv("SECURE_COOKIES", "true")
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.routers.auth import cookie_signer, HOST_SESSION_COOKIE_NAME
+    from app.services.auth import create_user, generate_csrf_token
+
+    user_id = create_user("hostlogout@example.com", "Host", "password123")
+    token = cookie_signer.dumps({"user_id": user_id, "sv": 0})
+    with TestClient(create_app(), base_url="https://crm.example.com") as c:
+        c.cookies.set(HOST_SESSION_COOKIE_NAME, token)
+        csrf = generate_csrf_token(token)
+        resp = c.post("/auth/logout", data={"csrf_token": csrf}, follow_redirects=False)
+    cookies = _set_cookie_headers(resp)
+    cleared = [h for h in cookies if h.startswith("__Host-session=")]
+    assert cleared
+    header = cleared[-1]
+    flags = _cookie_flags(header)
+    assert flags.get("max-age") == "0"
+    assert flags.get("path") == "/"
+    assert flags.get("secure") is True
+    assert "domain" not in flags
+
+
 def test_login_empty_email_or_password_is_html_error_not_422(client):
     from app.services.auth import generate_csrf_token
 

@@ -67,11 +67,60 @@ def test_cross_origin_post_without_session_cookie_is_not_blocked(client):
     assert resp.status_code == 401  # rejected for a bad key, not by the origin guard
 
 
+def _logout_csrf(html: str) -> str:
+    marker = 'action="/auth/logout"'
+    start = html.index(marker)
+    chunk = html[start:start + 500]
+    return chunk.split('name="csrf_token" value="')[1].split('"')[0]
+
+
 def test_logout_is_post_only(logged_in_client):
     assert logged_in_client.get("/auth/logout", follow_redirects=False).status_code == 405
-    resp = logged_in_client.post("/auth/logout", follow_redirects=False)
+    missing = logged_in_client.post("/auth/logout", follow_redirects=False)
+    assert missing.status_code == 303
+    assert missing.headers["location"] == "/partners"
+    assert logged_in_client.get("/partners").status_code == 200
+
+    forged = logged_in_client.post(
+        "/auth/logout", data={"csrf_token": "not-a-token"}, follow_redirects=False,
+    )
+    assert forged.status_code == 303
+    assert forged.headers["location"] == "/partners"
+    assert logged_in_client.get("/partners").status_code == 200
+
+    page = logged_in_client.get("/partners")
+    assert 'action="/auth/logout"' in page.text
+    token = _logout_csrf(page.text)
+    assert token
+    resp = logged_in_client.post(
+        "/auth/logout", data={"csrf_token": token}, follow_redirects=False,
+    )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
+    cleared = [
+        h for h in resp.headers.get_list("set-cookie")
+        if h.startswith("session=")
+    ]
+    assert cleared
+    assert any("Max-Age=0" in h or "max-age=0" in h for h in cleared)
+
+
+def test_login_then_logout_clears_client_cookie(client):
+    """A cookie the TestClient stored from Set-Cookie is dropped on logout."""
+    from app.services.auth import create_user, generate_csrf_token
+
+    create_user("roundtrip@example.com", "Round", "password123")
+    csrf = generate_csrf_token()
+    login = client.post("/auth/login", data={
+        "email": "roundtrip@example.com", "password": "password123", "csrf_token": csrf,
+    }, follow_redirects=False)
+    assert login.status_code == 303
+    assert client.get("/partners").status_code == 200
+    token = _logout_csrf(client.get("/partners").text)
+    resp = client.post("/auth/logout", data={"csrf_token": token}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/auth/login"
+    assert client.get("/partners", follow_redirects=False).status_code == 303
 
 
 def test_logged_out_binding_is_consistent_with_explicit_none():

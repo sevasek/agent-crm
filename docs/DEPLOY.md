@@ -36,6 +36,17 @@ from one customer's subdomain being replayable against a sibling subdomain
 on a multi-tenant host. Widening it to a parent domain removes that
 protection silently.
 
+When `SECURE_COOKIES=true` (or https `BASE_URL`), the cookie is named
+`__Host-session`: Secure, Path=/, no Domain. Browsers reject a `__Host-`
+cookie that breaks any of those, so a proxy must not rename it, drop
+Secure, change Path, or add Domain. Local http keeps the name `session`
+so a browser and the TestClient can still store it.
+
+The app sends a Content-Security-Policy that allows same-origin scripts
+and styles only (vendored Pico and htmx under `/static/vendor/`). Do not
+add a CDN `<script>` or `<link>`, and do not strip the CSP header at the
+proxy.
+
 ## `TRUSTED_PROXIES`
 
 Rate limits key on the client IP. Behind a proxy, uvicorn sees the proxy (or
@@ -81,6 +92,7 @@ and renews Let's Encrypt certificates and sets `Host`, `X-Forwarded-For`, and
 ```caddy
 crm.example.com {
 	reverse_proxy 127.0.0.1:8000
+	# HSTS: TLS terminates here. Caddy auto-HTTPS already sends it; the app also emits HSTS when cookies are Secure.
 }
 ```
 
@@ -117,6 +129,8 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Real-IP $remote_addr;
+        # HSTS: TLS terminates here. The app also emits HSTS when cookies are Secure.
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         # /mcp and /oauth/* use their own keys. Do not add auth or an
         # allow/deny IP list here — hosted MCP connectors have no stable CIDR.
     }

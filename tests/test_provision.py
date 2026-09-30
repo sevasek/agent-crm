@@ -99,6 +99,8 @@ def test_new_instance_sh_dry_run(tmp_path):
         "INSTANCE_ROOT": str(tmp_path),
         "INSTANCE_REGISTRY": str(tmp_path / "ports.tsv"),
         "TRUSTED_PROXIES": "172.16.0.0/12",
+        "APP_UID": str(os.getuid()),
+        "APP_GID": str(os.getgid()),
     }
     proc = subprocess.run(
         [
@@ -120,6 +122,11 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert env_path.is_file()
     assert env_path.stat().st_mode & stat.S_IRWXO == 0
     assert env_path.stat().st_mode & 0o777 == 0o600
+    data_dir = tmp_path / "acme" / "data"
+    assert data_dir.is_dir()
+    assert data_dir.stat().st_mode & 0o777 == 0o700
+    assert data_dir.stat().st_uid == os.getuid()
+    assert data_dir.stat().st_gid == os.getgid()
     body = env_path.read_text()
     port_match = re.search(r"^CRM_PORT=(\d+)$", body, re.M)
     assert port_match, body

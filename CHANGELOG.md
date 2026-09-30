@@ -75,6 +75,16 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   startup; new databases never create it.
 - Unused helpers `get_user_by_id` and `list_clients` (no app callers).
 
+### Fixed
+
+- Production `cap_drop: ALL` no longer crash-loops the container on
+  restart. The entrypoint skips ownership repair when `/app/data` is
+  already owned by `APP_UID`, and prints a host `chown` command instead
+  of retrying a repair that cannot succeed without `CAP_DAC_OVERRIDE`
+  (issue 70). The issue 60 hardening (`cap_drop`, `no-new-privileges`,
+  read-only rootfs) is unchanged. `scripts/new-instance.sh` chowns the
+  instance data dir to `APP_UID`/`APP_GID` before the container starts.
+
 ### Changed
 
 - Custom admin CSS sits on Pico's primitives: drop duplicate input/`<button>`/

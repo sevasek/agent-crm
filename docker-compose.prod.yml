@@ -27,12 +27,14 @@ services:
         max-size: 10m
         max-file: "5"
     # Do not set `user:`. The image starts as root so docker-entrypoint.sh can
-    # chown ./data, then drops to APP_UID/APP_GID. Setting `user:` skips the
-    # chown and can leave sqlite read-only.
+    # chown a still-root-owned ./data, then drops to APP_UID/APP_GID. Setting
+    # `user:` skips that first-boot repair and can leave sqlite read-only.
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
-    # Entrypoint starts as root, chowns the data volume, then gosu. Keep
-    # CHOWN/FOWNER for that repair and SETUID/SETGID for gosu; drop everything
-    # else. no-new-privileges stops a later exec from regaining caps.
+    # Entrypoint starts as root, repairs ./data only when it can traverse and
+    # ownership is wrong, then gosu. A 0700 APP_UID volume on restart is left
+    # alone (issue 70). Keep CHOWN/FOWNER for first-boot repair and
+    # SETUID/SETGID for gosu; drop everything else, including DAC_OVERRIDE.
+    # no-new-privileges stops a later exec from regaining caps.
     cap_drop:
       - ALL
     cap_add:
@@ -65,6 +67,7 @@ services:
       options:
         max-size: 10m
         max-file: "5"
+    # Same image/entrypoint as app: skip repair on an already-APP_UID volume.
     cap_drop:
       - ALL
     cap_add:

@@ -33,6 +33,7 @@ docker run --rm --entrypoint sh "$IMAGE" -c '
     exit 1
   fi
   test -f /app/docker-entrypoint.sh
+  test -f /app/docker-entrypoint-lib.sh
   test -f /app/scripts/create_admin.py
   test -f /app/scripts/seed_services.py
   test -f /app/scripts/staleness_cron.py

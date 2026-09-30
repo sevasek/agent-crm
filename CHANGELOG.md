@@ -12,6 +12,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-30
+
 ### Added
 
 - [`docs/CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md): runbook for a new client
@@ -184,4 +186,5 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   (HTTPEndpoint method dispatch, 1.1.0), PYSEC-2026-248 (path in authority,
   1.3.0), and PYSEC-2026-249 (urlencoded `request.form()` limits, 1.3.1).
 
-[Unreleased]: https://github.com/sevasek/agent-crm/compare/main...HEAD
+[Unreleased]: https://github.com/sevasek/agent-crm/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sevasek/agent-crm/releases/tag/v0.1.0

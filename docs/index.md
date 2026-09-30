@@ -6,5 +6,6 @@ For installing it, see the [README Quick start](https://github.com/sevasek/agent
 - **[Scope](/scope/)** — what's in and out, and the one design rule that keeps it generic.
 - **[Data model](/data_model/)** — entities, schema, the deal pipeline, nurture hand-off.
 - **[MCP: the agent interface](/mcp/)** — the tool set an AI agent gets over `/mcp`.
+- **[New client instance](/client_deploy/)** — stand up a separate CRM on a VPS.
 - **[Deploy](/deploy/)** — production reverse proxy and TLS.
 - **[Cutting a release](/release/)** — the release checklist.

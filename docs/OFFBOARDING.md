@@ -4,6 +4,9 @@ When a managed-hosting customer cancels, for a single-host multi-instance
 setup (see [`README.md`](../README.md#multiple-instances-on-one-host)).
 Replace `acme` with the instance name.
 
+Current policy is no backups. If you never took one, skip step 1: there is
+nothing to hand off, and deleting `instances/acme/` deletes the only copy.
+
 1. **Final backup**, kept outside the instance directory you're about to
    delete:
 

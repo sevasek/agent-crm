@@ -118,30 +118,4 @@
     <a class="btn btn-secondary" href="/partners/{{ deal.partner_id }}">Cancel</a>
     {% endif %}
 </form>
-{% if not deal %}
-<script>
-(function () {
-    var partner = document.getElementById("partner_id");
-    var parent = document.getElementById("parent_deal_id");
-    if (!partner || !parent) return;
-    function filterParents() {
-        var pid = partner.value;
-        Array.prototype.forEach.call(parent.options, function (opt) {
-            if (!opt.value) { opt.hidden = false; return; }
-            opt.hidden = !pid || opt.getAttribute("data-partner-id") !== pid;
-            if (opt.hidden && opt.selected) parent.value = "";
-        });
-        Array.prototype.forEach.call(parent.getElementsByTagName("optgroup"), function (og) {
-            var any = false;
-            Array.prototype.forEach.call(og.getElementsByTagName("option"), function (opt) {
-                if (!opt.hidden) any = true;
-            });
-            og.hidden = !any;
-        });
-    }
-    partner.addEventListener("change", filterParents);
-    filterParents();
-})();
-</script>
-{% endif %}
 {% endblock %}

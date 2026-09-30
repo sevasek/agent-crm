@@ -11,8 +11,8 @@ from fastapi.templating import Jinja2Templates
 
 from app.database import get_db, get_db_path, init_db
 from app.routers import admin, auth, api, mcp, oauth
-from app.routers.auth import get_current_user
-from app.services.auth import maybe_bootstrap_admin, should_use_secure_cookies
+from app.routers.auth import get_current_user, session_cookie_name
+from app.services.auth import generate_csrf_token, maybe_bootstrap_admin, should_use_secure_cookies
 from app.services.client_ip import warn_if_non_ip_trusted_proxies
 
 _health_db_warned = False
@@ -121,6 +121,24 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
 
 _STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# Same-origin scripts and styles only. Vendored Pico + htmx live at
+# /static/vendor/; call-tap.js / app.js replace inline <script> so this
+# does not need script-src 'unsafe-inline'. style-src still allows
+# 'unsafe-inline' for the handful of style="" attributes in templates.
+CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self'; "
+    "connect-src 'self'; "
+    "object-src 'none'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'; "
+    "form-action 'self'"
+)
+HSTS_HEADER = "max-age=31536000; includeSubDomains"
+
 
 def _cross_site_cookie_request(request: Request) -> bool:
     """True for a cookie-authenticated, state-changing request whose
@@ -133,7 +151,7 @@ def _cross_site_cookie_request(request: Request) -> bool:
     """
     if request.method not in _STATE_CHANGING_METHODS:
         return False
-    if not request.cookies.get("session"):
+    if not request.cookies.get(session_cookie_name()):
         return False
     host = request.headers.get("host", "")
     for header in ("origin", "referer"):
@@ -173,21 +191,28 @@ def create_app() -> FastAPI:
 
     @application.middleware("http")
     async def security_headers(request: Request, call_next):
+        request.state.csrf_token = generate_csrf_token(
+            request.cookies.get(session_cookie_name())
+        )
         if _cross_site_cookie_request(request):
-            return Response("Cross-origin request blocked", status_code=403)
-        try:
-            response = await call_next(request)
-        except Exception:
-            # Catch here so every 500 still gets the headers below. Re-raising
-            # would skip this middleware and leave Starlette's bare 500.
-            logger.exception("Unhandled error on %s", request.url.path)
-            if request.url.path.startswith("/api") or request.url.path == "/mcp":
-                response = JSONResponse({"error": "server_error"}, status_code=500)
-            else:
-                response = Response("Internal Server Error", status_code=500)
+            response = Response("Cross-origin request blocked", status_code=403)
+        else:
+            try:
+                response = await call_next(request)
+            except Exception:
+                # Catch here so every 500 still gets the headers below. Re-raising
+                # would skip this middleware and leave Starlette's bare 500.
+                logger.exception("Unhandled error on %s", request.url.path)
+                if request.url.path.startswith("/api") or request.url.path == "/mcp":
+                    response = JSONResponse({"error": "server_error"}, status_code=500)
+                else:
+                    response = Response("Internal Server Error", status_code=500)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+        if _production_intent():
+            response.headers["Strict-Transport-Security"] = HSTS_HEADER
         return response
 
     @application.get("/", response_class=HTMLResponse)

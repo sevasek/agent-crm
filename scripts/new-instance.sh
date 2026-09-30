@@ -82,6 +82,8 @@ export INSTANCE_PORT="$PORT"
 export INSTANCE_TRUSTED_PROXIES="$TRUSTED_PROXIES"
 export INSTANCE_BASE_URL="$BASE_HINT"
 export INSTANCE_ENV_FILE="$ENV_FILE"
+export INSTANCE_APP_UID="${APP_UID:-1000}"
+export INSTANCE_APP_GID="${APP_GID:-1000}"
 
 python3 -c '
 import os, sys
@@ -96,6 +98,8 @@ text = render_env(
     port=int(os.environ["INSTANCE_PORT"]),
     trusted_proxies=os.environ["INSTANCE_TRUSTED_PROXIES"],
     base_url=os.environ["INSTANCE_BASE_URL"],
+    app_uid=os.environ["INSTANCE_APP_UID"],
+    app_gid=os.environ["INSTANCE_APP_GID"],
 )
 secret = load_secret_key(text)
 assert_unique_secret_key(
@@ -106,10 +110,26 @@ write_env_file(os.environ["INSTANCE_ENV_FILE"], text)
 chmod 600 "$ENV_FILE"
 mkdir -p "$DATA_DIR"
 chmod 700 "$INSTANCE_DIR" "$DATA_DIR" 2>/dev/null || true
+# Own the bind-mount as APP_UID *before* the container starts. Production
+# compose drops CAP_DAC_OVERRIDE, so the entrypoint cannot chown a 0700
+# directory it does not already own (issue 70). The same ids are written
+# into the instance .env so the process drops to the owner of the files.
+app_uid="${APP_UID:-1000}"
+app_gid="${APP_GID:-1000}"
+if ! chown "${app_uid}:${app_gid}" "$DATA_DIR"; then
+  echo "ERROR: could not chown $DATA_DIR to ${app_uid}:${app_gid}." >&2
+  echo "Run this script as root, or export APP_UID and APP_GID to your own ids" >&2
+  echo "(they are written into the instance .env and must match this directory)." >&2
+  echo "  chown -R ${app_uid}:${app_gid} $DATA_DIR && chmod 700 $DATA_DIR" >&2
+  exit 1
+fi
 
-# Relative paths from repo root for compose interpolation
+# Relative paths from repo root for compose interpolation.
+# A volume source with no leading ./ or / is a named volume. Compose then
+# errors with "undefined volume instances/<name>/data" and the instance
+# never starts. Keep the ./ prefix.
 REL_ENV="instances/${NAME}/.env"
-REL_DATA="instances/${NAME}/data"
+REL_DATA="./instances/${NAME}/data"
 if [[ "$INSTANCE_ROOT" != "$REPO_ROOT/instances" ]]; then
   REL_ENV="$ENV_FILE"
   REL_DATA="$DATA_DIR"
@@ -119,10 +139,18 @@ echo "Wrote $ENV_FILE (mode $(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo 600))
 echo "Allocated CRM_PORT=$PORT  COMPOSE_PROJECT_NAME=$PROJECT"
 
 print_caddy() {
+  # BASE_URL_HINT is the public name. Fall back to <name>.example.com only
+  # when the operator did not set one.
+  local host="${BASE_HINT#https://}"
+  host="${host#http://}"
+  host="${host%%/*}"
+  if [[ -z "$host" ]]; then
+    host="${NAME}.example.com"
+  fi
   cat <<EOF
 
-# --- Caddy site block (paste into your Caddyfile; replace the hostname) ---
-${NAME}.example.com {
+# --- Caddy site block (paste into your Caddyfile) ---
+${host} {
 	reverse_proxy 127.0.0.1:${PORT}
 }
 # -------------------------------------------------------------------------
@@ -183,7 +211,11 @@ from instance_lib import generate_password
 print(generate_password())
 ')
 
-CREATE_ADMIN_PASSWORD="$OTP" compose_cmd exec -T -e CREATE_ADMIN_PASSWORD="$OTP" app \
+# exec does not run the entrypoint, so it stays root. Root without
+# CAP_DAC_OVERRIDE cannot write the 0700 data volume. Run as APP_UID.
+CREATE_ADMIN_PASSWORD="$OTP" compose_cmd exec -T \
+  -u "${app_uid}:${app_gid}" \
+  -e CREATE_ADMIN_PASSWORD="$OTP" app \
   python scripts/create_admin.py "$EMAIL" "Admin"
 
 cat <<EOF

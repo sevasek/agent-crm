@@ -96,7 +96,9 @@ plain formulas, not a model.
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 ```
 
-The app binds to `127.0.0.1:${CRM_PORT:-8000}` (default 8000). Put a
+Standing up a separate client (its own database, secrets, admin, and
+domain) is [`docs/CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md). The app binds
+to `127.0.0.1:${CRM_PORT:-8000}` (default 8000). Put a
 TLS-terminating reverse proxy in front and forward everything, including
 `/mcp` and `/oauth/*`. Working Caddy and nginx configs, header forwarding, and
 `TRUSTED_PROXIES` notes are in [`docs/DEPLOY.md`](docs/DEPLOY.md). In `.env`:
@@ -189,7 +191,10 @@ Restore (stops the stack, drops WAL/SHM, copies the snapshot, starts):
 ./scripts/restore.sh backups/crm-YYYY-MM-DDTHHMMSSZ.db
 ```
 
-The entrypoint fixes ownership of `./data` on start. Check `docker compose ps`
+The entrypoint repairs ownership of `./data` on first boot when it can
+traverse the volume; later restarts skip that step so `cap_drop: ALL`
+survives a restart. If start fails on an unreadable bind-mount, `chown`
+the host `./data` to `APP_UID` (see `docs/DEPLOY.md`). Check `docker compose ps`
 shows `healthy` and you can log in.
 
 Optional sub-minute RPO: run [Litestream](https://litestream.io/) beside the
@@ -259,6 +264,7 @@ markdown files, see `scripts/import_clients.py`.
 [`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
+[`CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md) new client instance on a VPS ·
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
 [`OFFBOARDING.md`](docs/OFFBOARDING.md) removing a cancelled customer's instance ·
 [`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·

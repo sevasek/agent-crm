@@ -96,13 +96,37 @@ def test_insecure_secret_warns_in_local_dev(db, monkeypatch, caplog):
     assert "insecure default" in caplog.text
 
 
+def _csp_directive(csp: str, name: str) -> str | None:
+    for part in csp.split(";"):
+        part = part.strip()
+        if part == name or part.startswith(name + " "):
+            return part
+    return None
+
+
+def _assert_baseline_security_headers(resp, *, hsts: bool = False):
+    assert resp.headers["X-Content-Type-Options"] == "nosniff"
+    assert resp.headers["X-Frame-Options"] == "DENY"
+    assert resp.headers["Referrer-Policy"] == "no-referrer"
+    csp = resp.headers["Content-Security-Policy"]
+    assert _csp_directive(csp, "default-src") == "default-src 'self'"
+    assert _csp_directive(csp, "script-src") == "script-src 'self'"
+    assert "unsafe-inline" not in _csp_directive(csp, "script-src")
+    assert _csp_directive(csp, "style-src").startswith("style-src 'self'")
+    assert "cdn" not in csp.lower()
+    assert "http:" not in csp
+    assert "https:" not in csp
+    if hsts:
+        assert resp.headers["Strict-Transport-Security"] == "max-age=31536000; includeSubDomains"
+    else:
+        assert "strict-transport-security" not in {k.lower() for k in resp.headers.keys()}
+
+
 def test_health_includes_nosniff_and_does_not_require_login(client):
     resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
-    assert resp.headers["X-Content-Type-Options"] == "nosniff"
-    assert resp.headers["X-Frame-Options"] == "DENY"
-    assert resp.headers["Referrer-Policy"] == "no-referrer"
+    _assert_baseline_security_headers(resp, hsts=False)
 
 
 def test_health_returns_503_when_db_check_fails(db, monkeypatch, caplog):
@@ -157,9 +181,55 @@ def test_health_returns_503_when_db_file_is_readonly(client, tmp_path, monkeypat
 def test_login_includes_nosniff(client):
     resp = client.get("/auth/login")
     assert resp.status_code == 200
-    assert resp.headers["X-Content-Type-Options"] == "nosniff"
-    assert resp.headers["X-Frame-Options"] == "DENY"
-    assert resp.headers["Referrer-Policy"] == "no-referrer"
+    _assert_baseline_security_headers(resp, hsts=False)
+
+
+def test_login_loads_call_tap_from_static_not_inline(client):
+    resp = client.get("/auth/login")
+    assert resp.status_code == 200
+    assert 'src="/static/call-tap.js"' in resp.text
+    assert 'src="/static/app.js"' in resp.text
+    assert "function logCallTap" not in resp.text
+    js = client.get("/static/call-tap.js")
+    assert js.status_code == 200
+    assert "function logCallTap" in js.text
+    assert "<!DOCTYPE" not in js.text[:80]
+    app_js = client.get("/static/app.js")
+    assert app_js.status_code == 200
+    # Partner-page stage <select> has no submit button; CSP blocks its
+    # inline onchange, so app.js has to submit that form.
+    assert "this.form.submit()" in app_js.text
+
+
+def test_hsts_not_sent_on_plain_http_localhost(client):
+    resp = client.get("/health")
+    assert "strict-transport-security" not in {k.lower() for k in resp.headers.keys()}
+
+
+def test_hsts_sent_when_secure_cookies(db, monkeypatch):
+    monkeypatch.setenv("SECURE_COOKIES", "true")
+    from app.main import create_app
+    with TestClient(create_app()) as c:
+        resp = c.get("/health")
+        _assert_baseline_security_headers(resp, hsts=True)
+
+
+def test_hsts_sent_when_base_url_is_https(db, monkeypatch):
+    monkeypatch.delenv("SECURE_COOKIES", raising=False)
+    monkeypatch.setenv("BASE_URL", "https://crm.example.com")
+    from app.main import create_app
+    with TestClient(create_app()) as c:
+        resp = c.get("/health")
+        _assert_baseline_security_headers(resp, hsts=True)
+
+
+def test_hsts_not_sent_when_secure_cookies_false_and_http_base_url(db, monkeypatch):
+    monkeypatch.setenv("SECURE_COOKIES", "false")
+    monkeypatch.setenv("BASE_URL", "http://localhost:8000")
+    from app.main import create_app
+    with TestClient(create_app()) as c:
+        resp = c.get("/health")
+        _assert_baseline_security_headers(resp, hsts=False)
 
 
 def test_non_api_unhandled_exception_still_has_security_headers(db, monkeypatch):
@@ -173,9 +243,7 @@ def test_non_api_unhandled_exception_still_has_security_headers(db, monkeypatch)
     with TestClient(application) as c:
         resp = c.get("/__boom")
     assert resp.status_code == 500
-    assert resp.headers["X-Content-Type-Options"] == "nosniff"
-    assert resp.headers["X-Frame-Options"] == "DENY"
-    assert resp.headers["Referrer-Policy"] == "no-referrer"
+    _assert_baseline_security_headers(resp, hsts=False)
     assert "html crash" not in resp.text.lower()
     assert "traceback" not in resp.text.lower()
 

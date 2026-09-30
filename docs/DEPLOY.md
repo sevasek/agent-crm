@@ -1,5 +1,9 @@
 # Production reverse proxy and TLS
 
+To stand up a new client instance end to end (env, compose, admin, TLS,
+Grok connector), follow [`CLIENT_DEPLOY.md`](CLIENT_DEPLOY.md). This file
+is the proxy and cookie detail that runbook points at.
+
 The production compose file binds the app to `127.0.0.1:${CRM_PORT:-8000}` on
 the host. Put a TLS-terminating reverse proxy in front of that loopback port.
 This file is a minimal Caddy (auto-TLS) example and an nginx equivalent.
@@ -24,21 +28,32 @@ to replay a session onto another sqlite file.
 on https).
 
 Production compose drops all Linux capabilities except the four the
-entrypoint needs to chown `./data` and `gosu` to `APP_UID` (`CHOWN`,
-`FOWNER`, `SETUID`, `SETGID`), sets `no-new-privileges`, and runs a
-read-only root filesystem with `tmpfs` on `/tmp`. The sqlite volume
-stays writable.
+entrypoint needs to chown a still-root-owned `./data` and `gosu` to
+`APP_UID` (`CHOWN`, `FOWNER`, `SETUID`, `SETGID`), sets
+`no-new-privileges`, and runs a read-only root filesystem with `tmpfs`
+on `/tmp`. The sqlite volume stays writable. `CAP_DAC_OVERRIDE` is not
+granted.
 
-**Known issue (#70):** dropping `CAP_DAC_OVERRIDE` means the entrypoint's own
-ownership repair can lock itself out on the *second* boot — the first
-successful start chowns/chmods `./data` to `APP_UID:APP_GID` `0700`, and every
-boot after that, root (without `CAP_DAC_OVERRIDE`) can no longer read that
-directory to redo the chown. Confirmed: a `stop`+`start` (or `restart`, or a
-host reboot) after a healthy first boot crash-loops the container
-permanently, with `chown: cannot read directory '/app/data': Permission
-denied` in the logs. Do not rely on this hardening surviving a restart until
-#70 is fixed — recovery today requires a manual `chown`/`chmod` on the host's
-`./data` before the container will start again.
+The entrypoint only repairs ownership and mode of `/app/data` when it
+can traverse that directory and it is not already owned by `APP_UID`.
+After the first successful boot the volume is `APP_UID` mode `0700`;
+later restarts skip the repair and drop privileges, so
+`docker compose restart`, crash recovery (`restart: unless-stopped`),
+and host reboots keep working.
+
+If the bind-mount is already `0700` and owned by a *different* uid,
+root cannot traverse it without `CAP_DAC_OVERRIDE`. The entrypoint
+exits with an error instead of crash-looping on `chown: Permission
+denied`. Fix the host directory, then start the container:
+
+```bash
+chown -R 1000:1000 ./data   # or whatever APP_UID:APP_GID you set
+chmod 700 ./data
+```
+
+`scripts/new-instance.sh` chowns the instance data dir to
+`APP_UID`/`APP_GID` (default 1000:1000) on the host before the
+container starts, so first boot does not need `CAP_DAC_OVERRIDE`.
 
 **Never set a cookie `Domain=` for the session cookie**, and never configure
 the proxy to rewrite it in. The session cookie is host-only by default
@@ -46,6 +61,17 @@ the proxy to rewrite it in. The session cookie is host-only by default
 from one customer's subdomain being replayable against a sibling subdomain
 on a multi-tenant host. Widening it to a parent domain removes that
 protection silently.
+
+When `SECURE_COOKIES=true` (or https `BASE_URL`), the cookie is named
+`__Host-session`: Secure, Path=/, no Domain. Browsers reject a `__Host-`
+cookie that breaks any of those, so a proxy must not rename it, drop
+Secure, change Path, or add Domain. Local http keeps the name `session`
+so a browser and the TestClient can still store it.
+
+The app sends a Content-Security-Policy that allows same-origin scripts
+and styles only (vendored Pico and htmx under `/static/vendor/`). Do not
+add a CDN `<script>` or `<link>`, and do not strip the CSP header at the
+proxy.
 
 ## `TRUSTED_PROXIES`
 
@@ -92,6 +118,9 @@ and renews Let's Encrypt certificates and sets `Host`, `X-Forwarded-For`, and
 ```caddy
 crm.example.com {
 	reverse_proxy 127.0.0.1:8000
+	# HSTS: Caddy's automatic HTTPS redirects HTTP to HTTPS but does not
+	# send Strict-Transport-Security. The app sends it when cookies are
+	# Secure or BASE_URL is https. Do not strip that response header.
 }
 ```
 
@@ -138,6 +167,12 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Real-IP $remote_addr;
+        # The app already sends this when cookies are Secure. Repeat it here
+        # so a browser still sees HSTS if something in front drops upstream
+        # headers. includeSubDomains covers names under this server_name
+        # only — do not put the CRM on an apex that still has HTTP-only
+        # subdomains.
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         # /mcp and /oauth/* use their own keys. Do not add auth or an
         # allow/deny IP list here — hosted MCP connectors have no stable CIDR.
     }

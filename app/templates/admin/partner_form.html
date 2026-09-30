@@ -72,21 +72,4 @@
     </div>
     <button type="submit">Save</button>
 </form>
-<script>
-    (function () {
-        var box = document.getElementById("is_company");
-        if (!box) return;
-        function syncCompanyFields() {
-            var isCompany = box.checked;
-            document.querySelectorAll(".js-person-only").forEach(function (el) {
-                el.hidden = isCompany;
-            });
-            document.querySelectorAll(".js-company-only").forEach(function (el) {
-                el.hidden = !isCompany;
-            });
-        }
-        box.addEventListener("change", syncCompanyFields);
-        syncCompanyFields();
-    })();
-</script>
 {% endblock %}

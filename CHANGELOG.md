@@ -14,6 +14,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Added
 
+- [`docs/CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md): runbook for a new client
+  instance on a VPS (own database, secrets, admin, domain, OAuth issuer).
+- `scripts/new-instance.sh` writes `APP_UID` / `APP_GID` into the instance
+  `.env` and refuses to continue if it cannot chown the data directory to
+  those ids.
 - `.dockerignore` so `.env`, `.git`, and `./data` (including sqlite files) are
   not copied into the image. CI builds a dirty context and fails if those paths
   exist in `/app`.
@@ -75,6 +80,24 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   startup; new databases never create it.
 - Unused helpers `get_user_by_id` and `list_clients` (no app callers).
 
+### Fixed
+
+- `scripts/new-instance.sh` passes `./instances/<name>/data` as the bind
+  mount. Without the `./`, Compose treated the path as a named volume and
+  refused to start the instance.
+- `scripts/new-instance.sh` creates the first admin with `compose exec -u
+  APP_UID`. A plain `exec` is root, and root cannot write the `0700` data
+  volume once `CAP_DAC_OVERRIDE` is dropped.
+- The Caddy block printed by `scripts/new-instance.sh` uses the hostname
+  from `BASE_URL_HINT`, not `<name>.example.com`.
+- Production `cap_drop: ALL` no longer crash-loops the container on
+  restart. The entrypoint skips ownership repair when `/app/data` is
+  already owned by `APP_UID`, and prints a host `chown` command instead
+  of retrying a repair that cannot succeed without `CAP_DAC_OVERRIDE`
+  (issue 70). The issue 60 hardening (`cap_drop`, `no-new-privileges`,
+  read-only rootfs) is unchanged. `scripts/new-instance.sh` chowns the
+  instance data dir to `APP_UID`/`APP_GID` before the container starts.
+
 ### Changed
 
 - Custom admin CSS sits on Pico's primitives: drop duplicate input/`<button>`/
@@ -133,7 +156,15 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   POST/PUT/PATCH/DELETE requests are also now rejected with 403 if their
   `Origin`/`Referer` names a different host than the request's own `Host`
   (defense-in-depth; requests that send neither are unaffected).
-  `GET /auth/logout` is now `POST /auth/logout`.
+  `GET /auth/logout` is now `POST /auth/logout`, and that POST validates
+  the session-bound CSRF token (the nav form includes the hidden field).
+- `Content-Security-Policy` allows same-origin scripts and styles only
+  (vendored Pico + htmx under `/static/vendor/`; `call-tap.js` / `app.js`
+  replace the former inline `<script>` so `script-src` does not need
+  `'unsafe-inline'`). `Strict-Transport-Security` is sent only when
+  cookies are Secure or `BASE_URL` is https, not on plain http localhost.
+  Production session cookies are named `__Host-session` (Secure, Path=/,
+  no Domain); local http keeps `session`.
 - Self-service password change (`/settings`, `POST /settings/password`) and
   session revocation. `users.session_version` (schema v5) is embedded in the
   session cookie and checked on every request; changing your password or

@@ -1,6 +1,7 @@
 """Port allocation and instance .env generation — no Docker required."""
 import os
 import re
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -67,6 +68,8 @@ def test_write_env_is_mode_600_with_fresh_secrets(tmp_path):
     assert "BOOTSTRAP_ADMIN_EMAIL=ops@example.com" in body
     assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert "TRUSTED_PROXIES=172.16.0.0/12" in body
+    assert "APP_UID=1000" in body
+    assert "APP_GID=1000" in body
     secret = re.search(r"^SECRET_KEY=([0-9a-f]+)$", body, re.M).group(1)
     assert len(secret) == 64
     assert generate_secret() != secret
@@ -78,6 +81,18 @@ def test_assert_unique_secret_key_rejects_copied_env(tmp_path):
         assert_unique_secret_key(tmp_path, "beta", "copied-from-acme")
     assert_unique_secret_key(tmp_path, "acme", "copied-from-acme")
     assert_unique_secret_key(tmp_path, "beta", "a-different-key")
+
+
+def test_render_env_rejects_non_numeric_uid():
+    with pytest.raises(ProvisionError, match="APP_UID"):
+        render_env(
+            name="acme",
+            tz="UTC",
+            email="ops@example.com",
+            port=8000,
+            trusted_proxies="",
+            app_uid="root",
+        )
 
 
 def test_assert_unique_secret_key_rejects_example_default():
@@ -99,6 +114,9 @@ def test_new_instance_sh_dry_run(tmp_path):
         "INSTANCE_ROOT": str(tmp_path),
         "INSTANCE_REGISTRY": str(tmp_path / "ports.tsv"),
         "TRUSTED_PROXIES": "172.16.0.0/12",
+        "APP_UID": str(os.getuid()),
+        "APP_GID": str(os.getgid()),
+        "BASE_URL_HINT": "https://crm.acme.test",
     }
     proc = subprocess.run(
         [
@@ -120,6 +138,11 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert env_path.is_file()
     assert env_path.stat().st_mode & stat.S_IRWXO == 0
     assert env_path.stat().st_mode & 0o777 == 0o600
+    data_dir = tmp_path / "acme" / "data"
+    assert data_dir.is_dir()
+    assert data_dir.stat().st_mode & 0o777 == 0o700
+    assert data_dir.stat().st_uid == os.getuid()
+    assert data_dir.stat().st_gid == os.getgid()
     body = env_path.read_text()
     port_match = re.search(r"^CRM_PORT=(\d+)$", body, re.M)
     assert port_match, body
@@ -127,10 +150,51 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert int(port) >= 8000
     assert "COMPOSE_PROJECT_NAME=crm-acme" in body
     assert "TZ=Australia/Sydney" in body
+    assert f"APP_UID={os.getuid()}" in body
+    assert f"APP_GID={os.getgid()}" in body
     assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert (tmp_path / "ports.tsv").read_text().startswith(f"acme\t{port}")
     assert f"reverse_proxy 127.0.0.1:{port}" in proc.stdout
+    assert "crm.acme.test" in proc.stdout
+    assert "acme.example.com" not in proc.stdout
     assert "Dry-run" in proc.stdout
+
+
+def test_default_instance_data_dir_is_a_bind_mount():
+    """new-instance.sh's CRM_DATA_DIR must be a bind mount, not a named volume.
+
+    Compose treats `instances/acme/data` (no leading ./) as a named volume and
+    refuses to start. The default layout has to pass `./instances/<name>/data`.
+    """
+    if not shutil.which("docker"):
+        pytest.skip("docker is not available")
+    probe = subprocess.run(["docker", "info"], capture_output=True, check=False)
+    if probe.returncode != 0:
+        pytest.skip("docker daemon is not available")
+    env = {
+        **os.environ,
+        "CRM_PORT": "8099",
+        "CRM_ENV_FILE": "./.env.example",
+        "CRM_DATA_DIR": "./instances/acme/data",
+    }
+    proc = subprocess.run(
+        [
+            "docker", "compose",
+            "-f", "docker-compose.yml",
+            "-f", "docker-compose.prod.yml",
+            "-f", "docker-compose.port.yml",
+            "-f", "docker-compose.instance.yml",
+            "config",
+        ],
+        cwd=str(REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "type: bind" in proc.stdout
+    assert "instances/acme/data" in proc.stdout
 
 
 def test_new_instance_sh_rejects_unsafe_name(tmp_path):

@@ -58,6 +58,17 @@ from one customer's subdomain being replayable against a sibling subdomain
 on a multi-tenant host. Widening it to a parent domain removes that
 protection silently.
 
+When `SECURE_COOKIES=true` (or https `BASE_URL`), the cookie is named
+`__Host-session`: Secure, Path=/, no Domain. Browsers reject a `__Host-`
+cookie that breaks any of those, so a proxy must not rename it, drop
+Secure, change Path, or add Domain. Local http keeps the name `session`
+so a browser and the TestClient can still store it.
+
+The app sends a Content-Security-Policy that allows same-origin scripts
+and styles only (vendored Pico and htmx under `/static/vendor/`). Do not
+add a CDN `<script>` or `<link>`, and do not strip the CSP header at the
+proxy.
+
 ## `TRUSTED_PROXIES`
 
 Rate limits key on the client IP. Behind a proxy, uvicorn sees the proxy (or
@@ -103,6 +114,9 @@ and renews Let's Encrypt certificates and sets `Host`, `X-Forwarded-For`, and
 ```caddy
 crm.example.com {
 	reverse_proxy 127.0.0.1:8000
+	# HSTS: Caddy's automatic HTTPS redirects HTTP to HTTPS but does not
+	# send Strict-Transport-Security. The app sends it when cookies are
+	# Secure or BASE_URL is https. Do not strip that response header.
 }
 ```
 
@@ -149,6 +163,12 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header X-Real-IP $remote_addr;
+        # The app already sends this when cookies are Secure. Repeat it here
+        # so a browser still sees HSTS if something in front drops upstream
+        # headers. includeSubDomains covers names under this server_name
+        # only — do not put the CRM on an apex that still has HTTP-only
+        # subdomains.
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         # /mcp and /oauth/* use their own keys. Do not add auth or an
         # allow/deny IP list here — hosted MCP connectors have no stable CIDR.
     }

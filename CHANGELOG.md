@@ -82,6 +82,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Fixed
 
+- `scripts/new-instance.sh` passes `./instances/<name>/data` as the bind
+  mount. Without the `./`, Compose treated the path as a named volume and
+  refused to start the instance.
 - Production `cap_drop: ALL` no longer crash-loops the container on
   restart. The entrypoint skips ownership repair when `/app/data` is
   already owned by `APP_UID`, and prints a host `chown` command instead

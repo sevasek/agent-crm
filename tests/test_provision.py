@@ -116,6 +116,7 @@ def test_new_instance_sh_dry_run(tmp_path):
         "TRUSTED_PROXIES": "172.16.0.0/12",
         "APP_UID": str(os.getuid()),
         "APP_GID": str(os.getgid()),
+        "BASE_URL_HINT": "https://crm.acme.test",
     }
     proc = subprocess.run(
         [
@@ -154,6 +155,8 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert (tmp_path / "ports.tsv").read_text().startswith(f"acme\t{port}")
     assert f"reverse_proxy 127.0.0.1:{port}" in proc.stdout
+    assert "crm.acme.test" in proc.stdout
+    assert "acme.example.com" not in proc.stdout
     assert "Dry-run" in proc.stdout
 
 

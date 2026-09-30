@@ -139,10 +139,18 @@ echo "Wrote $ENV_FILE (mode $(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo 600))
 echo "Allocated CRM_PORT=$PORT  COMPOSE_PROJECT_NAME=$PROJECT"
 
 print_caddy() {
+  # BASE_URL_HINT is the public name. Fall back to <name>.example.com only
+  # when the operator did not set one.
+  local host="${BASE_HINT#https://}"
+  host="${host#http://}"
+  host="${host%%/*}"
+  if [[ -z "$host" ]]; then
+    host="${NAME}.example.com"
+  fi
   cat <<EOF
 
-# --- Caddy site block (paste into your Caddyfile; replace the hostname) ---
-${NAME}.example.com {
+# --- Caddy site block (paste into your Caddyfile) ---
+${host} {
 	reverse_proxy 127.0.0.1:${PORT}
 }
 # -------------------------------------------------------------------------

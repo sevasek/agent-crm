@@ -88,6 +88,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - `scripts/new-instance.sh` creates the first admin with `compose exec -u
   APP_UID`. A plain `exec` is root, and root cannot write the `0700` data
   volume once `CAP_DAC_OVERRIDE` is dropped.
+- The Caddy block printed by `scripts/new-instance.sh` uses the hostname
+  from `BASE_URL_HINT`, not `<name>.example.com`.
 - Production `cap_drop: ALL` no longer crash-loops the container on
   restart. The entrypoint skips ownership repair when `/app/data` is
   already owned by `APP_UID`, and prints a host `chown` command instead

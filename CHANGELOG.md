@@ -14,6 +14,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Added
 
+- [`docs/CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md): runbook for a new client
+  instance on a VPS (own database, secrets, admin, domain, OAuth issuer).
+- `scripts/new-instance.sh` writes `APP_UID` / `APP_GID` into the instance
+  `.env` and refuses to continue if it cannot chown the data directory to
+  those ids.
 - `.dockerignore` so `.env`, `.git`, and `./data` (including sqlite files) are
   not copied into the image. CI builds a dirty context and fails if those paths
   exist in `/app`.

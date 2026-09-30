@@ -67,6 +67,8 @@ def test_write_env_is_mode_600_with_fresh_secrets(tmp_path):
     assert "BOOTSTRAP_ADMIN_EMAIL=ops@example.com" in body
     assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert "TRUSTED_PROXIES=172.16.0.0/12" in body
+    assert "APP_UID=1000" in body
+    assert "APP_GID=1000" in body
     secret = re.search(r"^SECRET_KEY=([0-9a-f]+)$", body, re.M).group(1)
     assert len(secret) == 64
     assert generate_secret() != secret
@@ -78,6 +80,18 @@ def test_assert_unique_secret_key_rejects_copied_env(tmp_path):
         assert_unique_secret_key(tmp_path, "beta", "copied-from-acme")
     assert_unique_secret_key(tmp_path, "acme", "copied-from-acme")
     assert_unique_secret_key(tmp_path, "beta", "a-different-key")
+
+
+def test_render_env_rejects_non_numeric_uid():
+    with pytest.raises(ProvisionError, match="APP_UID"):
+        render_env(
+            name="acme",
+            tz="UTC",
+            email="ops@example.com",
+            port=8000,
+            trusted_proxies="",
+            app_uid="root",
+        )
 
 
 def test_assert_unique_secret_key_rejects_example_default():
@@ -134,6 +148,8 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert int(port) >= 8000
     assert "COMPOSE_PROJECT_NAME=crm-acme" in body
     assert "TZ=Australia/Sydney" in body
+    assert f"APP_UID={os.getuid()}" in body
+    assert f"APP_GID={os.getgid()}" in body
     assert not re.search(r"^BOOTSTRAP_ADMIN_PASSWORD=", body, re.M)
     assert (tmp_path / "ports.tsv").read_text().startswith(f"acme\t{port}")
     assert f"reverse_proxy 127.0.0.1:{port}" in proc.stdout

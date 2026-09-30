@@ -1,5 +1,9 @@
 # Production reverse proxy and TLS
 
+To stand up a new client instance end to end (env, compose, admin, TLS,
+Grok connector), follow [`CLIENT_DEPLOY.md`](CLIENT_DEPLOY.md). This file
+is the proxy and cookie detail that runbook points at.
+
 The production compose file binds the app to `127.0.0.1:${CRM_PORT:-8000}` on
 the host. Put a TLS-terminating reverse proxy in front of that loopback port.
 This file is a minimal Caddy (auto-TLS) example and an nginx equivalent.

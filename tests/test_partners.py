@@ -37,7 +37,13 @@ def test_new_partner_form_hides_company_only_fields(logged_in_client):
     assert 'id="facebook_url"' in html
     assert 'id="youtube_url"' in html
     assert "Social / professional profile link" not in html
-    assert "syncCompanyFields" in html
+    # The toggle lives in /static/app.js. An inline copy would be blocked
+    # by script-src 'self'.
+    assert 'src="/static/app.js"' in html
+    assert "syncCompanyFields" not in html
+    js = logged_in_client.get("/static/app.js")
+    assert js.status_code == 200
+    assert "syncCompanyFields" in js.text
 
 
 def test_company_edit_form_hides_person_only_fields(logged_in_client):

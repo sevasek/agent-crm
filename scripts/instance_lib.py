@@ -170,6 +170,13 @@ def generate_password() -> str:
     return secrets.token_urlsafe(18)
 
 
+def _numeric_id(value: str, label: str) -> str:
+    text = str(value).strip()
+    if not text.isdigit():
+        raise ProvisionError(f"{label} must be a numeric uid/gid, got {value!r}")
+    return str(int(text))
+
+
 def render_env(
     *,
     name: str,
@@ -179,8 +186,12 @@ def render_env(
     trusted_proxies: str,
     base_url: str | None = None,
     secrets_map: dict[str, str] | None = None,
+    app_uid: str = "1000",
+    app_gid: str = "1000",
 ) -> str:
     name = validate_name(name)
+    app_uid = _numeric_id(app_uid, "APP_UID")
+    app_gid = _numeric_id(app_gid, "APP_GID")
     keys = secrets_map or {
         "SECRET_KEY": generate_secret(),
         "CRM_API_KEY": generate_secret(),
@@ -219,6 +230,12 @@ TRUSTED_PROXIES={trusted_proxies}
 # printed to the terminal). Do not leave a bootstrap password in this file.
 BOOTSTRAP_ADMIN_EMAIL={email}
 BOOTSTRAP_ADMIN_NAME=Admin
+
+# Must match the host owner of this instance's data directory. The
+# entrypoint drops to these ids and will not chown a 0700 directory it
+# does not already own (production compose drops CAP_DAC_OVERRIDE).
+APP_UID={app_uid}
+APP_GID={app_gid}
 """
 
 

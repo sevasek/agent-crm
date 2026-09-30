@@ -5,6 +5,7 @@ module.exports = {
   SCOPE: "Scope",
   MCP: "MCP: the agent interface",
   DATA_MODEL: "Data model",
+  CLIENT_DEPLOY: "New client instance",
   DEPLOY: "Deploy",
   RELEASE: "Cutting a release",
 };

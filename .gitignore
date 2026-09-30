@@ -35,3 +35,7 @@ docker-compose.override.yml
 
 # Claude Code
 .claude/
+
+# docs/ Eleventy build (doc-build-time only, see eleventy.config.js)
+node_modules/
+/_site/

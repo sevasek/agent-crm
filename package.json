@@ -1,0 +1,13 @@
+{
+  "name": "agent-crm-docs",
+  "private": true,
+  "description": "Doc-build-time only. Not part of the app: see docs/UI_UPGRADE_PLAN.md — the running app stays Node-free and build-step-free. This just turns docs/*.md into a static manual site, styled with the app's own Pico.css + style.css.",
+  "scripts": {
+    "docs:build": "eleventy",
+    "docs:serve": "eleventy --serve",
+    "docs:test": "npm run docs:build && node check-docs.js"
+  },
+  "devDependencies": {
+    "@11ty/eleventy": "3.1.6"
+  }
+}

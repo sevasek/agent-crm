@@ -124,9 +124,12 @@ if ! chown "${app_uid}:${app_gid}" "$DATA_DIR"; then
   exit 1
 fi
 
-# Relative paths from repo root for compose interpolation
+# Relative paths from repo root for compose interpolation.
+# A volume source with no leading ./ or / is a named volume. Compose then
+# errors with "undefined volume instances/<name>/data" and the instance
+# never starts. Keep the ./ prefix.
 REL_ENV="instances/${NAME}/.env"
-REL_DATA="instances/${NAME}/data"
+REL_DATA="./instances/${NAME}/data"
 if [[ "$INSTANCE_ROOT" != "$REPO_ROOT/instances" ]]; then
   REL_ENV="$ENV_FILE"
   REL_DATA="$DATA_DIR"

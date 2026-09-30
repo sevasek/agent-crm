@@ -1,6 +1,7 @@
 """Port allocation and instance .env generation — no Docker required."""
 import os
 import re
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -154,6 +155,43 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert (tmp_path / "ports.tsv").read_text().startswith(f"acme\t{port}")
     assert f"reverse_proxy 127.0.0.1:{port}" in proc.stdout
     assert "Dry-run" in proc.stdout
+
+
+def test_default_instance_data_dir_is_a_bind_mount():
+    """new-instance.sh's CRM_DATA_DIR must be a bind mount, not a named volume.
+
+    Compose treats `instances/acme/data` (no leading ./) as a named volume and
+    refuses to start. The default layout has to pass `./instances/<name>/data`.
+    """
+    if not shutil.which("docker"):
+        pytest.skip("docker is not available")
+    probe = subprocess.run(["docker", "info"], capture_output=True, check=False)
+    if probe.returncode != 0:
+        pytest.skip("docker daemon is not available")
+    env = {
+        **os.environ,
+        "CRM_PORT": "8099",
+        "CRM_ENV_FILE": "./.env.example",
+        "CRM_DATA_DIR": "./instances/acme/data",
+    }
+    proc = subprocess.run(
+        [
+            "docker", "compose",
+            "-f", "docker-compose.yml",
+            "-f", "docker-compose.prod.yml",
+            "-f", "docker-compose.port.yml",
+            "-f", "docker-compose.instance.yml",
+            "config",
+        ],
+        cwd=str(REPO_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert "type: bind" in proc.stdout
+    assert "instances/acme/data" in proc.stdout
 
 
 def test_new_instance_sh_rejects_unsafe_name(tmp_path):

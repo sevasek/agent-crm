@@ -130,6 +130,18 @@ migrations. `docker compose ps` should show the app `healthy`. Check
 Same command without `--build` after an `.env`-only edit, so the container
 is recreated with the new values.
 
+`docker compose exec` does not run the entrypoint, so the command is root.
+Root in this container cannot read the data directory. One-off commands
+need `-u 1000:1000` (or whatever `APP_UID`/`APP_GID` are in that `.env`):
+
+```bash
+docker compose --project-name crm-black-diamond \
+  --env-file instances/black-diamond/.env \
+  -f docker-compose.yml -f docker-compose.prod.yml \
+  -f docker-compose.port.yml -f docker-compose.instance.yml \
+  exec -u 1000:1000 app python scripts/create_admin.py jem@client.example "Jem"
+```
+
 ## One instance on an empty VPS
 
 If this host will only ever run one CRM, you can skip `instances/` and use

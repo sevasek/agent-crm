@@ -203,7 +203,11 @@ from instance_lib import generate_password
 print(generate_password())
 ')
 
-CREATE_ADMIN_PASSWORD="$OTP" compose_cmd exec -T -e CREATE_ADMIN_PASSWORD="$OTP" app \
+# exec does not run the entrypoint, so it stays root. Root without
+# CAP_DAC_OVERRIDE cannot write the 0700 data volume. Run as APP_UID.
+CREATE_ADMIN_PASSWORD="$OTP" compose_cmd exec -T \
+  -u "${app_uid}:${app_gid}" \
+  -e CREATE_ADMIN_PASSWORD="$OTP" app \
   python scripts/create_admin.py "$EMAIL" "Admin"
 
 cat <<EOF

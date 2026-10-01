@@ -102,6 +102,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Changed
 
+- `docs/UI_UPGRADE_PLAN.md` records that Pico/htmx phases 1–3 shipped
+  (PRs #53, #62); SortableJS, Tom Select, Alpine, and real dark mode stay
+  deferred (#46, #47).
 - Custom admin CSS sits on Pico's primitives: drop duplicate input/`<button>`/
   `<details>` rules, keep `.btn` for link-buttons, make `.btn-secondary` a
   full outlined chip so deal-stage filters match Pico's scale (closes #44).

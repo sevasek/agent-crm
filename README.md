@@ -268,7 +268,7 @@ markdown files, see `scripts/import_clients.py`.
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
 [`OFFBOARDING.md`](docs/OFFBOARDING.md) removing a cancelled customer's instance ·
 [`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
-[`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) pre-launch UI phases
+[`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) phases 1–3 shipped, 4–5 deferred
 
 `docs/*.md` also builds into a static manual site, styled with the app's own
 `app/static/style.css` and Pico.css so it looks like the app. This is a

@@ -1,28 +1,50 @@
 # UI upgrade plan: Pico.css + htmx
 
-**Goal:** make the app look launch-ready for paying customers within the week,
-without a build step, a JS framework, or a rewrite of the 18 Jinja2 templates.
+**Goal (original):** make the app look launch-ready for paying customers
+without a build step, a JS framework, or a rewrite of the Jinja2 templates.
 
-**Do not deviate from this constraint:** every file this plan adds is
+**Do not deviate from this constraint:** every frontend library is
 downloaded once and committed into `app/static/vendor/`. Nothing is loaded
 from a CDN at runtime — see `README.md` / `docs/DEPLOY.md`, this app must work
 fully offline and self-hosted. No `package.json`, no Node, no build step.
 
-Read this whole file before starting. Work phase by phase, in order. Do not
-skip ahead to Phase 3 or 4 before Phase 1 and 2 are done and merged — they are
-the ones that must ship this week; the rest is optional.
+**Status (verified on `main`, 2026-09-29):** Phases 1–3 have shipped.
+Do not re-vendor Pico or htmx, do not redo the polish pass, and do not
+re-implement the pipeline / call-outcome swaps. The phase notes below are
+history so a future agent can see *how* it was done — they are not a
+backlog. Phases 4 and 5 stay deferred and still need a decision; do not
+implement them from this file.
 
-**Status:** Phase 1+2 (#43, #44) are already in flight — PR #53
-(`cursor/polish-pico-css-42ff`) vendors Pico and does the polish pass. Check
-that PR before starting either phase so work isn't duplicated. Once it
-merges, the "Current state" line numbers below are stale — re-grep instead of
-trusting them. Phase 3 (#45) has a branch too (`cursor/htmx-pipeline-calls-42ff`,
-no PR yet as of this writing) but is not confirmed done.
+| Phase | What | Status | Tracking |
+|---|---|---|---|
+| 1 | Vendored Pico.css 2.1.1, `data-theme="light"` | **Shipped** | [#43](https://github.com/sevasek/agent-crm/issues/43), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
+| 2 | Polish custom CSS on top of Pico | **Shipped** | [#44](https://github.com/sevasek/agent-crm/issues/44), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
+| 3 | Vendored htmx 2.0.11, pipeline oob swaps, call-outcome swaps | **Shipped** | [#45](https://github.com/sevasek/agent-crm/issues/45), [PR #62](https://github.com/sevasek/agent-crm/pull/62) |
+| 4 | SortableJS drag-and-drop kanban | **Deferred** — do not implement | [#46](https://github.com/sevasek/agent-crm/issues/46) |
+| 5 | Tom Select / Alpine.js / real dark mode | **Deferred** — do not implement | [#47](https://github.com/sevasek/agent-crm/issues/47) |
+
+Dark mode stays locked to light for launch; `docs/SCOPE.md` already says
+that, and unlocking it is #47.
+
+Pinned versions live in `app/static/vendor/VENDOR.md` (Pico 2.1.1, htmx
+2.0.11 as of the shipping PRs).
 
 ---
 
-## Current state (verified 2026-09-28, do not re-derive — just confirm it's
-still true if something looks off)
+## Snapshot of the tree when this plan was written (2026-09-28)
+
+This section is a **point-in-time grep**, not a live inventory. Line
+counts, line numbers, test-file counts, template counts, and "no CSP"
+claims **will be wrong** on current `main`. Re-grep (`rg`, `grep`) before
+you trust any of them. In particular:
+
+- `style.css` is no longer the 152-line hand-written sheet described here
+  (Phase 2 rewrote it on top of Pico).
+- Pico and htmx are already in `app/static/vendor/` — see `VENDOR.md`.
+- CSP, auth cookies, and `docker-entrypoint.sh` are owned by other issues;
+  do not edit them from this plan.
+
+Kept below so you can see what the tree looked like *before* Phases 1–3:
 
 - `app/templates/base.html` — single layout, all 16 other templates extend it.
   Loads one stylesheet: `<link rel="stylesheet" href="/static/style.css">`.
@@ -47,7 +69,10 @@ still true if something looks off)
 
 ---
 
-## Phase 1 — Vendor Pico.css and wire it in (MUST ship before launch)
+## Phase 1 — Vendor Pico.css and wire it in (SHIPPED in PR #53, closes #43)
+
+**Do not re-run these steps.** History of how Pico 2.1.1 was vendored and
+how `data-theme="light"` was locked.
 
 This is a single `<link>` line. It is the highest-value, lowest-risk change
 available: modern spacing, typography, form controls, button/table styling,
@@ -160,7 +185,7 @@ convention Pico's default build expects.
      <html lang="en" data-theme="light">
      ```
      in `app/templates/base.html:2`. Revisit real dark-mode support later
-     (Phase 5) once there's time to redo the hand-picked colors as
+     (Phase 5 / #47) once there's time to redo the hand-picked colors as
      `light-dark()` pairs or a second `--bg-alt`-style variable set.
 
 5. Run the test suite and confirm nothing broke:
@@ -171,43 +196,46 @@ convention Pico's default build expects.
 6. Commit. Suggested message: `Add Pico.css for a modern baseline look
    (vendored, no build step)`.
 
-**Acceptance for Phase 1:** all 18 templates render correctly in light mode,
-desktop and mobile widths, `pytest` is green, nothing is loaded from a CDN at
-runtime (check `grep -rn 'http' app/templates/base.html` shows no external
-`http(s)://` src/href).
+**Acceptance for Phase 1 (met in PR #53):** all 18 templates render correctly
+in light mode, desktop and mobile widths, `pytest` is green, nothing is
+loaded from a CDN at runtime (check `grep -rn 'http' app/templates/base.html`
+shows no external `http(s)://` src/href).
 
 ---
 
-## Phase 2 — Small polish pass (MUST ship before launch, do right after Phase 1)
+## Phase 2 — Small polish pass (SHIPPED in PR #53, closes #44)
+
+**Do not re-run these steps.** History of the CSS polish that landed with
+Phase 1.
 
 Pico gives you the primitives; a few of the app's existing hand-rolled bits
 will look dated or slightly off next to them. Go through this list, in
 `app/static/style.css` only (don't touch templates unless a fix genuinely
 needs a new class):
 
-- [ ] `.pill`, `.pill-tag`, `.pill-due`, `.pill-overdue` (style.css:65-77,
+- [x] `.pill`, `.pill-tag`, `.pill-due`, `.pill-overdue` (style.css:65-77,
       87-88) — these are bespoke badges. Check they still look intentional
       next to Pico's more rounded, more padded buttons/inputs. Nudge
       `border-radius` / padding to match Pico's scale if they look flat.
-- [ ] `button, .btn` (style.css:50-61) and `.btn-secondary` — Pico already
+- [x] `button, .btn` (style.css:50-61) and `.btn-secondary` — Pico already
       styles bare `<button>` well. Decide whether to **delete** this custom
       block and let Pico's defaults + your `--pico-primary` override handle
       it (less code, more consistent), or keep it if it does something Pico
       can't. Prefer deleting if the rendered result looks the same or
       better — fewer overrides is less to maintain.
-- [ ] `.btn-outcome-*` variants (style.css:117-119, the call-outcome buttons:
+- [x] `.btn-outcome-*` variants (style.css:117-119, the call-outcome buttons:
       no-answer / not-interested / won) — these rely on setting `background`
       and `border-color` directly; confirm they still read clearly as
       distinct states next to Pico's button padding/shadow.
-- [ ] `input[type=...], select, textarea` block (style.css:44-48) — Pico
+- [x] `input[type=...], select, textarea` block (style.css:44-48) — Pico
       already styles these. Check for doubled borders/radius (both rules
       applying slightly different `border-radius` looks worse than either
       alone). Likely outcome: delete this block too.
-- [ ] `.topnav` (style.css:17-27) — confirm the nav still reads as a nav bar,
+- [x] `.topnav` (style.css:17-27) — confirm the nav still reads as a nav bar,
       not a loose row of links, next to Pico's page chrome. Pico doesn't
       forcibly restyle a `<nav class="topnav">` with no `<ul>/<li>` inside it
       much, so this should be low-risk, but check anyway.
-- [ ] `<details>` / `<summary>` (style.css:90-91) — Pico styles these nicely
+- [x] `<details>` / `<summary>` (style.css:90-91) — Pico styles these nicely
       by default (adds a disclosure triangle, hover state); your two-line
       override may now be redundant. Check where `<details>` is used
       (grep `<details` across `app/templates/`) and confirm it still looks
@@ -218,13 +246,19 @@ move on. Re-run `pytest` once at the end of this phase (should be a no-op
 since these are pure CSS changes). Commit as
 `Polish custom CSS to sit cleanly on top of Pico`.
 
-**Acceptance for Phase 2:** `style.css` is shorter or the same length, no
-visual regression, `pytest` green. **This is the launch bar — Phases 1+2
-alone are enough to ship.** Treat everything below as stretch goals.
+**Acceptance for Phase 2 (met in PR #53):** `style.css` is shorter or the
+same length, no visual regression, `pytest` green. **This was the launch
+bar — Phases 1+2 alone were enough to ship.** Treat everything below as
+stretch / deferred.
 
 ---
 
-## Phase 3 — htmx: kill full-page reloads on the two worst offenders (SHOULD, only if Phase 1+2 are done with days to spare)
+## Phase 3 — htmx: kill full-page reloads on the two worst offenders (SHIPPED in PR #62, closes #45)
+
+**Do not re-run these steps.** History of how htmx 2.0.11 was vendored and
+how pipeline / call-outcome swaps were wired. Line numbers in this section
+were already drifting when the plan was written; re-grep on current `main`
+if you need the live locations.
 
 Every action in the app is a `<form method=post>` that reloads the whole
 page. The two that feel worst to a live user are the pipeline stage-move
@@ -254,7 +288,7 @@ the request came from htmx.
 2. **Pipeline stage-move** (`app/templates/admin/pipeline.html:39-47`,
    backend at `app/routers/admin.py:737` `change_deal_stage` — re-grep both,
    line numbers have already drifted once since this plan was written and
-   will drift again once PR #53 lands):
+   will drift again):
    - Read `change_deal_stage` in full first. It currently does the DB update
      then presumably redirects (check for `RedirectResponse` — the `next`
      hidden field, `pipeline.html:40`, suggests it redirects back to
@@ -319,18 +353,16 @@ the request came from htmx.
    in production: `htmx: partial-swap pipeline stage moves`,
    `htmx: partial-swap call outcomes`.
 
-**Acceptance for Phase 3:** both flows work with JS on (no reload) and with
-JS off (falls back to the original full-page POST), `pytest` green including
-new tests, each change is its own revertable commit.
-
-**Do not start Phase 3 unless Phase 1 and 2 already shipped with real days
-to spare before the customer launch.** It touches backend routes, not just
-CSS — higher risk than the first two phases, and the app is fully usable
-(if less snappy) without it.
+**Acceptance for Phase 3 (met in PR #62):** both flows work with JS on (no
+reload) and with JS off (falls back to the original full-page POST),
+`pytest` green including new tests, each change is its own revertable
+commit.
 
 ---
 
-## Phase 4 — SortableJS drag-and-drop kanban (LATER, explicitly not for this launch)
+## Phase 4 — SortableJS drag-and-drop kanban (DEFERRED, [#46](https://github.com/sevasek/agent-crm/issues/46))
+
+**Do not implement this.** Needs a decision; it is not launch work.
 
 Turning the pipeline's per-card `<select>` into actual drag-and-drop is real
 scope: a new endpoint that accepts "deal X moved to stage Y, position Z",
@@ -338,13 +370,16 @@ touch-device testing (the call view already proves mobile matters here),
 and it depends on Phase 3's htmx work being in place and stable first (drag
 libraries pair with htmx via the `htmx-ext-sortable` pattern: SortableJS
 fires a DOM event on drop, an htmx listener turns it into the same
-`hx-post` the dropdown already uses). Do not attempt this before Phase 3 is
-shipped and stable. Leave it out of the launch-week scope entirely; revisit
-after launch with its own plan.
+`hx-post` the dropdown already uses). Phase 3 has shipped; this phase is
+still out of launch-week scope. Revisit after launch with its own plan
+on #46. Do not vendor SortableJS from this file.
 
 ---
 
-## Phase 5 — optional, only if a specific page needs it (LATER)
+## Phase 5 — optional extras (DEFERRED, [#47](https://github.com/sevasek/agent-crm/issues/47))
+
+**Do not implement this.** Needs a decision; it is not launch work.
+`docs/SCOPE.md` already lists dark mode as out of scope for launch.
 
 - **Tom Select / Choices.js** for the partner/service `<select>` fields, but
   only if a customer actually has enough partners or services that a plain
@@ -360,12 +395,15 @@ after launch with its own plan.
   hand-picked ones don't), then remove the `data-theme="light"` lock added
   in Phase 1 step 4.
 
+Do not vendor Tom Select or Alpine, and do not unlock dark mode, from this
+file.
+
 ---
 
 ## If something goes wrong mid-phase
 
-Each phase is one or two commits. If a phase causes a visible regression
-after merging, `git revert` the specific commit(s) for that phase — Phase 1
+Each phase was one or two commits. If a shipped phase causes a visible
+regression, `git revert` the specific commit(s) for that phase — Phase 1
 and 2 are pure CSS/one `<link>` tag, Phase 3's two routes are independent of
 each other and of Phases 1-2, so reverting one doesn't require reverting the
 others. Don't reach for a broader rollback than the phase that broke.

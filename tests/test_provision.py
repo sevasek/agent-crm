@@ -158,6 +158,9 @@ def test_new_instance_sh_dry_run(tmp_path):
     assert "crm.acme.test" in proc.stdout
     assert "acme.example.com" not in proc.stdout
     assert "Dry-run" in proc.stdout
+    assert "crm-backup-acme.timer" in proc.stdout
+    assert f"CRM_DB_PATH={data_dir}/crm.db" in proc.stdout
+    assert f"BACKUP_DIR={tmp_path / 'acme' / 'backups'}" in proc.stdout
 
 
 def test_default_instance_data_dir_is_a_bind_mount():

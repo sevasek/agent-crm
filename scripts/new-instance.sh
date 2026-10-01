@@ -135,6 +135,11 @@ if [[ "$INSTANCE_ROOT" != "$REPO_ROOT/instances" ]]; then
   REL_DATA="$DATA_DIR"
 fi
 
+# Same paths, without the compose-only ./ prefix, as README's backup.sh example.
+BACKUP_DB_PATH="${REL_DATA#./}/crm.db"
+BACKUP_DIR_PATH="${REL_DATA#./}"
+BACKUP_DIR_PATH="${BACKUP_DIR_PATH%/data}/backups"
+
 echo "Wrote $ENV_FILE (mode $(stat -c '%a' "$ENV_FILE" 2>/dev/null || echo 600))"
 echo "Allocated CRM_PORT=$PORT  COMPOSE_PROJECT_NAME=$PROJECT"
 
@@ -157,6 +162,48 @@ ${host} {
 EOF
 }
 
+print_backup_timer() {
+  cat <<EOF
+
+# --- Daily backup timer for this instance (run once, as root) ---
+sudo tee /etc/systemd/system/crm-backup-${NAME}.service >/dev/null <<'UNIT'
+[Unit]
+Description=agent-crm sqlite backup (${NAME})
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+UMask=0077
+WorkingDirectory=${REPO_ROOT}
+Environment=CRM_ENV_FILE=${REL_ENV}
+Environment=COMPOSE_PROJECT_NAME=${PROJECT}
+Environment=CRM_DB_PATH=${BACKUP_DB_PATH}
+Environment=BACKUP_DIR=${BACKUP_DIR_PATH}
+ExecStart=${REPO_ROOT}/scripts/backup.sh
+UNIT
+sudo tee /etc/systemd/system/crm-backup-${NAME}.timer >/dev/null <<'UNIT'
+[Unit]
+Description=Daily agent-crm sqlite backup (${NAME})
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=5m
+Unit=crm-backup-${NAME}.service
+
+[Install]
+WantedBy=timers.target
+UNIT
+sudo systemctl daemon-reload
+sudo systemctl enable --now crm-backup-${NAME}.timer
+# Off-host copy stays off by default — set BACKUP_RCLONE_DEST, BACKUP_S3_URI,
+# or BACKUP_REMOTE_CMD as an extra Environment= line above if this customer
+# needs their data to survive losing the VPS disk, not just this process.
+# -------------------------------------------------------------------------
+EOF
+}
+
 compose_cmd() {
   local files=(
     -f docker-compose.yml
@@ -175,12 +222,14 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Dry-run: not starting Docker."
   echo "Would run: docker compose --project-name $PROJECT --env-file $ENV_FILE -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.port.yml -f docker-compose.instance.yml up -d"
   print_caddy
+  print_backup_timer
   exit 0
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "Docker is not available. Re-run without --dry-run on the host, or use --dry-run." >&2
   print_caddy
+  print_backup_timer
   exit 1
 fi
 
@@ -230,3 +279,4 @@ Log in, then change the password. BOOTSTRAP_ADMIN_PASSWORD was not written
 to the lasting .env.
 EOF
 print_caddy
+print_backup_timer

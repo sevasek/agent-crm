@@ -12,8 +12,13 @@ under `instances/`. Session cookies are also tied to a per-database
 issuers. The MCP key is whatever is in that instance's `.env`; a copied
 key would be accepted by both.
 
-This deploy does not take backups. If the VPS disk or that instance's
-`crm.db` is lost, the data is gone.
+`scripts/new-instance.sh` prints a systemd timer that runs `scripts/backup.sh`
+for this instance daily at 03:00 — install it (see below). That only
+protects against a bad deploy or a corrupted database; the snapshot still
+lives on the same VPS disk. For an instance to survive losing that disk,
+also set `BACKUP_RCLONE_DEST`, `BACKUP_S3_URI`, or `BACKUP_REMOTE_CMD` as an
+extra `Environment=` line in the printed unit, so each backup copies off-host
+too.
 
 ## What you need
 
@@ -53,7 +58,8 @@ sudo -E scripts/new-instance.sh black-diamond Australia/Sydney jem@client.exampl
   directory only
 - waits until `http://127.0.0.1:<port>/health` answers
 - creates the admin and prints a one-time password once
-- prints a Caddy site block
+- prints a Caddy site block and a systemd backup timer, scoped to this
+  instance
 
 Migrations run inside the process on startup (`init_db`). A brand-new
 database is created at the current schema. You do not run a migrate

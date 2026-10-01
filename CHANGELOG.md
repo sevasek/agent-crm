@@ -12,6 +12,14 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/new-instance.sh` now also prints a per-instance systemd service
+  and timer that runs `scripts/backup.sh` daily, alongside the Caddy block
+  it already printed. Backups for a new client instance no longer require a
+  separate manual setup step; off-host copy is still opt-in
+  (`BACKUP_RCLONE_DEST` / `BACKUP_S3_URI` / `BACKUP_REMOTE_CMD`).
+
 ## [0.1.0] - 2026-09-30
 
 ### Added

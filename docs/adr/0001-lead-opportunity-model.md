@@ -32,7 +32,8 @@ The current data model has no definition of "lead" and no definition of
 
 1. An ingest payload (`app/services/leads.py`).
 2. A partner and a deal together (`icp_criteria` fit score).
-3. A deal in an early stage (the `interested` call outcome, "warm lead").
+3. A deal that a call moved to a nurture stage (the `interested` call
+   outcome, label "Interested (warm lead)").
 
 Each ingested row immediately creates a partner and a deal. Thus:
 
@@ -358,7 +359,8 @@ Conversion procedure (one transaction):
    with `is_default = 1`).
 4. Apply the optional fields in the call (`value_estimate`,
    `expected_close`, `probability`, `offer_id`, `next_action`,
-   `next_action_date`, `owner_key`).
+   `next_action_date`, `owner`). `owner` writes `owner_key`. The tool also
+   accepts `owner_key`, as the existing tools do (`_owner_arg`).
 5. Set `partner_id` on the activities and tasks of the lead (section 5.3).
 6. Write one `system` activity. It records: the conversion, the fit score
    and the matched criteria at this time, the partner action, and the
@@ -405,12 +407,31 @@ matches.
 If a lead has a `partner_id`, the lead's own value is used. If it is
 empty, the partner value is used.
 
-### 5.8 Indexes
+### 5.8 Code that reads deal records
+
+D3, D4 and D6 change two assumptions in the current read code. P1 must
+change these places before a lead or a lost record can exist:
+
+- `list_deals()` in `app/services/deals.py` and the queue query in
+  `app/services/call_queue.py` use `JOIN partners` and `JOIN services`.
+  An inner join drops each row with a null `partner_id` or `service_id`.
+  Use `LEFT JOIN` where a lead can be in the result (`list_deals` with
+  `type = 'lead'` or `'all'`, `list_due_followups`).
+- `get_deal_tool` and `create_delegated_task_tool` call
+  `get_partner(deal["partner_id"])` and `get_service(deal["service_id"])`.
+  These calls must accept a null id and return null.
+- `pipeline_stages.closed_stage_keys()` (`is_won` or `is_lost` stages) is
+  the "open" test in `get_open_deal_for_partner_service()` and in
+  `app/services/staleness.py`. After D6, "open" is `active = 1` and the
+  stage is not an `is_won` stage (section 2). Each caller must use the new
+  test. A lead with `active = 1` is open.
+
+### 5.9 Indexes
 
 New: `deals(type, active)`, `deals(email)`, `deals(phone)`,
 `deals(website)`, `deals(lost_reason_id)`, `deals(merged_into_id)`.
 Recreated after the rebuild: all existing indexes on `deals`,
-`activities` and `delegated_tasks` (section 6.2, step 7).
+`activities` and `delegated_tasks` (section 6.2, step 7 lists them).
 
 ## 6. Database migration plan
 
@@ -449,7 +470,9 @@ Do these steps for each table: `deals`, then `activities`, then
 
 0. Read `PRAGMA foreign_keys`. If the value is 1, stop the migration with
    an error. (A future change that turns on foreign keys must update this
-   procedure.)
+   procedure.) Run `PRAGMA foreign_key_check` once for each of the three
+   tables and keep the result (see step 11). Do this step one time, before
+   the first table.
 1. Read the current `sqlite_sequence.seq` value for the table. Keep it.
 2. Create `<table>_new` with the target DDL (section 5).
 3. Copy the rows: `INSERT INTO <table>_new (<column list>) SELECT
@@ -465,15 +488,26 @@ Do these steps for each table: `deals`, then `activities`, then
      `activities`, `deal_tags` and `delegated_tasks` to point to
      `deals_old`.
 7. Create all indexes for the table again (the existing names, plus
-   section 5.8).
+   section 5.9). The existing names are: `idx_deals_partner`,
+   `idx_deals_stage`, `idx_deals_owner`, `idx_deals_parent`,
+   `idx_activities_partner`, `idx_activities_deal`,
+   `idx_delegated_tasks_deal`, `idx_delegated_tasks_owner_status`.
 8. Set `sqlite_sequence.seq` for the table to the value from step 1.
-   This prevents the reuse of an `id` from a deleted row.
+   This prevents the reuse of an `id` from a deleted row. `DROP TABLE`
+   removes the row for the old table. Step 3 creates a row only if it
+   copied one or more rows. Thus use an upsert: update the row if it
+   exists, else insert it. Skip this step if step 1 found no row.
 
 After the three tables:
 
 9. Create `lost_reasons` and insert the seed rows (section 5.2).
 10. Backfill (section 6.3).
-11. Run `PRAGMA foreign_key_check`. If it returns rows, raise an error.
+11. Run `PRAGMA foreign_key_check(<table>)` for `deals`, `activities`,
+    `delegated_tasks` and `deal_tags`. If it returns a row that step 0 did
+    not return, raise an error. Foreign keys were never enforced, so a
+    live database can already have broken references (for example a
+    manual edit, or a v0 file). Those rows must not stop the start-up of
+    the app. Log them as a warning.
 12. Run `PRAGMA integrity_check`. If the result is not `ok`, raise an
     error.
 
@@ -537,6 +571,9 @@ lost on rollback. The release notes must say this.
 | Migrate a version-0 fixture whose `deals` columns are in the old order. | Column values go to the correct columns. |
 | Delete the highest deal id before the migration, then insert a new deal after it. | The new id is higher than the deleted id. |
 | A lost-stage deal. | `active = 0`, reason "Lost stage (migrated)". |
+| A schema 6 fixture with a deal whose `offer_id` points to a missing offer. | The migration completes. The log has a warning. |
+| A schema 6 fixture where all deals were deleted (`sqlite_sequence` has a value, the table is empty). | A new deal after the migration gets an id higher than the old `seq`. |
+| Restore a migrated lost-stage deal. | `active = 1`, `stage` is the default stage. |
 | Force an error after step 5. | The transaction rolls back. The schema stays at 6. The tables are as before. |
 | Run `init_db()` two times. | The second run does nothing. |
 | A new empty database. | It reaches schema 7. The schema is equal to a migrated database (compare `sqlite_master`). |
@@ -639,7 +676,7 @@ with MCP (section 8.1). Q6 asks if REST needs them.
 | `find_duplicates` | `lead_id`, or a set of contact fields. | Matches with `kind`, `id`, `matched_on`. | `not_found` |
 | `convert_lead` | `lead_id`, `partner_action` (`auto`, `link`, `create`), `partner_id`, `service_slug`, `stage`, `value_estimate`, `expected_close`, `probability`, `offer_id`, `next_action`, `next_action_date`, `owner`, `note`. | The opportunity, the partner, `partner_created` (bool), the `system` activity id. | See 5.4 |
 | `mark_lost` | `deal_id` (lead or opportunity), `lost_reason_id` or `lost_reason` (name), `note`. | The record. `nurture` result when the reason has `triggers_nurture`. | `not_found`, `already_lost`, `invalid_lost_reason` |
-| `restore_deal` | `deal_id` | The record with `active = 1`. Clears `lost_reason_id`, `lost_note`, `closed_at`. | `not_found`, `not_lost`, `merged` (a merged record cannot be restored) |
+| `restore_deal` | `deal_id` | The record with `active = 1`. Clears `lost_reason_id`, `lost_note`, `closed_at`. If the record is an opportunity in an `is_lost` stage (section 6.3), it also moves the stage to the stage with `is_default = 1`. Else the record would be open and in a lost stage at the same time. Writes a `system` activity. | `not_found`, `not_lost`, `merged` (a merged record cannot be restored) |
 | `merge_leads` | `target_id`, `source_ids` (max 10). Target and sources are leads, or the target is an opportunity and the sources are leads. | The target, and the ids that were merged. | `not_found`, `invalid_merge` (an opportunity as a source, a lost record, the same id) |
 | `list_lost_reasons` / `create_lost_reason` / `update_lost_reason` | `name`, `triggers_nurture`, `active` | The reason(s). | `duplicate_name` |
 
@@ -667,6 +704,12 @@ the target, in order of `created_at`. Move `activities`, `deal_tags` and
 "Duplicate" and `merged_into_id = target_id`. Write one `system` activity
 on the target with the source ids.
 
+- `deal_tags` has the primary key `(deal_id, tag)`. A tag that the target
+  already has must not cause an error. Use `INSERT OR IGNORE` for the
+  target, then delete the rows of the source.
+- If the target has a `partner_id`, set it on each moved `activities` and
+  `delegated_tasks` row where `partner_id` is null (same rule as 5.3).
+
 ### 8.2 Changed tools
 
 | Tool | Change |
@@ -680,9 +723,12 @@ on the target with the source ids.
 | `bulk_update_deals` | Selects opportunities only. Gets `mark_lost` (with `lost_reason`) as a bulk action. |
 | `get_call_queue` | Opportunities only, `active = 1`. No other change. See Q2 for leads. |
 | `list_due_followups` | Includes leads and opportunities. Each row has `type`. New argument `type`. |
-| `log_activity` | `partner_id` is optional when `deal_id` is given. New type `research`. New argument `source_url` (http or https only, max 2,000 characters). |
+| `log_activity` | `partner_id` is optional when `deal_id` is given. Then the CRM uses the `partner_id` of the deal record (it can be null for a lead). The current `deal_mismatch` check applies only when the call gives a `partner_id` and the deal record has one. New type `research`. New argument `source_url` (http or https only, max 2,000 characters). |
 | `list_activities` | Accepts `deal_id` for a lead without a partner. |
-| `create_delegated_task` | Accepts a lead. `partner_id` is null if the lead has no partner. |
+| `create_delegated_task` | Accepts a lead. `partner_id` is null if the lead has no partner. The `partner` in the response is null. |
+| `list_delegated_tasks`, `get_delegated_task`, `update_delegated_task`, `complete_delegated_task` | `partner_id` can be null. No other change. |
+| `set_deal_owner` | Works for leads and opportunities. Rejects a lost record with `deal_lost`. |
+| `list_tags` | Counts tags on leads and opportunities. Lost records are not counted. |
 | `get_partner` | Adds `leads` (open leads with this `partner_id`) and `is_customer`. |
 | `list_catalog` | Adds `lost_reasons`. Adds `research` to the activity types. Marks `is_lost` as deprecated. |
 | `search_partners` | No change. Leads are not partners. Use `list_leads` with `query`. |
@@ -717,7 +763,7 @@ A phase must not start before the previous phase is merged.
 | Phase | Scope | Main files | Tests |
 |---|---|---|---|
 | P0 | This ADR. | `docs/adr/0001-lead-opportunity-model.md` | None |
-| P1 | `migrate_007`, schema 7, `lost_reasons` seed, read paths return the new fields. No behaviour change except lost records hidden by default. `is_lost` compatibility. | `app/database.py`, `app/services/deals.py`, `app/services/pipeline_stages.py` | 6.8, plus the existing suite |
+| P1 | `migrate_007`, schema 7, `lost_reasons` seed, read paths return the new fields. Read paths accept a null partner and service, and use the new "open" test (5.8). No behaviour change except lost records hidden by default. `is_lost` compatibility. | `app/database.py`, `app/services/deals.py`, `app/services/call_queue.py`, `app/services/staleness.py`, `app/services/pipeline_stages.py` | 6.8, plus the existing suite |
 | P2 | Lead service layer: create, update (fill-empty), get, list, duplicate detection, mark lost, restore, merge, convert. Partner match code moves to `partners.py`. Activities and tasks accept a null partner. | `app/services/leads.py` (split ingest into `lead_ingest.py` if it gets large), `partners.py`, `activities.py`, `delegated_tasks.py` | Unit tests for 5.4, 5.5, 5.6 and the invariants I1 to I5 |
 | P3 | Ingest change (7.1), CLI flags, client import. | `leads.py`, `routers/api.py`, `scripts/inject_leads.py`, `client_import.py` | Update `test_leads_*`, `test_inject_leads.py`, `test_client_import.py` |
 | P4 | MCP tools (8.1, 8.2, 8.4). | `app/mcp/tools.py` | `test_mcp_tools.py`, a new end-to-end test of section 3 |
@@ -758,8 +804,9 @@ Good:
 
 Bad:
 
-- One table rebuild migration. It is the first exception to the
-  additive-only rule.
+- One table rebuild migration. It is the first rebuild of a table that
+  keeps live data. (`migrate_003` already dropped `rate_limit_hits`, but
+  that table had no data that the app used.)
 - Contact data is in two places (lead columns and partners). D10 limits
   the risk: after conversion, the partner is the source of truth.
 - Breaking changes for ingest jobs and for `list_deals` callers that

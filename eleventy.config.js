@@ -11,6 +11,10 @@ module.exports = function (eleventyConfig) {
   // template engine would otherwise try to parse as real tags.
   eleventyConfig.ignores.add("docs/UI_UPGRADE_PLAN.md");
 
+  // Architecture decision records: internal design history for reviewers,
+  // not user-facing help content.
+  eleventyConfig.ignores.add("docs/adr/**");
+
   // Same files the app itself serves from /static — not copies of a
   // separately maintained stylesheet.
   eleventyConfig.addPassthroughCopy({ "app/static/vendor/pico.min.css": "assets/pico.min.css" });

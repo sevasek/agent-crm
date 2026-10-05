@@ -582,7 +582,7 @@ activities and tasks.
 
 | Release | Behaviour |
 |---|---|
-| Schema 7 release | Existing `is_lost` stages still work. A move into an `is_lost` stage also applies `mark_lost` with reason "Lost stage (migrated)". `create_stage` and `update_stage` refuse `is_lost = 1` (new or existing), so REST and the admin form inherit the rule. `list_catalog` and `GET /api/v1/stages` mark `is_lost` as deprecated. |
+| Schema 7 release | Existing `is_lost` stages still work. A move into an `is_lost` stage also applies `mark_lost` with reason "Lost stage (migrated)". `create_stage` refuses `is_lost = 1`. `update_stage` refuses a change of `is_lost` from 0 to 1. It accepts `is_lost = 1` on a stage that already has it, because the admin stage form (`edit_stage_submit`) sends every role flag on each save; else a label edit on the seeded `lost` stage would fail. REST and the admin form inherit the rule. `list_catalog` and `GET /api/v1/stages` mark `is_lost` as deprecated. |
 | A later release (separate ADR or issue) | The column stays (additive rule). The seed `lost` stage can remain as a compatibility shim until an operator deletes it. |
 
 ### 6.7 Rollback
@@ -608,6 +608,7 @@ lost on rollback. The release notes must say this.
 | A schema 6 fixture with a deal whose `offer_id` points to a missing offer. | The migration completes. The log has a warning. |
 | A schema 6 fixture where all deals were deleted (`sqlite_sequence` has a value, the table is empty). | A new deal after the migration gets an id higher than the old `seq`. |
 | Restore a migrated lost-stage deal. | `active = 1`, `stage` is the default stage. |
+| Edit the label of the seeded `lost` stage in the admin form (the form sends `is_lost = 1`). | The save succeeds. Setting `is_lost = 1` on a stage that does not have it is refused. |
 | Force an error after step 5. | The transaction rolls back. The schema stays at 6. The tables are as before. |
 | Run `init_db()` two times. | The second run does nothing. |
 | A new empty database. | It reaches schema 7. The schema is equal to a migrated database (compare `sqlite_master`). |
@@ -702,8 +703,9 @@ must send `"type": "opportunity"`. The CHANGELOG must say this under
 `GET /api/v1/stages` and `GET /api/v1/stages/{key}`: each stage gets
 `"deprecated_fields": ["is_lost"]` when `is_lost` is true.
 
-`POST /api/v1/stages` and `PATCH /api/v1/stages/{key}`: refuse
-`is_lost = 1` with `invalid_stage_role`. Existing `is_lost` stages stay
+`POST /api/v1/stages` refuses `is_lost = 1`, and `PATCH
+/api/v1/stages/{key}` refuses a change of `is_lost` from 0 to 1, with
+`invalid_stage_role` (section 6.6). Existing `is_lost` stages stay
 as they are until an operator clears the flag or deletes an empty stage.
 A move of a deal into an existing `is_lost` stage still applies
 `mark_lost` (section 6.6).
@@ -813,7 +815,7 @@ A phase must not start before the previous phase is merged.
 | Phase | Scope | Main files | Tests |
 |---|---|---|---|
 | P0 | This ADR. | `docs/adr/0001-lead-opportunity-model.md` | None |
-| P1 | `migrate_007`, schema 7, `lost_reasons` seed, read paths return the new fields. Read paths accept a null partner and service, and use the new "open" test (5.8). `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false` (admin board inherits). Stages write path refuses `is_lost = 1` (6.6). No other behaviour change. | `app/database.py`, `app/services/deals.py`, `app/services/call_queue.py`, `app/services/staleness.py`, `app/services/pipeline_stages.py`, `app/routers/api.py` (stages write) | 6.8, plus the existing suite |
+| P1 | `migrate_007`, schema 7, `lost_reasons` seed, read paths return the new fields. Read paths accept a null partner and service, and use the new "open" test (5.8). `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false` (admin board inherits). Stages write path refuses a new `is_lost = 1` (6.6). No other behaviour change. | `app/database.py`, `app/services/deals.py`, `app/services/call_queue.py`, `app/services/staleness.py`, `app/services/pipeline_stages.py`, `app/routers/api.py` (stages write) | 6.8, plus the existing suite |
 | P2 | Lead service layer: create, update (fill-empty), get, list, duplicate detection (strong vs weak keys, 5.6), mark lost, restore, merge, convert. Partner match code moves to `partners.py`. Activities and tasks accept a null partner. | `app/services/leads.py` (split ingest into `lead_ingest.py` if it gets large), `partners.py`, `activities.py`, `delegated_tasks.py` | Unit tests for 5.4, 5.5, 5.6 and the invariants I1 to I5 |
 | P3 | Ingest change (7.1), CLI flags. Client import stays opportunity by default; `--type lead` is opt-in. | `leads.py`, `routers/api.py`, `scripts/inject_leads.py`, `client_import.py` | Update `test_leads_*`, `test_inject_leads.py`, `test_client_import.py` |
 | P4 | MCP tools (8.1, 8.2, 8.4). | `app/mcp/tools.py` | `test_mcp_tools.py`, a new end-to-end test of section 3 |
@@ -841,7 +843,7 @@ expected row count.
 | Q7 | Must the CRM keep a structured "qualification evidence" record (criteria and the activities that support each one)? | Not now. The `system` activity at conversion records the fit score and the matched criteria. Research notes keep the evidence. |
 | Q8 | Must `create_lead` refuse to create when a strong duplicate (email or website) exists? | No. It returns `possible_duplicates`. The agent decides. Ingest auto-merges on strong keys only: email, or phone + name, or website + name (5.6, 7.1). |
 | Q9 | Must ingest auto-merge on website domain or phone digits alone? | No. Those are weak keys for `find_duplicates` only. Shared hosts and shared reception numbers would merge unrelated leads. |
-| Q10 | When an operator sets `is_lost = 1` on a stage that holds active deals, mark those deals lost, or refuse the write? | Refuse the write from schema 7 (6.6). The move shim still marks a deal lost when it enters an existing `is_lost` stage. |
+| Q10 | When an operator sets `is_lost = 1` on a stage that holds active deals, mark those deals lost, or refuse the write? | Refuse a change from 0 to 1 from schema 7 (6.6). The move shim still marks a deal lost when it enters an existing `is_lost` stage. |
 | Q11 | Must the backfill set `closed_at` on migrated lost deals that have it null? | Yes. Use `updated_at` (6.3). |
 | Q12 | For a lead that already has a `partner_id`, does the fit score mix lead and partner fields? | No. A lead scores from its own columns only (5.7). |
 | Q13 | Does `get_lead` need a last-researched timestamp? | Yes. Return `last_researched_at` and `research_note_count`. `list_leads` accepts `sort = last_research` (8.1). |

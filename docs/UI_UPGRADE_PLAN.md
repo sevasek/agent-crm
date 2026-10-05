@@ -8,23 +8,30 @@ downloaded once and committed into `app/static/vendor/`. Nothing is loaded
 from a CDN at runtime — see `README.md` / `docs/DEPLOY.md`, this app must work
 fully offline and self-hosted. No `package.json`, no Node, no build step.
 
-**Status (verified on `main`, 2026-09-29):** Phases 1–3 have shipped.
+**Status (verified on `main`, 2026-10-06):** Phases 1–3 have shipped.
 Do not re-vendor Pico or htmx, do not redo the polish pass, and do not
 re-implement the pipeline / call-outcome swaps. The phase notes below are
 history so a future agent can see *how* it was done — they are not a
-backlog. Phases 4 and 5 stay deferred and still need a decision; do not
-implement them from this file.
+backlog.
+
+Phases 4 and 5 were decided on 2026-10-06 — no longer "pending a decision."
+Phase 5 (originally three bundled items) was split into separate issues
+since the three items had different outcomes:
 
 | Phase | What | Status | Tracking |
 |---|---|---|---|
 | 1 | Vendored Pico.css 2.1.1, `data-theme="light"` | **Shipped** | [#43](https://github.com/sevasek/agent-crm/issues/43), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 2 | Polish custom CSS on top of Pico | **Shipped** | [#44](https://github.com/sevasek/agent-crm/issues/44), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 3 | Vendored htmx 2.0.11, pipeline oob swaps, call-outcome swaps | **Shipped** | [#45](https://github.com/sevasek/agent-crm/issues/45), [PR #62](https://github.com/sevasek/agent-crm/pull/62) |
-| 4 | SortableJS drag-and-drop kanban | **Deferred** — do not implement | [#46](https://github.com/sevasek/agent-crm/issues/46) |
-| 5 | Tom Select / Alpine.js / real dark mode | **Deferred** — do not implement | [#47](https://github.com/sevasek/agent-crm/issues/47) |
+| 4 | SortableJS drag-and-drop kanban | **Scheduled** — next sprint | [#46](https://github.com/sevasek/agent-crm/issues/46) |
+| 5a | Real dark mode (unlock + redo `--bg-alt`/`.pill-*` as light/dark pairs) | **Scheduled** | [#87](https://github.com/sevasek/agent-crm/issues/87) |
+| 5b | Searchable dropdowns (Tom Select/Choices.js) | **Scheduled** — field(s) to target still need confirming, see #88 | [#88](https://github.com/sevasek/agent-crm/issues/88) |
+| 5c | Alpine.js for client-side UI state | **Decided against** — nothing identified needs it; don't add speculatively | [#47](https://github.com/sevasek/agent-crm/issues/47) (closed) |
 
-Dark mode stays locked to light for launch; `docs/SCOPE.md` already says
-that, and unlocking it is #47.
+Dark mode is being unlocked per #87 (supersedes the "stays locked to light
+for launch" note in `docs/SCOPE.md` — update that doc when #87 ships).
+`data-theme="light"` in `app/templates/base.html` (added in Phase 1) stays
+in place until #87 actually ships; don't remove it from this file.
 
 Pinned versions live in `app/static/vendor/VENDOR.md` (Pico 2.1.1, htmx
 2.0.11 as of the shipping PRs).

@@ -470,9 +470,9 @@ Do these steps for each table: `deals`, then `activities`, then
 
 0. Read `PRAGMA foreign_keys`. If the value is 1, stop the migration with
    an error. (A future change that turns on foreign keys must update this
-   procedure.) Run `PRAGMA foreign_key_check` once for each of the three
-   tables and keep the result (see step 11). Do this step one time, before
-   the first table.
+   procedure.) Run `PRAGMA foreign_key_check(<table>)` for `deals`,
+   `activities`, `delegated_tasks` and `deal_tags`, and keep the result
+   (see step 11). Do this step one time, before the first table.
 1. Read the current `sqlite_sequence.seq` value for the table. Keep it.
 2. Create `<table>_new` with the target DDL (section 5).
 3. Copy the rows: `INSERT INTO <table>_new (<column list>) SELECT
@@ -504,7 +504,11 @@ After the three tables:
 10. Backfill (section 6.3).
 11. Run `PRAGMA foreign_key_check(<table>)` for `deals`, `activities`,
     `delegated_tasks` and `deal_tags`. If it returns a row that step 0 did
-    not return, raise an error. Foreign keys were never enforced, so a
+    not return, raise an error. Compare rows on `(table, rowid, parent)`
+    only. Do not compare `fkid`: the rebuild adds foreign keys, so the
+    `fkid` of an existing foreign key can change. The `rowid` does not
+    change, because each rebuilt table keeps `id` as its `INTEGER PRIMARY
+    KEY`. Foreign keys were never enforced, so a
     live database can already have broken references (for example a
     manual edit, or a v0 file). Those rows must not stop the start-up of
     the app. Log them as a warning.

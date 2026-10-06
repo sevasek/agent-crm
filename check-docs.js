@@ -22,6 +22,7 @@ for (const slug of ["mcp", "scope", "data_model", "deploy", "release", "client_d
 }
 assert(fs.existsSync(path.join(SITE, "index.html")), "site root index.html exists (from docs/index.md)");
 assert(!fs.existsSync(path.join(SITE, "UI_UPGRADE_PLAN")), "UI_UPGRADE_PLAN.md was not built (internal, not user-facing)");
+assert(!fs.existsSync(path.join(SITE, "adr")), "docs/adr/ was not built (internal design records)");
 
 // The manual home page's own nav must not list itself, and must list the rest.
 const home = read("index.html");

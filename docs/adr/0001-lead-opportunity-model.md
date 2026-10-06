@@ -32,7 +32,8 @@ The current data model has no definition of "lead" and no definition of
 
 1. An ingest payload (`app/services/leads.py`).
 2. A partner and a deal together (`icp_criteria` fit score).
-3. A deal in an early stage (the `interested` call outcome, "warm lead").
+3. A deal that a call moved to a nurture stage (the `interested` call
+   outcome, label "Interested (warm lead)").
 
 Each ingested row immediately creates a partner and a deal. Thus:
 
@@ -227,7 +228,8 @@ webhook if the lead has an email address.
 
 A later ingest job sends the same company with a different source.
 
-1. The CRM finds the open lead by website.
+1. The CRM finds the open lead by a strong key: email, or phone and name,
+   or website and name (section 5.6).
 2. The CRM fills the empty fields on the existing lead. It merges tags.
 3. The CRM returns `status = "duplicate_open_lead"` and the `lead_id`.
 
@@ -358,7 +360,8 @@ Conversion procedure (one transaction):
    with `is_default = 1`).
 4. Apply the optional fields in the call (`value_estimate`,
    `expected_close`, `probability`, `offer_id`, `next_action`,
-   `next_action_date`, `owner_key`).
+   `next_action_date`, `owner`). `owner` writes `owner_key`. The tool also
+   accepts `owner_key`, as the existing tools do (`_owner_arg`).
 5. Set `partner_id` on the activities and tasks of the lead (section 5.3).
 6. Write one `system` activity. It records: the conversion, the fit score
    and the matched criteria at this time, the partner action, and the
@@ -380,18 +383,38 @@ The match code moves from `app/services/leads.py` to a shared function in
 ### 5.6 Duplicate detection
 
 `find_duplicates` and ingest use the same function. It compares a set of
-fields with open deal records and with partners. Match keys, in order:
+fields with open deal records and with partners.
+
+Website comparison uses `_website_key()` in `app/services/partners.py`:
+lowercase, strip, remove `http://` or `https://`, remove a leading
+`www.`, remove a trailing `/`. It does not remove the path. So
+`https://example.com/page` and `https://example.com` do not match.
+
+**Strong keys** (ingest auto-merge, and the first results from
+`find_duplicates`). These are the keys that ingest uses now for a
+partner. A lead ingest must not be weaker:
 
 1. Email (lowercase, trimmed).
-2. Phone (digits only, `phone_digits()` in `app/services/phone.py`).
-3. Website domain (lowercase, without `www.` and without the path).
-4. LinkedIn URL (lowercase, without the query string).
-5. Exact company name.
+2. Phone (digits only, `phone_digits()` in `app/services/phone.py`) **and**
+   name (case-insensitive). Name is `company_name` or `contact_name` or
+   `name`, the same as ingest uses now.
+3. Website key **and** name (same name rule as key 2).
 
-Each result has `kind` (`lead`, `opportunity` or `partner`), `id` and
-`matched_on` (the list of keys that matched). Ingest uses only keys 1 to 3
-for an automatic match (section 7.1). The agent decides on the other
-matches.
+**Weak keys** (`find_duplicates` only; the agent decides; ingest does not
+auto-merge):
+
+4. Phone digits only (no name). A shared reception number is a weak match.
+5. Website key only (no name). Skip a shared-host denylist:
+   `facebook.com`, `instagram.com`, `linkedin.com`, `linktr.ee`,
+   `wixsite.com`, `squarespace.com`, `square.site`, `wordpress.com`,
+   `google.com`, `youtu.be`, `youtube.com`.
+6. LinkedIn URL (lowercase, without the query string).
+7. Exact company name.
+
+Each result has `kind` (`lead`, `opportunity` or `partner`), `id`,
+`matched_on` (the list of keys that matched) and `strength`
+(`strong` or `weak`). Ingest uses only the strong keys for an automatic
+match (section 7.1).
 
 ### 5.7 Fit score input
 
@@ -402,15 +425,41 @@ matches.
 | `industry`, `team_size`, `is_company`, `preferred_channel`, `email`, `phone`, `website`, social URL | The lead's own columns. `is_company` is true if `company_name` is set and `contact_name` is empty. | The partner (now). |
 | `source`, `value_estimate`, `pain_points`, `goals` | The deal record (now). | The deal record (now). |
 
-If a lead has a `partner_id`, the lead's own value is used. If it is
-empty, the partner value is used.
+A lead always scores from its own columns. A linked `partner_id` does
+not fill empty lead fields for the score (D10: one source of truth).
+`get_lead` still returns the partner as a separate object when
+`partner_id` is set.
 
-### 5.8 Indexes
+### 5.8 Code that reads deal records
+
+D3, D4 and D6 change two assumptions in the current read code. P1 must
+change these places before a lead or a lost record can exist:
+
+- `list_deals()` in `app/services/deals.py` and the queue query in
+  `app/services/call_queue.py` use `JOIN partners` and `JOIN services`.
+  An inner join drops each row with a null `partner_id` or `service_id`.
+  Use `LEFT JOIN` where a lead can be in the result (`list_deals` with
+  `type = 'lead'` or `'all'`, `list_due_followups`).
+- `list_deals()` is also the admin board query (`app/routers/admin.py`).
+  It must default to `type = 'opportunity'` and `include_lost = false`,
+  the same as the MCP tool (section 8.2). Leads must not appear in a
+  stage column (D14). The board inherits these defaults; P1 does not
+  need a separate admin change.
+- `get_deal_tool` and `create_delegated_task_tool` call
+  `get_partner(deal["partner_id"])` and `get_service(deal["service_id"])`.
+  These calls must accept a null id and return null.
+- `pipeline_stages.closed_stage_keys()` (`is_won` or `is_lost` stages) is
+  the "open" test in `get_open_deal_for_partner_service()` and in
+  `app/services/staleness.py`. After D6, "open" is `active = 1` and the
+  stage is not an `is_won` stage (section 2). Each caller must use the new
+  test. A lead with `active = 1` is open.
+
+### 5.9 Indexes
 
 New: `deals(type, active)`, `deals(email)`, `deals(phone)`,
 `deals(website)`, `deals(lost_reason_id)`, `deals(merged_into_id)`.
 Recreated after the rebuild: all existing indexes on `deals`,
-`activities` and `delegated_tasks` (section 6.2, step 7).
+`activities` and `delegated_tasks` (section 6.2, step 7 lists them).
 
 ## 6. Database migration plan
 
@@ -449,7 +498,9 @@ Do these steps for each table: `deals`, then `activities`, then
 
 0. Read `PRAGMA foreign_keys`. If the value is 1, stop the migration with
    an error. (A future change that turns on foreign keys must update this
-   procedure.)
+   procedure.) Run `PRAGMA foreign_key_check(<table>)` for `deals`,
+   `activities`, `delegated_tasks` and `deal_tags`, and keep the result
+   (see step 11). Do this step one time, before the first table.
 1. Read the current `sqlite_sequence.seq` value for the table. Keep it.
 2. Create `<table>_new` with the target DDL (section 5).
 3. Copy the rows: `INSERT INTO <table>_new (<column list>) SELECT
@@ -465,15 +516,30 @@ Do these steps for each table: `deals`, then `activities`, then
      `activities`, `deal_tags` and `delegated_tasks` to point to
      `deals_old`.
 7. Create all indexes for the table again (the existing names, plus
-   section 5.8).
+   section 5.9). The existing names are: `idx_deals_partner`,
+   `idx_deals_stage`, `idx_deals_owner`, `idx_deals_parent`,
+   `idx_activities_partner`, `idx_activities_deal`,
+   `idx_delegated_tasks_deal`, `idx_delegated_tasks_owner_status`.
 8. Set `sqlite_sequence.seq` for the table to the value from step 1.
-   This prevents the reuse of an `id` from a deleted row.
+   This prevents the reuse of an `id` from a deleted row. `DROP TABLE`
+   removes the row for the old table. Step 3 creates a row only if it
+   copied one or more rows. Thus use an upsert: update the row if it
+   exists, else insert it. Skip this step if step 1 found no row.
 
 After the three tables:
 
 9. Create `lost_reasons` and insert the seed rows (section 5.2).
 10. Backfill (section 6.3).
-11. Run `PRAGMA foreign_key_check`. If it returns rows, raise an error.
+11. Run `PRAGMA foreign_key_check(<table>)` for `deals`, `activities`,
+    `delegated_tasks` and `deal_tags`. If it returns a row that step 0 did
+    not return, raise an error. Compare rows on `(table, rowid, parent)`
+    only. Do not compare `fkid`: the rebuild adds foreign keys, so the
+    `fkid` of an existing foreign key can change. The `rowid` does not
+    change, because each rebuilt table keeps `id` as its `INTEGER PRIMARY
+    KEY`. Foreign keys were never enforced, so a
+    live database can already have broken references (for example a
+    manual edit, or a v0 file). Those rows must not stop the start-up of
+    the app. Log them as a warning.
 12. Run `PRAGMA integrity_check`. If the result is not `ok`, raise an
     error.
 
@@ -482,7 +548,7 @@ After the three tables:
 | Data | Action |
 |---|---|
 | All rows in `deals` | `type = 'opportunity'`, `active = 1`, `priority = 0`. Contact columns stay null (D10). |
-| Rows in `deals` whose `stage` is a stage with `is_lost = 1` | `active = 0`, `lost_reason_id` = "Lost stage (migrated)". `stage` and `closed_at` do not change. |
+| Rows in `deals` whose `stage` is a stage with `is_lost = 1` | `active = 0`, `lost_reason_id` = "Lost stage (migrated)". `stage` does not change. If `closed_at` is null, set it from `updated_at`. |
 | `activities`, `delegated_tasks` | No change to data. `source_url` is null. |
 
 Result: every existing record keeps its id, partner, service, stage, tags,
@@ -492,8 +558,9 @@ activities and tasks.
 
 | Area | Before | After |
 |---|---|---|
-| Deals list, pipeline, `list_deals` | Show deals in the `lost` stage. | Hide lost records by default. `include_lost=true` shows them (section 8.2). |
-| Ingest | Creates a partner and a deal. | Creates a lead only (section 7.1). |
+| Deals list, pipeline, `list_deals` | Show deals in the `lost` stage. | Hide lost records by default. `include_lost=true` shows them (section 8.2). The admin board uses `list_deals()`, so the Lost column is empty unless the operator uses the lost filter (P6). |
+| Ingest (`POST /api/v1/leads`, `ingest_leads`, `inject_leads.py`) | Creates a partner and a deal. | Creates a lead only (section 7.1). |
+| Client import (`import_clients.py`) | Creates a partner and a deal. | Unchanged default: still a partner and an opportunity. `--type lead` is opt-in. |
 | Everything else | | No change for existing records, because they are all opportunities. |
 
 ### 6.5 Optional script: early opportunities to leads
@@ -515,8 +582,8 @@ activities and tasks.
 
 | Release | Behaviour |
 |---|---|
-| Schema 7 release | `is_lost` still works. A move into an `is_lost` stage also sets `active = 0` and the lost reason "Lost stage (migrated)". `list_catalog` and `GET /api/v1/stages` mark `is_lost` as deprecated. |
-| A later release (separate ADR or issue) | The admin UI and the stages API stop accepting `is_lost = 1` on new stages. The column stays (additive rule). |
+| Schema 7 release | Existing `is_lost` stages still work. A move into an `is_lost` stage also applies `mark_lost` with reason "Lost stage (migrated)". `create_stage` refuses `is_lost = 1`. `update_stage` refuses a change of `is_lost` from 0 to 1. It accepts `is_lost = 1` on a stage that already has it, because the admin stage form (`edit_stage_submit`) sends every role flag on each save; else a label edit on the seeded `lost` stage would fail. REST and the admin form inherit the rule. `list_catalog` and `GET /api/v1/stages` mark `is_lost` as deprecated. |
+| A later release (separate ADR or issue) | The column stays (additive rule). The seed `lost` stage can remain as a compatibility shim until an operator deletes it. |
 
 ### 6.7 Rollback
 
@@ -537,6 +604,11 @@ lost on rollback. The release notes must say this.
 | Migrate a version-0 fixture whose `deals` columns are in the old order. | Column values go to the correct columns. |
 | Delete the highest deal id before the migration, then insert a new deal after it. | The new id is higher than the deleted id. |
 | A lost-stage deal. | `active = 0`, reason "Lost stage (migrated)". |
+| A lost-stage deal whose `closed_at` is null. | `closed_at` equals that row's `updated_at`. |
+| A schema 6 fixture with a deal whose `offer_id` points to a missing offer. | The migration completes. The log has a warning. |
+| A schema 6 fixture where all deals were deleted (`sqlite_sequence` has a value, the table is empty). | A new deal after the migration gets an id higher than the old `seq`. |
+| Restore a migrated lost-stage deal. | `active = 1`, `stage` is the default stage. |
+| Edit the label of the seeded `lost` stage in the admin form (the form sends `is_lost = 1`). | The save succeeds. Setting `is_lost = 1` on a stage that does not have it is refused. |
 | Force an error after step 5. | The transaction rolls back. The schema stays at 6. The tables are as before. |
 | Run `init_db()` two times. | The second run does nothing. |
 | A new empty database. | It reaches schema 7. The schema is equal to a migrated database (compare `sqlite_master`). |
@@ -564,9 +636,9 @@ and invariant I4 applies. Else the status is `invalid`.
 
 Behaviour for `type = lead`:
 
-1. Run duplicate detection (section 5.6) with keys 1 to 3 against open
-   deal records (leads and opportunities). Do not match partners
-   automatically.
+1. Run duplicate detection (section 5.6) with the **strong** keys
+   against open deal records (leads and opportunities). Do not match
+   partners automatically. Do not auto-merge on a weak key.
 2. One open match: fill the empty fields on that record and merge the
    tags. Status `duplicate_open_lead` (if the match is a lead) or
    `duplicate_open_opportunity` (if the match is an opportunity). For an
@@ -604,13 +676,23 @@ Response, per lead:
 `lead_id` is equal to `deal_id` when `type = lead`. `lead_id` is null when
 `type = opportunity`.
 
+When a request has no `type` key, the default is `lead`. For one
+release, REST also sets the header
+`Deprecation: type omitted; default is now lead` and each item in the
+response includes `"type_defaulted": true`. Do not write a `system`
+activity per ingested row (that would flood the timeline).
+
 CLI `scripts/inject_leads.py`: same changes. A new flag
 `--type opportunity` keeps the old behaviour for existing jobs. The exit
 code is 0 when every lead has a status other than `invalid` and
-`invalid_service`.
+`invalid_service`. The current allow-list `SUCCESS_STATUSES` must gain
+`duplicate_open_lead` and `duplicate_open_opportunity`. Else a successful
+match would exit 1.
 
-`scripts/import_clients.py` (`app/services/client_import.py`): same
-change, with the same `--type` flag.
+`scripts/import_clients.py` (`app/services/client_import.py`) creates
+confirmed clients. It keeps the current behaviour: it creates or matches
+a partner and creates an opportunity. A `--type lead` flag is opt-in for
+research-style markdown. It does not inherit the ingest default.
 
 Migration note for operators: an ETL job that needs the old behaviour
 must send `"type": "opportunity"`. The CHANGELOG must say this under
@@ -619,7 +701,14 @@ must send `"type": "opportunity"`. The CHANGELOG must say this under
 ### 7.2 Stages API
 
 `GET /api/v1/stages` and `GET /api/v1/stages/{key}`: each stage gets
-`"deprecated_fields": ["is_lost"]` when `is_lost` is true. No other change.
+`"deprecated_fields": ["is_lost"]` when `is_lost` is true.
+
+`POST /api/v1/stages` refuses `is_lost = 1`, and `PATCH
+/api/v1/stages/{key}` refuses a change of `is_lost` from 0 to 1, with
+`invalid_stage_role` (section 6.6). Existing `is_lost` stages stay
+as they are until an operator clears the flag or deletes an empty stage.
+A move of a deal into an existing `is_lost` stage still applies
+`mark_lost` (section 6.6).
 
 ### 7.3 Lost reasons API
 
@@ -634,12 +723,12 @@ with MCP (section 8.1). Q6 asks if REST needs them.
 |---|---|---|---|
 | `create_lead` | Contact fields (5.1), `name`, `service_slug`, `source`, `tags`, `pain_points`, `goals`, `value_estimate`, `probability`, `priority`, `expected_close`, `next_action`, `next_action_date`, `owner`, `external_ref`, `partner_id` (optional). | The lead, and `possible_duplicates` (5.6). It creates the lead also when duplicates exist. | `invalid` (I4), `invalid_service`, `partner_not_found` |
 | `update_lead` | `lead_id`, any field from `create_lead`, `fill_empty_only` (default `true`), `tags` / `add_tags` / `remove_tags`. | The updated lead. | `not_found`, `not_a_lead`, `lead_lost` |
-| `get_lead` | `lead_id` | The lead, `tags`, recent activities (research notes first), `fit` (score, matched, unmatched), `possible_duplicates`, `conversion_readiness`. | `not_found`, `not_a_lead` |
-| `list_leads` | `query` (name, company, email, phone, website), `owner`, `service_slug`, `tags`, `source_prefix`, `min_fit`, `due_only`, `include_lost` (default `false`), `sort` (`fit`, `created`, `updated`, `next_action_date`), `limit` (max 50). | Leads with `fit_score` and a short `conversion_readiness`. | |
+| `get_lead` | `lead_id` | The lead, `tags`, recent activities (research notes first), `last_researched_at` (max `occurred_at` of `type = 'research'`), `research_note_count`, `fit` (score, matched, unmatched), `possible_duplicates`, `conversion_readiness`. | `not_found`, `not_a_lead` |
+| `list_leads` | `query` (name, company, email, phone, website), `owner`, `service_slug`, `tags`, `source_prefix`, `min_fit`, `due_only`, `include_lost` (default `false`), `sort` (`fit`, `created`, `updated`, `next_action_date`, `last_research`), `limit` (max 50). | Leads with `fit_score`, `last_researched_at`, `research_note_count` and a short `conversion_readiness`. | |
 | `find_duplicates` | `lead_id`, or a set of contact fields. | Matches with `kind`, `id`, `matched_on`. | `not_found` |
 | `convert_lead` | `lead_id`, `partner_action` (`auto`, `link`, `create`), `partner_id`, `service_slug`, `stage`, `value_estimate`, `expected_close`, `probability`, `offer_id`, `next_action`, `next_action_date`, `owner`, `note`. | The opportunity, the partner, `partner_created` (bool), the `system` activity id. | See 5.4 |
 | `mark_lost` | `deal_id` (lead or opportunity), `lost_reason_id` or `lost_reason` (name), `note`. | The record. `nurture` result when the reason has `triggers_nurture`. | `not_found`, `already_lost`, `invalid_lost_reason` |
-| `restore_deal` | `deal_id` | The record with `active = 1`. Clears `lost_reason_id`, `lost_note`, `closed_at`. | `not_found`, `not_lost`, `merged` (a merged record cannot be restored) |
+| `restore_deal` | `deal_id` | The record with `active = 1`. Clears `lost_reason_id`, `lost_note`, `closed_at`. If the record is an opportunity in an `is_lost` stage (section 6.3), it also moves the stage to the stage with `is_default = 1`. Else the record would be open and in a lost stage at the same time. Writes a `system` activity. | `not_found`, `not_lost`, `merged` (a merged record cannot be restored) |
 | `merge_leads` | `target_id`, `source_ids` (max 10). Target and sources are leads, or the target is an opportunity and the sources are leads. | The target, and the ids that were merged. | `not_found`, `invalid_merge` (an opportunity as a source, a lost record, the same id) |
 | `list_lost_reasons` / `create_lost_reason` / `update_lost_reason` | `name`, `triggers_nurture`, `active` | The reason(s). | `duplicate_name` |
 
@@ -667,6 +756,12 @@ the target, in order of `created_at`. Move `activities`, `deal_tags` and
 "Duplicate" and `merged_into_id = target_id`. Write one `system` activity
 on the target with the source ids.
 
+- `deal_tags` has the primary key `(deal_id, tag)`. A tag that the target
+  already has must not cause an error. Use `INSERT OR IGNORE` for the
+  target, then delete the rows of the source.
+- If the target has a `partner_id`, set it on each moved `activities` and
+  `delegated_tasks` row where `partner_id` is null (same rule as 5.3).
+
 ### 8.2 Changed tools
 
 | Tool | Change |
@@ -680,9 +775,12 @@ on the target with the source ids.
 | `bulk_update_deals` | Selects opportunities only. Gets `mark_lost` (with `lost_reason`) as a bulk action. |
 | `get_call_queue` | Opportunities only, `active = 1`. No other change. See Q2 for leads. |
 | `list_due_followups` | Includes leads and opportunities. Each row has `type`. New argument `type`. |
-| `log_activity` | `partner_id` is optional when `deal_id` is given. New type `research`. New argument `source_url` (http or https only, max 2,000 characters). |
+| `log_activity` | `partner_id` is optional when `deal_id` is given. Then the CRM uses the `partner_id` of the deal record (it can be null for a lead). The current `deal_mismatch` check applies only when the call gives a `partner_id` and the deal record has one. New type `research`. New argument `source_url` (http or https only, max 2,000 characters). |
 | `list_activities` | Accepts `deal_id` for a lead without a partner. |
-| `create_delegated_task` | Accepts a lead. `partner_id` is null if the lead has no partner. |
+| `create_delegated_task` | Accepts a lead. `partner_id` is null if the lead has no partner. The `partner` in the response is null. |
+| `list_delegated_tasks`, `get_delegated_task`, `update_delegated_task`, `complete_delegated_task` | `partner_id` can be null. No other change. |
+| `set_deal_owner` | Works for leads and opportunities. Rejects a lost record with `deal_lost`. |
+| `list_tags` | Counts tags on leads and opportunities. Lost records are not counted. |
 | `get_partner` | Adds `leads` (open leads with this `partner_id`) and `is_customer`. |
 | `list_catalog` | Adds `lost_reasons`. Adds `research` to the activity types. Marks `is_lost` as deprecated. |
 | `search_partners` | No change. Leads are not partners. Use `list_leads` with `query`. |
@@ -717,9 +815,9 @@ A phase must not start before the previous phase is merged.
 | Phase | Scope | Main files | Tests |
 |---|---|---|---|
 | P0 | This ADR. | `docs/adr/0001-lead-opportunity-model.md` | None |
-| P1 | `migrate_007`, schema 7, `lost_reasons` seed, read paths return the new fields. No behaviour change except lost records hidden by default. `is_lost` compatibility. | `app/database.py`, `app/services/deals.py`, `app/services/pipeline_stages.py` | 6.8, plus the existing suite |
-| P2 | Lead service layer: create, update (fill-empty), get, list, duplicate detection, mark lost, restore, merge, convert. Partner match code moves to `partners.py`. Activities and tasks accept a null partner. | `app/services/leads.py` (split ingest into `lead_ingest.py` if it gets large), `partners.py`, `activities.py`, `delegated_tasks.py` | Unit tests for 5.4, 5.5, 5.6 and the invariants I1 to I5 |
-| P3 | Ingest change (7.1), CLI flags, client import. | `leads.py`, `routers/api.py`, `scripts/inject_leads.py`, `client_import.py` | Update `test_leads_*`, `test_inject_leads.py`, `test_client_import.py` |
+| P1 | `migrate_007`, schema 7, `lost_reasons` seed, read paths return the new fields. Read paths accept a null partner and service, and use the new "open" test (5.8). `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false` (admin board inherits). Stages write path refuses a new `is_lost = 1` (6.6). No other behaviour change. | `app/database.py`, `app/services/deals.py`, `app/services/call_queue.py`, `app/services/staleness.py`, `app/services/pipeline_stages.py`, `app/routers/api.py` (stages write) | 6.8, plus the existing suite |
+| P2 | Lead service layer: create, update (fill-empty), get, list, duplicate detection (strong vs weak keys, 5.6), mark lost, restore, merge, convert. Partner match code moves to `partners.py`. Activities and tasks accept a null partner. | `app/services/leads.py` (split ingest into `lead_ingest.py` if it gets large), `partners.py`, `activities.py`, `delegated_tasks.py` | Unit tests for 5.4, 5.5, 5.6 and the invariants I1 to I5 |
+| P3 | Ingest change (7.1), CLI flags. Client import stays opportunity by default; `--type lead` is opt-in. | `leads.py`, `routers/api.py`, `scripts/inject_leads.py`, `client_import.py` | Update `test_leads_*`, `test_inject_leads.py`, `test_client_import.py` |
 | P4 | MCP tools (8.1, 8.2, 8.4). | `app/mcp/tools.py` | `test_mcp_tools.py`, a new end-to-end test of section 3 |
 | P5 | Fit score input (5.7), call queue filter, follow-ups, nurture from lost reasons (8.3). | `icp.py`, `call_queue.py`, `scripts/staleness_gate.py`, `nurture.py` | `test_icp.py`, `test_call_queue.py`, `test_nurture_integration.py`, `test_staleness.py` |
 | P6 | Admin UI: Leads list, lead form, convert dialog (with partner candidates), lost dialog, lost reasons page, type badge, lost filter. | `app/routers/admin.py`, `app/templates/admin/*` | `test_a11y.py`, `test_htmx.py`, new view tests |
@@ -736,14 +834,19 @@ expected row count.
 
 | ID | Question | Recommended answer |
 |---|---|---|
-| Q1 | Must `POST /api/v1/leads` default to `type = lead` (breaking) or to `type = opportunity` (compatible)? | `lead`. The project is pre-1.0. The purpose of this change is to stop unverified data in `partners`. |
+| Q1 | Must `POST /api/v1/leads` default to `type = lead` (breaking) or to `type = opportunity` (compatible)? | `lead`. The project is pre-1.0. The purpose of this change is to stop unverified data in `partners`. When `type` is omitted, set the deprecation header and `type_defaulted` (7.1). Client import does not inherit this default. |
 | Q2 | Can the call queue include leads with a phone number (qualification calls)? | Not in this change. Add a later `include_leads` argument if an operator needs it. |
 | Q3 | Must the operator be able to set a minimum fit score for conversion? | No. Keep it as agent judgement (D9). Reconsider after real use. |
 | Q4 | Do leads need a status (New, Working) apart from `active` and `next_action_date`? | No. Use tags if an operator needs more states. |
 | Q5 | When an opportunity is lost and later the same partner shows interest again, is that a new lead or a restore? | A new lead (or a new opportunity) linked to the partner. Restore is for mistakes. |
 | Q6 | Do lost reasons need a REST API? | No. Admin UI and MCP are sufficient. |
 | Q7 | Must the CRM keep a structured "qualification evidence" record (criteria and the activities that support each one)? | Not now. The `system` activity at conversion records the fit score and the matched criteria. Research notes keep the evidence. |
-| Q8 | Must `create_lead` refuse to create when a strong duplicate (email or website) exists? | No. It returns `possible_duplicates`. The agent decides. Ingest auto-merges on strong keys (7.1). |
+| Q8 | Must `create_lead` refuse to create when a strong duplicate (email or website) exists? | No. It returns `possible_duplicates`. The agent decides. Ingest auto-merges on strong keys only: email, or phone + name, or website + name (5.6, 7.1). |
+| Q9 | Must ingest auto-merge on website domain or phone digits alone? | No. Those are weak keys for `find_duplicates` only. Shared hosts and shared reception numbers would merge unrelated leads. |
+| Q10 | When an operator sets `is_lost = 1` on a stage that holds active deals, mark those deals lost, or refuse the write? | Refuse a change from 0 to 1 from schema 7 (6.6). The move shim still marks a deal lost when it enters an existing `is_lost` stage. |
+| Q11 | Must the backfill set `closed_at` on migrated lost deals that have it null? | Yes. Use `updated_at` (6.3). |
+| Q12 | For a lead that already has a `partner_id`, does the fit score mix lead and partner fields? | No. A lead scores from its own columns only (5.7). |
+| Q13 | Does `get_lead` need a last-researched timestamp? | Yes. Return `last_researched_at` and `research_note_count`. `list_leads` accepts `sort = last_research` (8.1). |
 
 ## 11. Consequences
 
@@ -758,8 +861,9 @@ Good:
 
 Bad:
 
-- One table rebuild migration. It is the first exception to the
-  additive-only rule.
+- One table rebuild migration. It is the first rebuild of a table that
+  keeps live data. (`migrate_003` already dropped `rate_limit_hits`, but
+  that table had no data that the app used.)
 - Contact data is in two places (lead columns and partners). D10 limits
   the risk: after conversion, the partner is the source of truth.
 - Breaking changes for ingest jobs and for `list_deals` callers that

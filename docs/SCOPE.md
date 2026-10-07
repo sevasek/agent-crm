@@ -20,6 +20,12 @@ seeded once as editable data, not a hardcoded workflow. `offers` and
 `scripts/seed_services.py` is an optional example-data script. Example content
 must not live inside `app/` or run automatically at startup.
 
+One exception is opt-in and off unless an operator sets `HC_LADDER_ENABLED`:
+the Health Check ladder ported from sevasek's own CRM (a Willow kickoff task
+at `hc_paid`, and automation-delivery / automations-support child deals at
+`hc_presented`). Other deployments leave the flag unset. It does not seed
+services, stages, or prices.
+
 ## In scope
 
 - **Contacts**: one `partners` table for companies and people.

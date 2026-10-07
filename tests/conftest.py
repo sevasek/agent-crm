@@ -18,6 +18,10 @@ os.environ.pop("CRM_API_KEY", None)
 os.environ.pop("CRM_STAGES_API_KEY", None)
 os.environ.pop("TASK_WEBHOOK_URL", None)
 os.environ.pop("TASK_WEBHOOK_TOKEN", None)
+os.environ.pop("HC_LADDER_ENABLED", None)
+os.environ.pop("DELEGATED_TASK_OWNERS", None)
+os.environ.pop("LEADS_IP_ALLOWLIST", None)
+os.environ.pop("STAGES_IP_ALLOWLIST", None)
 
 import pytest
 from fastapi.testclient import TestClient
@@ -40,6 +44,10 @@ def db(tmp_path, monkeypatch):
     monkeypatch.delenv("CRM_STAGES_API_KEY", raising=False)
     monkeypatch.delenv("TASK_WEBHOOK_URL", raising=False)
     monkeypatch.delenv("TASK_WEBHOOK_TOKEN", raising=False)
+    monkeypatch.delenv("HC_LADDER_ENABLED", raising=False)
+    monkeypatch.delenv("DELEGATED_TASK_OWNERS", raising=False)
+    monkeypatch.delenv("LEADS_IP_ALLOWLIST", raising=False)
+    monkeypatch.delenv("STAGES_IP_ALLOWLIST", raising=False)
     monkeypatch.setattr(database, "DB_PATH", str(tmp_path / "test.db"))
     database.init_db()
     return database

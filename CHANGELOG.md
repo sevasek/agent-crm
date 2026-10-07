@@ -12,6 +12,25 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Added
+
+- Health Check ladder (`HC_LADDER_ENABLED`, default off). When set, moving a
+  `health-check` deal to `hc_paid` creates Willow's "Send HC kickoff" task,
+  and moving it to `hc_presented` spawns `automation-delivery` and
+  `automations-support` child deals (`source` `hc-spawn:<id>`, no price).
+- `docker-compose.traefik.yml`: no published host port, network alias `crm`
+  so other containers can call `http://crm:8000`, Traefik labels.
+- `LEADS_IP_ALLOWLIST` and `STAGES_IP_ALLOWLIST`. Unset means no IP
+  restriction. `/mcp` is not on either list.
+- `DELEGATED_TASK_OWNERS`. When set, `list_catalog` returns
+  `delegated_task_owners`.
+- Production compose bind-mounts `./backups` at `/app/backups` so the
+  automatic pre-upgrade snapshot can be written on a read-only root.
+  The entrypoint chowns that directory when it exists.
+- `.github/workflows/deploy.yml`, skipped unless repository variables
+  `DEPLOY_ENABLED=true` and `DEPLOY_REPOSITORY` equals this repository.
+- [`docs/cutover-from-sevasek-crm.md`](docs/cutover-from-sevasek-crm.md).
+
 ## [0.1.0] - 2026-10-06
 
 ### Added

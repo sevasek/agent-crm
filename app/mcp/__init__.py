@@ -49,3 +49,13 @@ INSTRUCTIONS = (
     "(notified_at, last_attempt_at, last_error). "
     "If a tool returns ok=false, fix the arguments or search again — do not guess."
 )
+
+
+def server_instructions() -> str:
+    """Initialize instructions. The Health Check ladder sentence is appended
+    only when that sevasek workflow is switched on."""
+    from app.services.hc_ladder import ladder_enabled, ladder_instruction
+
+    if not ladder_enabled():
+        return INSTRUCTIONS
+    return f"{INSTRUCTIONS} {ladder_instruction()}"

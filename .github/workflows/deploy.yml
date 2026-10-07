@@ -1,0 +1,69 @@
+# Opt-in SSH deploy for the operator VPS. Does not run for forks, and does
+# not run for this repository until an admin sets repository variables:
+#
+#   DEPLOY_ENABLED=true
+#   DEPLOY_REPOSITORY=sevasek/agent-crm
+#
+# Secrets (Actions, not variables): DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH,
+# DEPLOY_SSH_KEY, DEPLOY_SSH_KNOWN_HOSTS.
+#
+# The SSH user is the server account that owns the checkout and ./data
+# (uid 1004 on the sevasek VPS). The workflow does not sudo. APP_UID in
+# that host's .env must be the same uid. Leave the variables unset until
+# the cutover; a push to main only skips this job.
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to check out on the server (branch, tag, or full SHA)
+        required: false
+        default: main
+        type: string
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: >-
+      vars.DEPLOY_ENABLED == 'true' &&
+      vars.DEPLOY_REPOSITORY == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DEPLOY_HOST}" ] || [ -z "${DEPLOY_USER}" ] || [ -z "${DEPLOY_PATH}" ] || [ -z "${DEPLOY_SSH_KEY}" ] || [ -z "${DEPLOY_SSH_KNOWN_HOSTS}" ]; then
+            echo "DEPLOY_HOST, DEPLOY_USER, DEPLOY_PATH, DEPLOY_SSH_KEY, and DEPLOY_SSH_KNOWN_HOSTS must be set" >&2
+            exit 1
+          fi
+          case "${DEPLOY_REF}" in
+            *[!A-Za-z0-9._/-]*) echo "Refusing unsafe ref" >&2; exit 1 ;;
+          esac
+          case "${DEPLOY_PATH}" in
+            *[!A-Za-z0-9._/-]*) echo "Refusing unsafe path" >&2; exit 1 ;;
+          esac
+          case "${DEPLOY_USER}" in
+            *[!A-Za-z0-9._-]*) echo "Refusing unsafe user" >&2; exit 1 ;;
+          esac
+          install -m 700 -d "${HOME}/.ssh"
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > "${HOME}/.ssh/deploy_key"
+          chmod 600 "${HOME}/.ssh/deploy_key"
+          printf '%s\n' "${DEPLOY_SSH_KNOWN_HOSTS}" > "${HOME}/.ssh/known_hosts"
+          chmod 600 "${HOME}/.ssh/known_hosts"
+          ssh -i "${HOME}/.ssh/deploy_key" -o UserKnownHostsFile="${HOME}/.ssh/known_hosts" -o StrictHostKeyChecking=yes \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "set -eu; cd '${DEPLOY_PATH}'; git fetch origin; git checkout --detach '${DEPLOY_REF}'; docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.traefik.yml up -d --build; docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.traefik.yml ps"

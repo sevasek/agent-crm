@@ -54,6 +54,7 @@ from app.services.deals import (
     validate_parent_link,
 )
 from app.services.delegated_tasks import (
+    configured_task_owners,
     default_owner,
     TASK_STATUSES,
     clean_task_status,
@@ -462,7 +463,7 @@ def list_tags_tool(_arguments):
 
 
 def list_catalog_tool(_arguments):
-    return _ok(
+    payload = dict(
         services=[service_brief(s) for s in list_services(active_only=True)],
         stages=[stage_brief(s) for s in pipeline_stages.list_stages()],
         offers=[offer_brief(o) for o in list_offers(active_only=True)],
@@ -473,6 +474,12 @@ def list_catalog_tool(_arguments):
         delegated_task_default_owner=default_owner(),
         delegated_task_statuses=list(TASK_STATUSES),
     )
+    # Live sevasek/crm always returns this list. Other clients leave the env
+    # unset so the key stays absent and bots are not told a fixed owner enum.
+    owners = configured_task_owners()
+    if owners:
+        payload["delegated_task_owners"] = owners
+    return _ok(**payload)
 
 
 def ingest_leads_tool(arguments):
@@ -2052,11 +2059,17 @@ TOOL_BY_NAME = {tool["name"]: tool for tool in TOOLS}
 
 
 def list_tool_defs():
+    from app.services.hc_ladder import ladder_enabled, ladder_instruction
+
+    hc_note = f" {ladder_instruction()}" if ladder_enabled() else ""
     defs = []
     for tool in TOOLS:
+        description = tool["description"]
+        if hc_note and tool["name"] == "set_deal_stage":
+            description = description + hc_note
         defs.append({
             "name": tool["name"],
-            "description": tool["description"],
+            "description": description,
             "inputSchema": tool["inputSchema"],
             "annotations": tool["annotations"],
         })

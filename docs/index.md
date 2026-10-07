@@ -8,4 +8,5 @@ For installing it, see the [README Quick start](https://github.com/sevasek/agent
 - **[MCP: the agent interface](/mcp/)** — the tool set an AI agent gets over `/mcp`.
 - **[New client instance](/client_deploy/)** — stand up a separate CRM on a VPS.
 - **[Deploy](/deploy/)** — production reverse proxy and TLS.
+- **[Cutover from sevasek CRM](/cutover-from-sevasek-crm/)** — replacing crm.sevasek.com with this app.
 - **[Cutting a release](/release/)** — the release checklist.

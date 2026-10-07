@@ -182,6 +182,37 @@ server {
 Change `proxy_pass` if `CRM_PORT` is not 8000. Reload nginx after edits:
 `sudo nginx -t && sudo systemctl reload nginx`.
 
+## Traefik
+
+When Traefik is already the proxy, add `docker-compose.traefik.yml` on top
+of the prod file. That overlay removes the loopback port publish, joins an
+external network (`TRAEFIK_NETWORK`, default `proxy`), and gives the app the
+network alias `crm` so other containers call `http://crm:8000`. Traefik
+labels route `CRM_HOST` to container port 8000.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  -f docker-compose.traefik.yml up -d --build
+```
+
+Do not put an IP allowlist on the Traefik router for `/mcp` or `/oauth/*`.
+`LEADS_IP_ALLOWLIST` and `STAGES_IP_ALLOWLIST` are optional app-level lists
+for `POST /api/v1/leads` and `/api/v1/stages` only. Leave them unset unless
+you need them. Set `TRUSTED_PROXIES` to the Docker network Traefik uses so
+the allowlist sees the real client.
+
+`APP_UID` and `APP_GID` default to 1000. A data directory owned by another
+uid and mode `0700` will not start under the prod capability set. Set the
+two variables to that uid and gid.
+
+The prod file bind-mounts `./backups` at `/app/backups` (the entrypoint
+chowns it when the directory exists) so a schema upgrade can write its
+pre-migrate snapshot on the read-only root filesystem. The app container
+is capped at 256 MB (`mem_limit: 256m`).
+
+Replacing an existing sevasek CRM host is
+[`cutover-from-sevasek-crm.md`](cutover-from-sevasek-crm.md), not this file.
+
 ## Offboarding a customer
 
 There is no export or delete route in the app — only pipeline stages, offers,

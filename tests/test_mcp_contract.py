@@ -1,9 +1,9 @@
 """MCP names and fields the live sevasek bots already call.
 
 The live tool list was read from the crm.sevasek.com MCP connection on
-2026-10-07 (27 tools). The review expected 28 plus list_tags. What that
-connection actually exposes is these 27; agent-crm adds list_tags and
-nothing else. Extra properties are allowed. A missing live property is not.
+2026-10-07 (27 tools). agent-crm adds list_tags and the stage-automation
+tools. Live names and their argument names stay. Extra properties are
+allowed. A missing live property is not.
 """
 from app.mcp.tools import TOOLS
 from app.services.leads import ALLOWED_LEAD_KEYS
@@ -49,14 +49,22 @@ LIVE_INGEST_LEAD_FIELDS = {
 }
 
 
-def test_tool_list_is_live_tools_plus_list_tags():
+STAGE_AUTOMATION_TOOLS = {
+    "list_stage_automations",
+    "create_stage_automation",
+    "update_stage_automation",
+    "delete_stage_automation",
+}
+
+
+def test_tool_list_keeps_live_tools_and_adds_stage_automations():
     names = [tool["name"] for tool in TOOLS]
     assert len(names) == len(set(names))
     assert "list_tags" in names
-    assert set(names) == set(LIVE_TOOL_PROPS) | {"list_tags"}
-    # 27 live tools + list_tags. Not 29: the live connection does not expose
-    # a 28th tool for list_tags to sit on top of.
-    assert len(names) == 28
+    # 27 live tools, plus list_tags, plus stage automations. Live argument
+    # names are pinned below and are not renamed.
+    assert set(names) == set(LIVE_TOOL_PROPS) | {"list_tags"} | STAGE_AUTOMATION_TOOLS
+    assert len(names) == 32
 
 
 def test_live_tool_arguments_are_accepted():

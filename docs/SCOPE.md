@@ -20,11 +20,12 @@ seeded once as editable data, not a hardcoded workflow. `offers` and
 `scripts/seed_services.py` is an optional example-data script. Example content
 must not live inside `app/` or run automatically at startup.
 
-One exception is opt-in and off unless an operator sets `HC_LADDER_ENABLED`:
-the Health Check ladder ported from sevasek's own CRM (a Willow kickoff task
-at `hc_paid`, and automation-delivery / automations-support child deals at
-`hc_presented`). Other deployments leave the flag unset. It does not seed
-services, stages, or prices.
+Stage automations follow the same rule. A deal entering a stage runs whatever
+rows an operator saved (a delegated task, child deals, or both), scoped
+optionally to one service and one offer. A fresh database has none, so a
+stage change does nothing extra. `scripts/seed_sevasek_automations.py` is the
+sevasek import for that table. It does not run at startup and it does not
+insert services, stages, or prices.
 
 ## In scope
 

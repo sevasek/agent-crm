@@ -94,7 +94,7 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `ingest_leads` | Bulk lead ingest. Email is optional. Matching order: email, then phone + name, then website + name, then name within the parent. Rows with a company and phone create a company partner and a deal. Optional `tags` on a lead are merged; omitting `tags` leaves the existing set alone. |
 | `create_partner` / `update_partner` | `update_partner` fills empty fields by default. |
 | `create_deal` / `update_deal` | `offer_id`, `owner_key` / `owner`, `external_ref`, `parent_deal_id` (same partner, cycles rejected), and tags. `create_deal` takes `tags`. `update_deal` takes `tags` (replace; `[]` clears) or `add_tags` / `remove_tags` (merge; remove wins if a tag is in both). A duplicate open deal from `create_deal` is returned unchanged — use `add_tags` or `ingest_leads` to merge. |
-| `set_deal_stage` | Move a deal to any configured stage. Entering a `triggers_nurture` stage fires the nurture webhook. Entering an `is_won` stage from a non-won stage fires the deal-won webhook. When `HC_LADDER_ENABLED` is set, a `health-check` deal moved to `hc_paid` or `hc_presented` also runs the Health Check ladder (see the cutover note below). |
+| `set_deal_stage` | Move a deal to any configured stage. Entering a `triggers_nurture` stage fires the nurture webhook. Entering an `is_won` stage from a non-won stage fires the deal-won webhook. Enabled stage automations for that stage run after the move. |
 | `record_call_outcome` | One of `no_answer`, `interested`, `meeting_scheduled`, `won`, `not_interested`, with an optional note. Targets resolve by stage role, not by name; `no_answer` leaves the stage so the deal stays in today's queue. |
 | `log_activity` | Add a `call`, `email`, `meeting` or `note` to the timeline. |
 | `create_service` / `update_service` | Add or change a catalogue service (`slug` is idempotent on create; `active=false` hides it without deleting; `nurture_list_slug`). |
@@ -106,27 +106,49 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `get_delegated_task` | Full task row plus partner and deal, with webhook `notified` / `notified_at` / `last_attempt_at` / `last_error`. |
 | `update_delegated_task` | Change `status`, `due_date`, `brief`, `result_notes`, `owner`. |
 | `complete_delegated_task` | Sets `status=done`, stores `result_notes` and logs a note on the deal timeline. |
+| `list_stage_automations` | Every stage automation, including disabled ones. Empty until an operator adds one. |
+| `create_stage_automation` | `name`, `stage_key`, optional `service_slug` / `service_id` / `offer_id`, `enabled`, and `actions`. |
+| `update_stage_automation` | Rename, retarget, enable or disable, change scope, or replace `actions`. `service_slug` `""` or `service_id` null clears the service scope. `offer_id` null clears the offer scope. |
+| `delete_stage_automation` | Remove one automation. Deals and tasks already created stay. |
 
-## Health Check ladder
+## Stage automations
 
-Off unless `HC_LADDER_ENABLED` is true. With it on, `set_deal_stage` for a
-deal whose service slug is `health-check` does two extra things, and the
-`initialize` instructions plus the `set_deal_stage` description say so:
+Operator data, stored in `stage_automations` / `stage_automation_actions`.
+A new database has no rows. Nothing in the product hard-codes a service
+slug or a stage key.
 
-- `hc_paid` creates one open delegated task titled `Send HC kickoff`, owner
-  `willow`, status `delegated`. A later move back to `hc_paid` does not
-  create a second task while that one is still open.
-- `hc_presented` opens child deals for `automation-delivery` and
-  `automations-support` on the same partner, `source` `hc-spawn:<parent id>`,
-  no offer and no price. An open child of that service is not duplicated.
-  `it-support` is not created.
+An automation has a name (unique, case-insensitive; the operator can rename
+it), a stage, and an optional service and/or offer. Both scopes are AND.
+If the service or offer row later disappears, that automation does not run.
 
-The task webhook still follows `DELEGATE_DEFAULT_OWNER`. Set that to `willow`
-if Willow should be POSTed when the kickoff task is created. Catalog services
-must already exist; the ladder does not insert them.
+Actions, at most one of each:
+
+- `delegated_task`: `owner`, `title`, `brief`, optional `due_in_days`.
+  Title and brief may contain `{partner_name}`, `{deal_id}`, `{stage}`,
+  `{service_name}`, `{service_slug}`, `{automation_name}`. The task is
+  created with status `delegated`. The webhook still follows
+  `DELEGATE_DEFAULT_OWNER`.
+- `spawn_child_deals`: `service_slugs` (or `service_ids`). Each child keeps
+  the parent's partner, sets `parent_deal_id`, uses
+  `source` `automation:<automation id>`, and copies no offer and no price.
+  A missing service is skipped. The automation does not insert catalog rows.
+
+`set_deal_stage` runs enabled automations whose stage matches the stage
+just entered. Creating a deal that is already in the stage does not.
+Moving the deal in again does not open a second task while one with the
+same title and owner is still `proposed` or `delegated`, and does not open
+a second child while one for that service is still open. A finished task
+or a closed child does not block a new one.
+
+Admin → Automations edits the same rows. The form shows one task and one
+set of child services; saving replaces the action list.
 
 `list_catalog` includes `delegated_task_owners` only when
 `DELEGATED_TASK_OWNERS` is set (comma-separated slugs).
+
+Sevasek's previous Health Check behaviour is the optional script
+`scripts/seed_sevasek_automations.py` (two named automations). See
+[`cutover-from-sevasek-crm.md`](cutover-from-sevasek-crm.md).
 
 ## Delegated tasks and webhooks
 

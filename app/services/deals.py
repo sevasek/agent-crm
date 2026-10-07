@@ -361,12 +361,12 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
             )
 
     # After the stage is committed, same as nurture and the won webhook.
-    # The ladder is a no-op unless HC_LADDER_ENABLED is set.
+    # No automations are seeded, so this is a no-op until an operator adds one.
     try:
-        from app.services.hc_ladder import apply_hc_ladder
-        apply_hc_ladder(deal, old_stage, new_stage)
+        from app.services.stage_automations import apply_stage_automations
+        apply_stage_automations(deal, old_stage, new_stage)
     except Exception:
-        logger.exception("Health Check ladder failed for deal %s", deal_id)
+        logger.exception("Stage automations failed for deal %s", deal_id)
 
     return True
 

@@ -14,10 +14,12 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Added
 
-- Health Check ladder (`HC_LADDER_ENABLED`, default off). When set, moving a
-  `health-check` deal to `hc_paid` creates Willow's "Send HC kickoff" task,
-  and moving it to `hc_presented` spawns `automation-delivery` and
-  `automations-support` child deals (`source` `hc-spawn:<id>`, no price).
+- Stage automations (schema v7). Named rules, empty until an operator adds
+  one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
+  Entering the chosen stage can create a delegated task and/or child deals
+  (`source` `automation:<automation id>`, no price). Re-entry does not
+  duplicate an open task or an open child. `scripts/seed_sevasek_automations.py`
+  loads sevasek's two Health Check rules; it does not run on boot.
 - `docker-compose.traefik.yml`: no published host port, network alias `crm`
   so other containers can call `http://crm:8000`, Traefik labels.
 - `LEADS_IP_ALLOWLIST` and `STAGES_IP_ALLOWLIST`. Unset means no IP

@@ -114,6 +114,9 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
     assert "app_install" in names
     assert "mcp_oauth_used_codes" in names
     assert "deal_tags" in names
+    assert "stage_automations" in names
+    assert "stage_automation_actions" in names
+    assert conn.execute("SELECT COUNT(*) FROM stage_automations").fetchone()[0] == 0
     user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
     assert "session_version" in user_cols
     conn.close()

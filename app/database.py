@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 class SchemaVersionError(RuntimeError):
@@ -165,6 +165,33 @@ def _split_sql(script: str):
 def _run_sql(db, script: str) -> None:
     for stmt in _split_sql(script):
         db.execute(stmt)
+
+
+# Operator-defined stage automations. Empty on a new database. Same DDL is
+# applied to an already-versioned file by migrate_007 (CREATE IF NOT EXISTS).
+_STAGE_AUTOMATION_SQL = """
+CREATE TABLE IF NOT EXISTS stage_automations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    stage_key TEXT NOT NULL,
+    service_id INTEGER,
+    offer_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stage_automations_stage
+    ON stage_automations(stage_key, enabled);
+CREATE TABLE IF NOT EXISTS stage_automation_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    automation_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    action_type TEXT NOT NULL,
+    config TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stage_automation_actions_automation
+    ON stage_automation_actions(automation_id, position);
+"""
 
 
 # Additive-only. Do not DROP or RENAME columns in this series.
@@ -360,7 +387,7 @@ _SCHEMA_V1 = """
             PRIMARY KEY (deal_id, tag)
         );
         CREATE INDEX IF NOT EXISTS idx_deal_tags_tag ON deal_tags(tag);
-"""
+""" + _STAGE_AUTOMATION_SQL
 
 
 def _apply_additive_columns(db) -> None:
@@ -512,6 +539,17 @@ def migrate_005(db) -> None:
     )
 
 
+def migrate_007(db) -> None:
+    """Stage automations: named rules that run when a deal enters a stage.
+
+    New installs get the tables from _SCHEMA_V1 and this is a no-op.
+    A database already at version 6 does not re-run _SCHEMA_V1, so the
+    tables are created here. No rows are inserted; nothing runs until an
+    operator adds an automation.
+    """
+    _run_sql(db, _STAGE_AUTOMATION_SQL)
+
+
 def migrate_006(db) -> None:
     """Per-database install_id mixed into the session cookie signer.
 
@@ -543,6 +581,7 @@ MIGRATIONS = {
     4: migrate_004,
     5: migrate_005,
     6: migrate_006,
+    7: migrate_007,
 }
 
 

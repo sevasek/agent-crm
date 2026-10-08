@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from app.database import get_db
@@ -12,6 +13,8 @@ from app.services.nurture import SENT as NURTURE_SENT, SKIPPED as NURTURE_SKIPPE
 from app.services.won_webhook import SENT as WON_SENT, SKIPPED as WON_SKIPPED, notify_deal_won
 from app.services import pipeline_stages
 from app.services.offers import default_offer_id, get_offer
+
+logger = logging.getLogger(__name__)
 
 # Pipeline stages themselves (new -> contacted -> qualified -> ... -> won/lost)
 # are configurable, not hardcoded — see app.services.pipeline_stages. What
@@ -356,6 +359,14 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
                 f"Deal-won webhook {'succeeded' if status == WON_SENT else 'failed'}: {message}",
                 deal_id=deal_id,
             )
+
+    # After the stage is committed, same as nurture and the won webhook.
+    # No automations are seeded, so this is a no-op until an operator adds one.
+    try:
+        from app.services.stage_automations import apply_stage_automations
+        apply_stage_automations(deal, old_stage, new_stage)
+    except Exception:
+        logger.exception("Stage automations failed for deal %s", deal_id)
 
     return True
 

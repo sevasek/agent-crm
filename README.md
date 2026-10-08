@@ -101,7 +101,9 @@ domain) is [`docs/CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md). The app binds
 to `127.0.0.1:${CRM_PORT:-8000}` (default 8000). Put a
 TLS-terminating reverse proxy in front and forward everything, including
 `/mcp` and `/oauth/*`. Working Caddy and nginx configs, header forwarding, and
-`TRUSTED_PROXIES` notes are in [`docs/DEPLOY.md`](docs/DEPLOY.md). In `.env`:
+`TRUSTED_PROXIES` notes are in [`docs/DEPLOY.md`](docs/DEPLOY.md). A host that
+already runs Traefik adds [`docker-compose.traefik.yml`](docker-compose.traefik.yml)
+on top of the prod file. In `.env`:
 
 - `SECRET_KEY`: a real one, not the placeholder.
 - `SECURE_COOKIES=true` and `BASE_URL=https://your.domain`.

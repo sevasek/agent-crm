@@ -28,6 +28,7 @@ from app.services.activities import log_activity, list_activities_for_partner, l
 from app.services.phone import to_tel_href, has_callable_phone
 from app.services import offers as offers_service
 from app.services import icp as icp_service
+from app.services import stage_automations
 from app.services import api_keys as api_keys_service
 
 router = APIRouter(prefix="", tags=["admin"])
@@ -1233,3 +1234,146 @@ async def logout_everywhere_submit(
     response = RedirectResponse("/settings", status_code=303)
     set_session_cookie(response, user["id"], new_version)
     return response
+
+
+_AUTOMATION_ERROR_MESSAGES = {
+    "name_required": "Name is required.",
+    "name_taken": "An automation with that name already exists.",
+    "invalid_stage": "Pick a stage that exists.",
+    "service_not_found": "That service does not exist.",
+    "offer_not_found": "That offer does not exist.",
+    "scope_conflict": "The service id and slug do not match.",
+    "actions_required": "Add a task title, at least one child service, or both.",
+    "duplicate_action": "Only one task and one set of child deals are allowed.",
+    "invalid_action": "That action is not supported.",
+    "title_required": "A task needs a title.",
+    "invalid_owner": "Task owner must be letters, digits, and hyphens.",
+    "invalid_due": "Due in days must be a whole number from 0 to 3650, or left blank.",
+    "not_found": "That automation no longer exists.",
+}
+
+
+def _automation_error_message(error):
+    if isinstance(error, str) and error.startswith("unknown_service:"):
+        slug = error.split(":", 1)[1] or "that service"
+        return f"No service named {slug}."
+    return _AUTOMATION_ERROR_MESSAGES.get(error, "Could not save that automation.")
+
+
+def _automation_page(request, user, error=None, status_code=200):
+    return templates.TemplateResponse(request, "admin/automations.html", {
+        "request": request,
+        "user": user,
+        "automations": stage_automations.list_automations(),
+        "stages": pipeline_stages.list_stages(),
+        "services": list_services(),
+        "offers": offers_service.list_offers(),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "error": error,
+    }, status_code=status_code)
+
+
+def _actions_from_form(form):
+    actions = []
+    title = form.get("task_title") or ""
+    if str(title).strip():
+        due = str(form.get("task_due_in_days") or "").strip()
+        actions.append({
+            "type": "delegated_task",
+            "owner": form.get("task_owner") or "",
+            "title": title,
+            "brief": form.get("task_brief") or "",
+            "due_in_days": due or None,
+        })
+    child_ids = []
+    for raw in form.getlist("child_service_ids"):
+        text = str(raw).strip()
+        if text:
+            child_ids.append(text)
+    if child_ids:
+        actions.append({"type": "spawn_child_deals", "service_ids": child_ids})
+    return actions
+
+
+def _scope_id(form, field):
+    text = str(form.get(field) or "").strip()
+    return None if text == "" else text
+
+
+@router.get("/automations", response_class=HTMLResponse)
+async def automations_settings(request: Request, user=Depends(require_login)):
+    return _automation_page(request, user)
+
+
+@router.post("/automations/new")
+async def create_automation_submit(request: Request, user=Depends(require_login)):
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    automation, error = stage_automations.create_automation(
+        form.get("name") or "",
+        form.get("stage_key") or "",
+        service_id=_scope_id(form, "service_id"),
+        offer_id=_scope_id(form, "offer_id"),
+        enabled=form.get("enabled") is not None,
+        actions=_actions_from_form(form),
+    )
+    if error or not automation:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+@router.post("/automations/{automation_id}/edit")
+async def edit_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
+    if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
+        return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    automation, error = stage_automations.update_automation(
+        automation_id,
+        name=form.get("name") or "",
+        stage_key=form.get("stage_key") or "",
+        service_id=_scope_id(form, "service_id"),
+        offer_id=_scope_id(form, "offer_id"),
+        enabled=form.get("enabled") is not None,
+        actions=_actions_from_form(form),
+    )
+    if error or not automation:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+@router.post("/automations/{automation_id}/enabled")
+async def toggle_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
+    if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
+        return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    enabled = str(form.get("enabled") or "").strip() in {"1", "true", "on", "yes"}
+    _automation, error = stage_automations.update_automation(automation_id, enabled=enabled)
+    if error:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+@router.post("/automations/{automation_id}/delete")
+async def delete_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
+    if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
+        return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    _deleted, error = stage_automations.delete_automation(automation_id)
+    if error:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)

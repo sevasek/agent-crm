@@ -19,6 +19,7 @@
         <a href="/deals"{% if path == "/deals" or (path.startswith("/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>
         <a href="/services"{% if path == "/services" or path.startswith("/services/") %} aria-current="page"{% endif %}>Services</a>
         <a href="/stages"{% if path == "/stages" or path.startswith("/stages/") %} aria-current="page"{% endif %}>Stages</a>
+        <a href="/automations"{% if path == "/automations" or path.startswith("/automations/") %} aria-current="page"{% endif %}>Automations</a>
         <a href="/offers"{% if path == "/offers" or path.startswith("/offers/") %} aria-current="page"{% endif %}>Offers</a>
         <a href="/icp"{% if path == "/icp" or path.startswith("/icp/") %} aria-current="page"{% endif %}>ICP</a>
         <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>

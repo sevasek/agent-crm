@@ -1,0 +1,44 @@
+# Traefik overlay for a host that already runs Traefik (the sevasek VPS).
+# docker-compose.prod.yml still publishes a loopback port for Caddy or nginx;
+# this file clears that publish.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     -f docker-compose.traefik.yml up -d --build
+#
+# Requires Docker Compose 2.24+ (!override).
+#
+# No host port is published. Traefik routes HTTPS for CRM_HOST to container
+# port 8000. n8n and anything else on TRAEFIK_NETWORK reach the app at
+# http://crm:8000 (network alias `crm`; the compose service stays `app`).
+#
+# APP_UID / APP_GID are read from .env (entrypoint default 1000:1000).
+# The sevasek data directory is owned by uid 1004. Set APP_UID=1004 and
+# APP_GID=1004 or a 0700 volume owned by 1004 will not start: production
+# drops CAP_DAC_OVERRIDE, so root cannot traverse that directory to chown it.
+#
+# CRM_HOST=crm.sevasek.com
+# TRAEFIK_NETWORK=proxy          # external network Traefik and n8n share
+# TRAEFIK_ENTRYPOINT=websecure
+# TRAEFIK_CERTRESOLVER=letsencrypt
+
+services:
+  app:
+    ports: !override []
+    networks:
+      default: {}
+      traefik:
+        aliases:
+          - crm
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-proxy}
+      - traefik.http.routers.crm.rule=Host(`${CRM_HOST:-crm.example.com}`)
+      - traefik.http.routers.crm.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}
+      - traefik.http.routers.crm.tls=true
+      - traefik.http.routers.crm.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.services.crm.loadbalancer.server.port=8000
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-proxy}

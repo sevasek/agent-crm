@@ -3,6 +3,8 @@
 Each tool returns a dict with `ok` so a bad argument is a recoverable
 result, not a protocol error. Destructive pipeline/user/catalog deletes
 are not exposed; those stay in the admin UI / stages API key.
+Stage automations are operator configuration and have their own
+list/create/update/delete tools.
 """
 
 from app.mcp.serialize import (
@@ -30,6 +32,7 @@ from app.mcp.util import (
 )
 from app.services import icp as icp_service
 from app.services import pipeline_stages
+from app.services import stage_automations
 from app.services.activities import VALID_TYPES, list_activities_for_deal, list_activities_for_partner, log_activity
 from app.services.call_queue import CALL_QUEUE_LIMIT, list_todays_calls
 from app.services.auth import clean_owner_key, is_valid_slug
@@ -54,6 +57,7 @@ from app.services.deals import (
     validate_parent_link,
 )
 from app.services.delegated_tasks import (
+    configured_task_owners,
     default_owner,
     TASK_STATUSES,
     clean_task_status,
@@ -462,7 +466,7 @@ def list_tags_tool(_arguments):
 
 
 def list_catalog_tool(_arguments):
-    return _ok(
+    payload = dict(
         services=[service_brief(s) for s in list_services(active_only=True)],
         stages=[stage_brief(s) for s in pipeline_stages.list_stages()],
         offers=[offer_brief(o) for o in list_offers(active_only=True)],
@@ -473,6 +477,12 @@ def list_catalog_tool(_arguments):
         delegated_task_default_owner=default_owner(),
         delegated_task_statuses=list(TASK_STATUSES),
     )
+    # Live sevasek/crm always returns this list. Other clients leave the env
+    # unset so the key stays absent and bots are not told a fixed owner enum.
+    owners = configured_task_owners()
+    if owners:
+        payload["delegated_task_owners"] = owners
+    return _ok(**payload)
 
 
 def ingest_leads_tool(arguments):
@@ -1103,6 +1113,113 @@ _TAGS_PROP = {
     ),
 }
 
+
+def _automation_error(error):
+    if isinstance(error, str) and error.startswith("unknown_service:"):
+        slug = error.split(":", 1)[1]
+        if not slug:
+            return _err("unknown_service", "service_slugs must be an array of service slugs")
+        return _err("unknown_service", f"No service with slug {slug!r}")
+    messages = {
+        "name_required": "name is required",
+        "name_taken": "An automation with that name already exists",
+        "invalid_stage": "stage_key is not a pipeline stage",
+        "service_not_found": "service_id does not match a service",
+        "offer_not_found": "offer_id does not match an offer",
+        "scope_conflict": "service_id and service_slug refer to different services",
+        "actions_required": "actions must include a delegated_task and/or spawn_child_deals",
+        "duplicate_action": "at most one delegated_task and one spawn_child_deals action",
+        "invalid_action": "action type must be delegated_task or spawn_child_deals",
+        "title_required": "delegated_task requires title",
+        "invalid_owner": "delegated_task owner must be a slug of letters, digits, and hyphens",
+        "invalid_due": "due_in_days must be a whole number from 0 to 3650",
+        "not_found": "No stage automation with that id",
+    }
+    return _err(error or "invalid", messages.get(error, error or "invalid"))
+
+
+def list_stage_automations_tool(_arguments):
+    rows = stage_automations.list_automations()
+    return _ok(automations=rows, count=len(rows))
+
+
+def _automation_kwargs(arguments, *, creating):
+    kwargs = {}
+    if creating or "name" in arguments:
+        kwargs["name"] = as_text(arguments.get("name"))
+    if creating or "stage_key" in arguments:
+        kwargs["stage_key"] = as_text(arguments.get("stage_key"))
+    if "service_id" in arguments:
+        kwargs["service_id"] = arguments.get("service_id")
+    if "service_slug" in arguments:
+        kwargs["service_slug"] = as_text(arguments.get("service_slug"))
+    if "offer_id" in arguments:
+        kwargs["offer_id"] = arguments.get("offer_id")
+    if "enabled" in arguments:
+        flag = as_bool(arguments.get("enabled"))
+        if flag is None:
+            return None, _err("invalid_enabled", "enabled must be a boolean")
+        kwargs["enabled"] = flag
+    elif creating:
+        kwargs["enabled"] = True
+    if creating or "actions" in arguments:
+        actions = arguments.get("actions")
+        if not isinstance(actions, list):
+            return None, _err("actions_required", "actions must be an array")
+        kwargs["actions"] = actions
+    return kwargs, None
+
+
+def create_stage_automation_tool(arguments):
+    kwargs, error = _automation_kwargs(arguments, creating=True)
+    if error:
+        return error
+    automation, failure = stage_automations.create_automation(**kwargs)
+    if failure:
+        return _automation_error(failure)
+    return _ok(status="created", automation=automation)
+
+
+def update_stage_automation_tool(arguments):
+    automation_id, error = _id_arg(arguments, "automation_id")
+    if error:
+        return error
+    kwargs, error = _automation_kwargs(arguments, creating=False)
+    if error:
+        return error
+    if not kwargs:
+        return _err("empty_update", "Provide at least one field to change")
+    automation, failure = stage_automations.update_automation(automation_id, **kwargs)
+    if failure:
+        return _automation_error(failure)
+    return _ok(status="updated", automation=automation)
+
+
+def delete_stage_automation_tool(arguments):
+    automation_id, error = _id_arg(arguments, "automation_id")
+    if error:
+        return error
+    deleted, failure = stage_automations.delete_automation(automation_id)
+    if failure or not deleted:
+        return _automation_error(failure or "not_found")
+    return _ok(status="deleted", automation_id=automation_id)
+
+
+_AUTOMATION_ACTION_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["type"],
+    "properties": {
+        "type": {"type": "string", "enum": ["delegated_task", "spawn_child_deals"]},
+        "owner": {"type": "string"},
+        "title": {"type": "string"},
+        "brief": {"type": "string"},
+        "due_in_days": {"type": "integer", "minimum": 0, "maximum": 3650},
+        "service_slugs": {"type": "array", "items": {"type": "string"}},
+        "service_ids": {"type": "array", "items": {"type": "integer", "minimum": 1}},
+    },
+}
+
 TOOLS = [
     {
         "name": "search_partners",
@@ -1615,7 +1732,9 @@ TOOLS = [
             "Move a deal to a pipeline stage key from list_catalog. "
             "Entering a nurture-trigger stage POSTs the partner to NURTURE_WEBHOOK_URL "
             "(no-op if unconfigured). Entering an is_won stage POSTs to "
-            "DEAL_WON_WEBHOOK_URL (no-op if unconfigured). After a live call, "
+            "DEAL_WON_WEBHOOK_URL (no-op if unconfigured). Enabled stage "
+            "automations for that stage run after the move "
+            "(list_stage_automations). After a live call, "
             "prefer record_call_outcome."
         ),
         "inputSchema": {
@@ -2045,6 +2164,127 @@ TOOLS = [
         },
         "handler": complete_delegated_task_tool,
     },
+    {
+        "name": "list_stage_automations",
+        "description": (
+            "List stage automations. Each runs when a deal enters its stage_key, "
+            "optionally only for one service and/or offer. actions are "
+            "delegated_task and/or spawn_child_deals. An empty list means a "
+            "stage change does nothing extra."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {},
+        },
+        "annotations": {
+            "title": "List stage automations",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": list_stage_automations_tool,
+    },
+    {
+        "name": "create_stage_automation",
+        "description": (
+            "Create a named stage automation. name is unique. stage_key comes "
+            "from list_catalog. Omit service_slug/service_id and offer_id to "
+            "match every deal entering that stage. actions: delegated_task "
+            "(owner, title, brief, optional due_in_days; title and brief may "
+            "use {partner_name} {deal_id} {stage} {service_name} {service_slug} "
+            "{automation_name}) and/or spawn_child_deals (service_slugs). "
+            "Child deals keep the same partner, set parent_deal_id, use source "
+            "automation:<automation id>, and copy no offer or price. "
+            "Re-entry does not duplicate an open task or an open child."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["name", "stage_key", "actions"],
+            "properties": {
+                "name": {"type": "string"},
+                "stage_key": {"type": "string"},
+                "service_slug": {"type": "string"},
+                "service_id": {"type": "integer", "minimum": 1},
+                "offer_id": {"type": "integer", "minimum": 1},
+                "enabled": {"type": "boolean"},
+                "actions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": _AUTOMATION_ACTION_SCHEMA,
+                },
+            },
+        },
+        "annotations": {
+            "title": "Create stage automation",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+        "handler": create_stage_automation_tool,
+    },
+    {
+        "name": "update_stage_automation",
+        "description": (
+            "Change a stage automation's name, stage, scope, enabled flag, "
+            "or actions. Sending actions replaces the whole list. "
+            "service_slug \"\" or service_id null clears the service scope. "
+            "offer_id null clears the offer scope. Rename does not re-fire "
+            "anything by itself."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["automation_id"],
+            "properties": {
+                "automation_id": {"type": "integer", "minimum": 1},
+                "name": {"type": "string"},
+                "stage_key": {"type": "string"},
+                "service_slug": {"type": "string"},
+                "service_id": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+                "offer_id": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+                "enabled": {"type": "boolean"},
+                "actions": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 2,
+                    "items": _AUTOMATION_ACTION_SCHEMA,
+                },
+            },
+        },
+        "annotations": {
+            "title": "Update stage automation",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": update_stage_automation_tool,
+    },
+    {
+        "name": "delete_stage_automation",
+        "description": "Delete one stage automation and its actions. Deals already created are left as they are.",
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["automation_id"],
+            "properties": {
+                "automation_id": {"type": "integer", "minimum": 1},
+            },
+        },
+        "annotations": {
+            "title": "Delete stage automation",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": delete_stage_automation_tool,
+    },
 ]
 
 
@@ -2052,15 +2292,15 @@ TOOL_BY_NAME = {tool["name"]: tool for tool in TOOLS}
 
 
 def list_tool_defs():
-    defs = []
-    for tool in TOOLS:
-        defs.append({
+    return [
+        {
             "name": tool["name"],
             "description": tool["description"],
             "inputSchema": tool["inputSchema"],
             "annotations": tool["annotations"],
-        })
-    return defs
+        }
+        for tool in TOOLS
+    ]
 
 
 def call_tool(name, arguments):

@@ -1,0 +1,184 @@
+{% extends "base.html" %}
+{% block title %}Automations — crm{% endblock %}
+{% block content %}
+<h1>Stage automations</h1>
+<p class="muted">
+    A named rule that runs when a deal <strong>enters</strong> a stage. Leave service and offer
+    on “any” to match every deal, or narrow it. A task title and brief can use
+    <code>{partner_name}</code>, <code>{deal_id}</code>, <code>{stage}</code>,
+    <code>{service_name}</code>, <code>{service_slug}</code>, and <code>{automation_name}</code>.
+    Child deals stay on the same partner, link back with <code>parent_deal_id</code>,
+    and are stamped <code>source=automation:&lt;this automation’s id&gt;</code> with no offer and no price.
+    Moving the deal into the stage again does not open a second task or child while the first is still open.
+    Nothing here is built in: a new database starts empty, and creating a deal already in the stage does not fire.
+</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+
+{% if not automations %}
+<p>No automations yet. Changing a deal’s stage will not create tasks or child deals.</p>
+{% endif %}
+
+{% for a in automations %}
+{% set task = namespace(title='', owner='', brief='', due='') %}
+{% set children = namespace(ids=[]) %}
+{% for action in a.actions %}
+    {% if action.type == 'delegated_task' %}
+        {% set task.title = action.title %}
+        {% set task.owner = action.owner %}
+        {% set task.brief = action.brief %}
+        {% set task.due = action.due_in_days if action.due_in_days is not none else '' %}
+    {% elif action.type == 'spawn_child_deals' %}
+        {% set children.ids = action.service_ids %}
+    {% endif %}
+{% endfor %}
+<article>
+    <h2>{{ a.name }}{% if not a.enabled %} <span class="muted">(disabled)</span>{% endif %}</h2>
+    {% for warning in a.warnings %}<p class="error">{{ warning }}</p>{% endfor %}
+    <form method="post" action="/automations/{{ a.id }}/edit">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <div class="form-row">
+            <label for="name-{{ a.id }}">Name</label>
+            <input type="text" id="name-{{ a.id }}" name="name" value="{{ a.name }}" required>
+        </div>
+        <div class="form-row">
+            <label for="stage-{{ a.id }}">When a deal enters</label>
+            <select id="stage-{{ a.id }}" name="stage_key" required>
+                {% for s in stages %}
+                <option value="{{ s.key }}" {% if s.key == a.stage_key %}selected{% endif %}>{{ s.label }} ({{ s.key }})</option>
+                {% endfor %}
+                {% if a.stage_key not in stages | map(attribute='key') %}
+                <option value="{{ a.stage_key }}" selected>{{ a.stage_key }} (missing)</option>
+                {% endif %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="service-{{ a.id }}">Only for service</label>
+            <select id="service-{{ a.id }}" name="service_id">
+                <option value="">Any service</option>
+                {% for s in services %}
+                <option value="{{ s.id }}" {% if s.id == a.service_id %}selected{% endif %}>{{ s.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label for="offer-{{ a.id }}">Only for offer</label>
+            <select id="offer-{{ a.id }}" name="offer_id">
+                <option value="">Any offer</option>
+                {% for o in offers %}
+                <option value="{{ o.id }}" {% if o.id == a.offer_id %}selected{% endif %}>{{ o.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-row">
+            <label><input type="checkbox" name="enabled" {% if a.enabled %}checked{% endif %}> Enabled</label>
+        </div>
+        <h3>Delegated task</h3>
+        <p class="muted">Leave the title blank to skip the task. Owner is a slug such as willow.</p>
+        <div class="form-row">
+            <label for="task-title-{{ a.id }}">Title</label>
+            <input type="text" id="task-title-{{ a.id }}" name="task_title" value="{{ task.title }}">
+        </div>
+        <div class="form-row">
+            <label for="task-owner-{{ a.id }}">Owner</label>
+            <input type="text" id="task-owner-{{ a.id }}" name="task_owner" value="{{ task.owner }}">
+        </div>
+        <div class="form-row">
+            <label for="task-brief-{{ a.id }}">Brief</label>
+            <textarea id="task-brief-{{ a.id }}" name="task_brief" rows="3">{{ task.brief }}</textarea>
+        </div>
+        <div class="form-row">
+            <label for="task-due-{{ a.id }}">Due in days</label>
+            <input type="number" id="task-due-{{ a.id }}" name="task_due_in_days" min="0" max="3650" value="{{ task.due }}">
+        </div>
+        <h3>Child deals</h3>
+        <fieldset>
+            <legend>Services to open on the same partner</legend>
+            {% for s in services %}
+            <label>
+                <input type="checkbox" name="child_service_ids" value="{{ s.id }}" {% if s.id in children.ids %}checked{% endif %}>
+                {{ s.name }}
+            </label>
+            {% endfor %}
+        </fieldset>
+        <button type="submit">Save</button>
+    </form>
+    <form method="post" action="/automations/{{ a.id }}/enabled">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="enabled" value="{{ '0' if a.enabled else '1' }}">
+        <button type="submit" class="btn-secondary">{{ 'Disable' if a.enabled else 'Enable' }}</button>
+    </form>
+    <form method="post" action="/automations/{{ a.id }}/delete">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn-secondary" onclick="return confirm('Delete this automation?')">Delete</button>
+    </form>
+</article>
+{% endfor %}
+
+<h2>New automation</h2>
+<form method="post" action="/automations/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" required>
+    </div>
+    <div class="form-row">
+        <label for="stage_key">When a deal enters</label>
+        <select id="stage_key" name="stage_key" required>
+            {% for s in stages %}
+            <option value="{{ s.key }}">{{ s.label }} ({{ s.key }})</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="service_id">Only for service</label>
+        <select id="service_id" name="service_id">
+            <option value="">Any service</option>
+            {% for s in services %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="offer_id">Only for offer</label>
+        <select id="offer_id" name="offer_id">
+            <option value="">Any offer</option>
+            {% for o in offers %}
+            <option value="{{ o.id }}">{{ o.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label><input type="checkbox" name="enabled" checked> Enabled</label>
+    </div>
+    <h3>Delegated task</h3>
+    <p class="muted">Leave the title blank to skip the task.</p>
+    <div class="form-row">
+        <label for="task_title">Title</label>
+        <input type="text" id="task_title" name="task_title">
+    </div>
+    <div class="form-row">
+        <label for="task_owner">Owner</label>
+        <input type="text" id="task_owner" name="task_owner" placeholder="willow">
+    </div>
+    <div class="form-row">
+        <label for="task_brief">Brief</label>
+        <textarea id="task_brief" name="task_brief" rows="3"></textarea>
+    </div>
+    <div class="form-row">
+        <label for="task_due_in_days">Due in days</label>
+        <input type="number" id="task_due_in_days" name="task_due_in_days" min="0" max="3650">
+    </div>
+    <h3>Child deals</h3>
+    <fieldset>
+        <legend>Services to open on the same partner</legend>
+        {% for s in services %}
+        <label>
+            <input type="checkbox" name="child_service_ids" value="{{ s.id }}">
+            {{ s.name }}
+        </label>
+        {% endfor %}
+        {% if not services %}<p class="muted">Add a service first.</p>{% endif %}
+    </fieldset>
+    <button type="submit">Create automation</button>
+</form>
+{% endblock %}

@@ -18,6 +18,7 @@ A database newer than the running code refuses to start. No ORM.
 - `activities`: the timeline.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
+- `stage_automations`, `stage_automation_actions`: rules that run when a deal enters a stage. Empty until an operator adds one.
 - `users`, `api_keys`, `mcp_oauth_clients`, `mcp_oauth_used_codes`: auth plumbing.
 - `app_install`: single-row per-database `install_id` mixed into the session cookie signer so a copied `SECRET_KEY` cannot replay sessions onto another instance.
 
@@ -223,6 +224,33 @@ project manager: a title, a brief, an owner and a status tied to a deal.
 
 See [`MCP.md`](MCP.md) for the webhook behaviour.
 
+### `stage_automations` and `stage_automation_actions`
+
+Operator configuration. Schema version 7 creates the tables and inserts no
+rows. A stage change runs nothing extra until someone adds an automation
+in the admin UI or over MCP.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT NOT NULL UNIQUE COLLATE NOCASE | The operator's label. Rename does not change `id`. |
+| `enabled` | INTEGER NOT NULL DEFAULT 1 | `0` skips the row. |
+| `stage_key` | TEXT NOT NULL | Fires when a deal enters this stage. |
+| `service_id` | INTEGER | Null matches every service. A missing service row does not fire. |
+| `offer_id` | INTEGER | Null matches every offer. Combined with `service_id` as AND. |
+| `created_at`, `updated_at` | TEXT | |
+
+Actions are child rows (`position`, `action_type`, `config` JSON).
+
+| `action_type` | Config | Effect |
+|---|---|---|
+| `delegated_task` | `owner`, `title`, `brief`, `due_in_days` | One task. Title and brief may use `{partner_name}`, `{deal_id}`, `{stage}`, `{service_name}`, `{service_slug}`, `{automation_name}`. |
+| `spawn_child_deals` | `service_ids` | Child deals, same partner, `parent_deal_id` set, `source` `automation:<automation id>`, no offer and no price. |
+
+At most one action of each type. An open task with the same title and owner,
+or an open child of that service, is not duplicated when the deal enters the
+stage again.
+
 ### Post-sale / follow-on deals
 
 Issue #10 asked whether the CRM should grow a fulfilment module (invoice
@@ -239,8 +267,10 @@ That is the post-sale model.
 `deals.parent_deal_id`, `activities.partner_id`, `activities.deal_id`,
 `pipeline_stages.position`, `api_keys.user_id`, `delegated_tasks.deal_id`,
 `delegated_tasks(owner, status)`, `deal_tags(tag)` (the primary key on
-`(deal_id, tag)` covers lookups by deal). `offers` and `icp_criteria` are
-small and scanned in full.
+`(deal_id, tag)` covers lookups by deal),
+`stage_automations(stage_key, enabled)`,
+`stage_automation_actions(automation_id, position)`.
+`offers` and `icp_criteria` are small and scanned in full.
 
 ## Scoring
 

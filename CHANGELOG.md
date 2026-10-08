@@ -12,6 +12,27 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Added
+
+- Stage automations (schema v7). Named rules, empty until an operator adds
+  one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
+  Entering the chosen stage can create a delegated task and/or child deals
+  (`source` `automation:<automation id>`, no price). Re-entry does not
+  duplicate an open task or an open child. `scripts/seed_sevasek_automations.py`
+  loads sevasek's two Health Check rules; it does not run on boot.
+- `docker-compose.traefik.yml`: no published host port, network alias `crm`
+  so other containers can call `http://crm:8000`, Traefik labels.
+- `LEADS_IP_ALLOWLIST` and `STAGES_IP_ALLOWLIST`. Unset means no IP
+  restriction. `/mcp` is not on either list.
+- `DELEGATED_TASK_OWNERS`. When set, `list_catalog` returns
+  `delegated_task_owners`.
+- Production compose bind-mounts `./backups` at `/app/backups` so the
+  automatic pre-upgrade snapshot can be written on a read-only root.
+  The entrypoint chowns that directory when it exists.
+- `.github/workflows/deploy.yml`, skipped unless repository variables
+  `DEPLOY_ENABLED=true` and `DEPLOY_REPOSITORY` equals this repository.
+- [`docs/cutover-from-sevasek-crm.md`](docs/cutover-from-sevasek-crm.md).
+
 ## [0.1.0] - 2026-10-06
 
 ### Added

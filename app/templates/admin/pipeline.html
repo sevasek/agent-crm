@@ -5,7 +5,13 @@
 <h1>Pipeline</h1>
 <p class="muted">
     Columns follow the stage order set on the <a href="/stages">Stages</a> page.
-    Move a deal by picking a new stage on its card.
+    Move an opportunity by picking a new stage on its card.
+    Leads are not shown here. <a href="/leads">Leads</a> · <a href="/lost-reasons">Lost reasons</a>
+    {% if current_lost %}
+    · <a href="/pipeline{% if current_tag %}?tag={{ current_tag }}{% endif %}">Hide lost</a>
+    {% else %}
+    · <a href="/pipeline?lost=1{% if current_tag %}&tag={{ current_tag }}{% endif %}">Show lost</a>
+    {% endif %}
 </p>
 {% if tags_in_use or current_tag %}
 <div class="tag-filters">

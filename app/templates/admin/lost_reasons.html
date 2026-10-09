@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Lost reasons — crm{% endblock %}
+{% block content %}
+<h1>Lost reasons</h1>
+<p class="muted">Used when a lead or an opportunity is marked lost. Inactive reasons stay on old records and leave the pickers. <a href="/leads">Leads</a></p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<table>
+    <tr><th>Name</th><th>Nurture</th><th>Active</th><th></th></tr>
+    {% for reason in reasons %}
+    <tr>
+        <td colspan="4">
+            <form method="post" action="/lost-reasons/{{ reason.id }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <label for="name-{{ reason.id }}">Name</label>
+                <input id="name-{{ reason.id }}" name="name" value="{{ reason.name }}" required>
+                <label><input type="checkbox" name="triggers_nurture" {% if reason.triggers_nurture %}checked{% endif %}> Starts nurture</label>
+                <label><input type="checkbox" name="active" {% if reason.active %}checked{% endif %}> Active</label>
+                <button type="submit">Save</button>
+            </form>
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+<h2>Add a lost reason</h2>
+<form method="post" action="/lost-reasons">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="name">Name</label>
+    <input id="name" name="name" required>
+    <label><input type="checkbox" name="triggers_nurture"> Starts nurture</label>
+    <button type="submit">Add</button>
+</form>
+{% endblock %}

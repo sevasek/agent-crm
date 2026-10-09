@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Lead — crm{% endblock %}
+{% block content %}
+<p><a href="/leads">Leads</a></p>
+<h1>{{ lead.company_name or lead.contact_name or lead.name or ("Lead #" ~ lead.id) }} <span class="pill">lead</span></h1>
+{% if lead.active == 0 %}<p class="pill">Lost</p>{% endif %}
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+{% if candidates %}
+<p>More than one partner matches. Pick one with partner action “link”, or merge the partners first.</p>
+<ul>
+    {% for person in candidates %}
+    <li>{{ person.name }}{% if person.email %} · {{ person.email }}{% endif %} (#{{ person.id }})</li>
+    {% endfor %}
+</ul>
+{% endif %}
+<p>
+    {% if lead.email %}{{ lead.email }}{% endif %}
+    {% if lead.phone %} · {{ lead.phone }}{% endif %}
+    {% if lead.website %} · {{ lead.website }}{% endif %}
+</p>
+{% if readiness %}
+<p>Conversion readiness: {% if readiness.ready %}ready{% else %}missing {{ readiness.missing|join(", ") }}{% endif %}.
+    Fit {{ readiness.fit_score }}/{{ readiness.fit_max }}.</p>
+{% endif %}
+
+{% if lead.active != 0 %}
+<h2>Convert to an opportunity</h2>
+<form method="post" action="/leads/{{ lead.id }}/convert">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="service_slug">Service</label>
+    <select id="service_slug" name="service_slug" required>
+        <option value="">Choose a service</option>
+        {% for service in services %}
+        <option value="{{ service.slug }}">{{ service.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="partner_action">Partner</label>
+    <select id="partner_action" name="partner_action">
+        <option value="auto">Match or create</option>
+        <option value="create">Create</option>
+        <option value="link">Link an existing partner id in the note flow later</option>
+    </select>
+    <label for="note">Note</label>
+    <textarea id="note" name="note"></textarea>
+    <button type="submit">Convert</button>
+</form>
+
+<h2>Mark lost</h2>
+<form method="post" action="/leads/{{ lead.id }}/lost">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="lost_reason">Lost reason</label>
+    <select id="lost_reason" name="lost_reason" required>
+        {% for reason in reasons %}
+        <option value="{{ reason.name }}">{{ reason.name }}</option>
+        {% endfor %}
+    </select>
+    <label for="lost_note">Note</label>
+    <textarea id="lost_note" name="note"></textarea>
+    <button type="submit">Mark lost</button>
+</form>
+{% elif not lead.merged_into_id %}
+<form method="post" action="/deals/{{ lead.id }}/restore">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Restore</button>
+</form>
+{% else %}
+<p>Merged into record #{{ lead.merged_into_id }}. Restore is not available.</p>
+{% endif %}
+
+<h2>Research notes</h2>
+<ul>
+    {% for activity in activities %}
+    <li><strong>{{ activity.type }}</strong> {{ activity.body }}</li>
+    {% else %}
+    <li>No notes yet.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

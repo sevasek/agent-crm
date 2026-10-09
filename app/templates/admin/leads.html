@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Leads — crm{% endblock %}
+{% block content %}
+<h1>Leads</h1>
+<p class="muted">
+    Unqualified signals. They are not opportunities and they do not appear in pipeline columns.
+    <a href="/lost-reasons">Lost reasons</a>
+    · <a href="/deals">Opportunities</a>
+</p>
+<form method="get" action="/leads">
+    <input type="search" name="q" value="{{ query }}" placeholder="Name, company, email, phone, website" aria-label="Search leads">
+    {% if current_lost %}<input type="hidden" name="lost" value="1">{% endif %}
+    <button type="submit">Search</button>
+    {% if current_lost %}
+    <a class="btn" href="/leads{% if query %}?q={{ query }}{% endif %}">Hide lost</a>
+    {% else %}
+    <a class="btn-secondary btn" href="/leads?lost=1{% if query %}&q={{ query }}{% endif %}">Show lost</a>
+    {% endif %}
+    <a class="btn" href="/leads/new">New lead</a>
+</form>
+<table>
+    <tr><th>Lead</th><th>Email</th><th>Fit</th><th>Next action</th><th></th></tr>
+    {% for lead in leads %}
+    <tr>
+        <td><a href="/leads/{{ lead.id }}">{{ lead.company_name or lead.contact_name or lead.name or ("Lead #" ~ lead.id) }}</a>
+            <span class="pill">lead</span>
+            {% if lead.active == 0 %}<span class="pill">lost</span>{% endif %}
+        </td>
+        <td>{{ lead.email or "" }}</td>
+        <td>{{ lead.fit_score }}</td>
+        <td>{{ lead.next_action or "" }}{% if lead.next_action_date %} · {{ lead.next_action_date }}{% endif %}</td>
+        <td><a href="/leads/{{ lead.id }}">Open</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5">No leads.</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

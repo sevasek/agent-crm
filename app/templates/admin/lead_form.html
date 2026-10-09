@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}New lead — crm{% endblock %}
+{% block content %}
+<h1>New lead</h1>
+<p class="muted">This does not create a partner. Convert the lead when it is worth pursuit.</p>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" action="/leads/new">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="company_name">Company</label>
+    <input type="text" id="company_name" name="company_name">
+    <label for="contact_name">Contact</label>
+    <input type="text" id="contact_name" name="contact_name">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email">
+    <label for="phone">Phone</label>
+    <input type="text" id="phone" name="phone">
+    <label for="website">Website</label>
+    <input type="text" id="website" name="website">
+    <button type="submit">Create lead</button>
+    <a href="/leads">Cancel</a>
+</form>
+{% endblock %}

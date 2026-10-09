@@ -29,6 +29,10 @@ from app.services.phone import to_tel_href, has_callable_phone
 from app.services import offers as offers_service
 from app.services import icp as icp_service
 from app.services import stage_automations
+from app.services.lead_records import (
+    convert_lead, create_lead, create_lost_reason, get_lead, list_leads,
+    list_lost_reasons, mark_lost, restore_deal, update_lost_reason,
+)
 from app.services import api_keys as api_keys_service
 
 router = APIRouter(prefix="", tags=["admin"])
@@ -509,29 +513,31 @@ def _tag_query(raw: str):
     return slug, ""
 
 
-def _deals_for_board(stage: str, due: bool, tag: str):
+def _deals_for_board(stage: str, due: bool, tag: str, include_lost: bool = False):
     tag_filter = [tag] if tag else None
     if due:
         return list_due_deals(stage=stage or None, tags=tag_filter)
-    return annotate_deals(list_deals(stage=stage or None, tags=tag_filter))
+    return annotate_deals(list_deals(stage=stage or None, tags=tag_filter, include_lost=include_lost))
 
 
 @router.get("/deals", response_class=HTMLResponse)
 async def deals_list(
-    request: Request, stage: str = "", due: str = "", tag: str = "",
+    request: Request, stage: str = "", due: str = "", tag: str = "", lost: str = "",
     user=Depends(require_login),
 ):
     due_filter = due.strip().lower() in {"1", "true", "yes", "due"}
+    include_lost = lost.strip().lower() in {"1", "true", "yes"}
     current_tag, tag_error = _tag_query(tag)
     if tag_error:
         deals = []
     else:
-        deals = _deals_for_board(stage, due_filter, current_tag)
+        deals = _deals_for_board(stage, due_filter, current_tag, include_lost)
     return templates.TemplateResponse(request, "admin/deals.html", {
         "request": request, "user": user,
         "deals": deals, "stages": pipeline_stages.list_stages(),
         "current_stage": stage, "current_due": due_filter,
         "current_tag": current_tag, "tag_error": tag_error,
+        "current_lost": include_lost,
         "tags_in_use": list_tags(),
     })
 
@@ -626,13 +632,15 @@ def _annotate_child_counts(columns):
     return columns
 
 
-def _pipeline_board_data(current_tag="", tag_error=""):
+def _pipeline_board_data(current_tag="", tag_error="", include_lost=False):
     stages = pipeline_stages.list_stages()
     tag_filter = [current_tag] if current_tag else None
     columns = [
         {
             "stage": s,
-            "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter)),
+            "deals": [] if tag_error else annotate_deals(
+                list_deals(stage=s["key"], tags=tag_filter, include_lost=include_lost)
+            ),
         }
         for s in stages
     ]
@@ -830,12 +838,14 @@ async def change_deal_stage(
 
 # ==================== Pipeline (Kanban board) ====================
 @router.get("/pipeline", response_class=HTMLResponse)
-async def pipeline_board(request: Request, tag: str = "", user=Depends(require_login)):
+async def pipeline_board(request: Request, tag: str = "", lost: str = "", user=Depends(require_login)):
     current_tag, tag_error = _tag_query(tag)
-    stages, columns = _pipeline_board_data(current_tag, tag_error)
+    include_lost = lost.strip().lower() in {"1", "true", "yes"}
+    stages, columns = _pipeline_board_data(current_tag, tag_error, include_lost)
     return templates.TemplateResponse(request, "admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,
+        "current_lost": include_lost,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "current_tag": current_tag, "tag_error": tag_error,
         "tags_in_use": list_tags(),
@@ -1378,3 +1388,160 @@ async def delete_automation_submit(automation_id: int, request: Request, user=De
             request, user, error=_automation_error_message(error), status_code=400,
         )
     return RedirectResponse("/automations", status_code=303)
+
+
+def _csrf(request):
+    return generate_csrf_token(get_session_cookie(request))
+
+
+@router.get("/leads", response_class=HTMLResponse)
+async def leads_list(request: Request, q: str = "", lost: str = "", user=Depends(require_login)):
+    include_lost = lost.strip().lower() in {"1", "true", "yes"}
+    rows = list_leads(query=q, include_lost=include_lost, limit=50)["leads"]
+    return templates.TemplateResponse(request, "admin/leads.html", {
+        "request": request, "user": user, "leads": rows,
+        "query": q, "current_lost": include_lost,
+        "csrf_token": _csrf(request),
+    })
+
+
+@router.get("/leads/new", response_class=HTMLResponse)
+async def new_lead_page(request: Request, user=Depends(require_login)):
+    return templates.TemplateResponse(request, "admin/lead_form.html", {
+        "request": request, "user": user, "error": None, "csrf_token": _csrf(request),
+    })
+
+
+@router.post("/leads/new")
+async def new_lead_submit(
+    request: Request,
+    company_name: str = Form(""), contact_name: str = Form(""), email: str = Form(""),
+    phone: str = Form(""), website: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/leads/new", status_code=303)
+    created = create_lead(
+        company_name=company_name, contact_name=contact_name,
+        email=email, phone=phone, website=website, log_create=False,
+    )
+    if not created.get("ok"):
+        return templates.TemplateResponse(request, "admin/lead_form.html", {
+            "request": request, "user": user,
+            "error": "A lead needs a company, a contact, or another identity field.",
+            "csrf_token": _csrf(request),
+        }, status_code=400)
+    return RedirectResponse(f"/leads/{created['lead']['id']}", status_code=303)
+
+
+@router.get("/leads/{lead_id}", response_class=HTMLResponse)
+async def lead_detail(request: Request, lead_id: int, user=Depends(require_login)):
+    detail = get_lead(lead_id)
+    if not detail.get("ok"):
+        return RedirectResponse("/leads", status_code=303)
+    return templates.TemplateResponse(request, "admin/lead_detail.html", {
+        "request": request, "user": user,
+        "lead": detail["lead"],
+        "activities": detail["activities"],
+        "readiness": detail["conversion_readiness"],
+        "duplicates": detail["possible_duplicates"],
+        "services": list_services(active_only=True),
+        "reasons": list_lost_reasons(active_only=True),
+        "csrf_token": _csrf(request),
+        "error": None,
+        "candidates": [],
+    })
+
+
+@router.post("/leads/{lead_id}/convert")
+async def convert_lead_submit(
+    request: Request, lead_id: int,
+    service_slug: str = Form(""), partner_action: str = Form("auto"),
+    note: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+    result = convert_lead(
+        lead_id, service_slug=service_slug, partner_action=partner_action, note=note,
+    )
+    if not result.get("ok"):
+        detail = get_lead(lead_id)
+        return templates.TemplateResponse(request, "admin/lead_detail.html", {
+            "request": request, "user": user,
+            "lead": (detail.get("lead") or {}),
+            "activities": detail.get("activities") or [],
+            "readiness": detail.get("conversion_readiness") or {},
+            "duplicates": detail.get("possible_duplicates") or [],
+            "services": list_services(active_only=True),
+            "reasons": list_lost_reasons(active_only=True),
+            "csrf_token": _csrf(request),
+            "error": result.get("error"),
+            "candidates": result.get("candidates") or [],
+        }, status_code=400)
+    return RedirectResponse(f"/deals/{lead_id}/edit", status_code=303)
+
+
+@router.post("/leads/{lead_id}/lost")
+async def lose_lead_submit(
+    request: Request, lead_id: int,
+    lost_reason: str = Form(""), note: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        mark_lost(lead_id, lost_reason=lost_reason, note=note)
+    return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+
+
+@router.post("/deals/{deal_id}/restore")
+async def restore_record_submit(
+    request: Request, deal_id: int,
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        restore_deal(deal_id)
+    deal = get_deal(deal_id)
+    if deal and deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
+    return RedirectResponse("/deals?lost=1", status_code=303)
+
+
+@router.get("/lost-reasons", response_class=HTMLResponse)
+async def lost_reasons_page(request: Request, user=Depends(require_login)):
+    return templates.TemplateResponse(request, "admin/lost_reasons.html", {
+        "request": request, "user": user,
+        "reasons": list_lost_reasons(),
+        "error": None,
+        "csrf_token": _csrf(request),
+    })
+
+
+@router.post("/lost-reasons")
+async def create_lost_reason_submit(
+    request: Request, name: str = Form(""), triggers_nurture: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/lost-reasons", status_code=303)
+    created = create_lost_reason(name, triggers_nurture=bool(triggers_nurture))
+    if not created.get("ok"):
+        return templates.TemplateResponse(request, "admin/lost_reasons.html", {
+            "request": request, "user": user,
+            "reasons": list_lost_reasons(),
+            "error": "That lost reason name is already in use." if created.get("error") == "duplicate_name" else "Name is required.",
+            "csrf_token": _csrf(request),
+        }, status_code=400)
+    return RedirectResponse("/lost-reasons", status_code=303)
+
+
+@router.post("/lost-reasons/{reason_id}")
+async def update_lost_reason_submit(
+    request: Request, reason_id: int,
+    name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        update_lost_reason(
+            reason_id, name=name,
+            triggers_nurture=bool(triggers_nurture), active=bool(active),
+        )
+    return RedirectResponse("/lost-reasons", status_code=303)

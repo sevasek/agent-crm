@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Deals — crm{% endblock %}
 {% block content %}
-<h1>Deals</h1>
+<h1>Opportunities</h1>
+<p><a href="/leads">Leads</a> · <a href="/lost-reasons">Lost reasons</a>
+    {% if current_lost %}<a href="/deals">Hide lost</a>{% else %}<a href="/deals?lost=1">Show lost</a>{% endif %}
+</p>
 <div style="margin-bottom:1rem;">
     <a href="/deals{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_stage and not current_due else 'btn-secondary' }}">All</a>
     <a href="/deals?due=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_due else 'btn-secondary' }}">Due</a>
@@ -28,7 +31,7 @@
     <tr>
         <td><a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
         <td>{{ d.service_name }}{% if d.parent_deal_id %}<div class="muted">follow-on of #{{ d.parent_deal_id }}</div>{% endif %}</td>
-        <td><span class="pill">{{ d.stage }}</span></td>
+        <td><span class="pill">opportunity</span> <span class="pill">{{ d.stage }}</span></td>
         <td>
             {% for tag in d.tags %}
             <a class="pill pill-tag{% if current_tag == tag %} pill-tag-on{% endif %}" href="/deals?tag={{ tag }}{% if current_stage %}&stage={{ current_stage }}{% endif %}">{{ tag }}</a>

@@ -2,10 +2,13 @@
 {% block title %}Pipeline — crm{% endblock %}
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
+<link rel="stylesheet" href="/static/pipeline-board.css">
 <h1>Pipeline</h1>
 <p class="muted">
     Columns follow the stage order set on the <a href="/stages">Stages</a> page.
-    Move a deal by picking a new stage on its card.
+    Drag a card onto another column to change its stage, or pick a stage on the card.
+    The stage menu still submits with JavaScript off.
+    Order within a column lasts only until the next refresh.
 </p>
 {% if tags_in_use or current_tag %}
 <div class="tag-filters">
@@ -21,4 +24,6 @@
     {% include "admin/_pipeline_column.html" %}
     {% endfor %}
 </div>
+<script src="/static/vendor/sortable.min.js" defer></script>
+<script src="/static/pipeline-board.js" defer></script>
 {% endblock %}

@@ -1,0 +1,43 @@
+/* Drag affordances for the pipeline board. Loaded from pipeline.html only. */
+
+.pipeline-column {
+    display: flex;
+    flex-direction: column;
+}
+
+.pipeline-cards {
+    flex: 1 1 auto;
+    min-height: 4rem;
+}
+
+.pipeline-card {
+    cursor: grab;
+    touch-action: pan-x pan-y;
+}
+
+.pipeline-card a {
+    cursor: pointer;
+}
+
+.pipeline-card select,
+.pipeline-card button {
+    cursor: auto;
+}
+
+.pipeline-card.pipeline-card-chosen {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.pipeline-card.pipeline-card-ghost {
+    opacity: 0.4;
+}
+
+.pipeline-card.pipeline-card-drag {
+    opacity: 0.95;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.16);
+}
+
+.pipeline-cards:has(.pipeline-card) .pipeline-empty {
+    display: none;
+}

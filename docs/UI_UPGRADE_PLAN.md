@@ -360,19 +360,36 @@ commit.
 
 ---
 
-## Phase 4 — SortableJS drag-and-drop kanban (DEFERRED, [#46](https://github.com/sevasek/agent-crm/issues/46))
+## Phase 4 — SortableJS drag-and-drop kanban ([#46](https://github.com/sevasek/agent-crm/issues/46))
 
-**Do not implement this.** Needs a decision; it is not launch work.
+Shipped. Dragging a card onto another column changes that deal's stage.
+The drop sets the card's stage `<select>` and fires `change`, so the
+request is the same `POST /deals/{id}/stage` the menu already uses
+(session CSRF token, `next=pipeline`, htmx out-of-band column swap).
+`set_deal_stage` still owns the move, including nurture, won, and
+stage-automation side effects. A drop on the deal's current stage does
+not post. Posting the current stage is a no-op inside `set_deal_stage`
+(no second activity, nurture enrollment, won webhook, or automation).
 
-Turning the pipeline's per-card `<select>` into actual drag-and-drop is real
-scope: a new endpoint that accepts "deal X moved to stage Y, position Z",
-touch-device testing (the call view already proves mobile matters here),
-and it depends on Phase 3's htmx work being in place and stable first (drag
-libraries pair with htmx via the `htmx-ext-sortable` pattern: SortableJS
-fires a DOM event on drop, an htmx listener turns it into the same
-`hx-post` the dropdown already uses). Phase 3 has shipped; this phase is
-still out of launch-week scope. Revisit after launch with its own plan
-on #46. Do not vendor SortableJS from this file.
+The stage `<select>` stays on the card. With JavaScript off, a
+`<noscript>` submit button posts the same form. If htmx did not load,
+the existing `onchange` submits it. Sortable is loaded only from
+`pipeline.html` (`app/static/vendor/sortable.min.js`,
+`app/static/pipeline-board.js`, `app/static/pipeline-board.css`).
+
+Touch: `delay` is 180ms and `delayOnTouchOnly` is true, with
+`touchStartThreshold` 8 and `forceFallback`. Native HTML5 drag forces
+the threshold down to 1px and then divides by devicePixelRatio, which
+cancels the delay on the first pointer move. Fallback mode keeps an
+8px threshold, so a scroll during those 180ms does not start a drag.
+A mouse drag starts immediately.
+
+Persisted order inside a column was skipped so this change does not
+take a migration number. There is no `position` column. Reordering
+cards inside one column is DOM-only until the next refresh.
+
+Vendored file: SortableJS 1.15.7, recorded in
+`app/static/vendor/VENDOR.md`. Nothing is loaded from a CDN at runtime.
 
 ---
 

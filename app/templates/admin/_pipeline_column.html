@@ -1,7 +1,8 @@
 <div id="pipeline-col-{{ col.stage.key }}" class="pipeline-column"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
     <h2>{{ col.stage.label }} <span class="muted">({{ col.deals|length }})</span></h2>
+    <div class="pipeline-cards" data-stage="{{ col.stage.key }}">
     {% for d in col.deals %}
-    <div class="pipeline-card">
+    <div class="pipeline-card" data-deal-id="{{ d.id }}">
         <a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>
         <div class="muted">{{ d.service_name }}</div>
         {% if d.tags %}
@@ -31,9 +32,11 @@
                 <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
                 {% endfor %}
             </select>
+            <noscript><button type="submit">Update stage</button></noscript>
         </form>
     </div>
     {% else %}
-    <p class="muted">No deals.</p>
+    <p class="muted pipeline-empty">No deals.</p>
     {% endfor %}
+    </div>
 </div>

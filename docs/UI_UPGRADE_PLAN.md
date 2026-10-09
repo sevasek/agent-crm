@@ -379,7 +379,7 @@ on #46. Do not vendor SortableJS from this file.
 ## Phase 5 — optional extras (DEFERRED, [#47](https://github.com/sevasek/agent-crm/issues/47))
 
 **Do not implement this.** Needs a decision; it is not launch work.
-`docs/SCOPE.md` already lists dark mode as out of scope for launch.
+Dark mode is unlocked (issue #87, decision 2026-10-06) and is no longer deferred with the rest of this phase.
 
 - **Tom Select / Choices.js** for the partner/service `<select>` fields, but
   only if a customer actually has enough partners or services that a plain
@@ -390,13 +390,12 @@ on #46. Do not vendor SortableJS from this file.
   htmx can't express server-side (e.g. a multi-step form section that
   toggles without a round-trip). Nothing identified in the current templates
   needs this yet — don't add it "just in case."
-- **Real dark mode** — redo `--bg-alt` and the `.pill-*` colors as proper
-  light/dark pairs (Pico's own tokens already flip automatically; the app's
-  hand-picked ones don't), then remove the `data-theme="light"` lock added
-  in Phase 1 step 4.
+- **Real dark mode** — shipped in #87. `--bg-alt`, `.pill-due`, `.pill-overdue`,
+  and the other hand-picked colors are `light-dark()` pairs that follow Pico's
+  `color-scheme`. The `data-theme="light"` lock from Phase 1 step 4 is removed.
 
-Do not vendor Tom Select or Alpine, and do not unlock dark mode, from this
-file.
+Do not vendor Tom Select or Alpine from this file. Dark mode is unlocked
+(issue #87, decision 2026-10-06).
 
 ---
 

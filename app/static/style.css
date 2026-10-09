@@ -1,23 +1,42 @@
+/* Light values are the previous light-only UI. Dark values follow the same
+   color-scheme Pico sets (OS preference, or data-theme when present) via
+   light-dark(). The dark page background matches Pico 2.1.1. */
 :root {
-    --border: #ddd;
-    --muted: #666;
-    --bg-alt: #f7f7f7;
+    --page: light-dark(#fff, rgb(19, 22.5, 30.5));
+    --surface: light-dark(#fff, #343e56);
+    --border: light-dark(#ddd, #8b99b0);
+    --muted: light-dark(#666, #b4bccb);
+    --bg-alt: light-dark(#f7f7f7, #222a3d);
+    --text: light-dark(#222, #e6e9ef);
     --accent: #2c5aa0;
+    --accent-text: light-dark(#2c5aa0, #9ec0ef);
+    --danger: light-dark(#b00020, #ffb4ae);
+    --due-bg: light-dark(#fff3cd, #b8922e);
+    --due-text: light-dark(#856404, #1a1406);
+    --overdue-bg: light-dark(#fdecea, #d98986);
+    --overdue-text: light-dark(#b00020, #3d0c12);
+    --tag-hover-bg: light-dark(#e7eef8, #2a3d58);
+    --secondary-hover: light-dark(#f0f4fa, #3d4a66);
+    --ok-bg: light-dark(#f0f7f0, #1e4636);
+    --ok-border: light-dark(#cde5cd, #5d9a78);
+    --code-text: light-dark(#646b79, #e6e9ef);
 }
 
-/* Pico.css primary tokens → existing brand blue. data-theme="light" is locked
-   in base.html so Pico's auto dark mode cannot override these. */
-:root,
-[data-theme="light"] {
-    --pico-primary: var(--accent);
+/* Brand blue in both schemes. These selectors match Pico's theme rules so
+   they win over Pico's cyan dark primary. Links lighten on a dark page;
+   button fills stay #2c5aa0 with white text. */
+:root:not([data-theme]),
+[data-theme="light"],
+[data-theme="dark"] {
+    --pico-primary: var(--accent-text);
     --pico-primary-background: var(--accent);
     --pico-primary-border: var(--accent);
-    --pico-primary-hover: #234a85;
+    --pico-primary-hover: light-dark(#234a85, #c5d9f5);
     --pico-primary-hover-background: #234a85;
     --pico-primary-hover-border: #234a85;
-    --pico-primary-hover-underline: #234a85;
-    --pico-primary-underline: var(--accent);
-    --pico-primary-focus: rgba(44, 90, 160, 0.25);
+    --pico-primary-hover-underline: light-dark(#234a85, #c5d9f5);
+    --pico-primary-underline: var(--accent-text);
+    --pico-primary-focus: light-dark(rgba(44, 90, 160, 0.25), rgba(158, 192, 239, 0.45));
     --pico-primary-inverse: #fff;
 }
 
@@ -26,8 +45,8 @@
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     margin: 0;
-    color: #222;
-    background: #fff;
+    color: var(--text);
+    background: var(--page);
 }
 
 .skip-link {
@@ -55,25 +74,25 @@ input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
 summary:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--accent-text);
     outline-offset: 2px;
 }
 
 .topnav {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start;
     gap: 0.75rem 1.5rem; padding: 0.75rem 1.5rem;
-    border-bottom: 1px solid var(--border); background: #fff;
+    border-bottom: 1px solid var(--border); background: var(--page);
 }
-.topnav a { text-decoration: none; color: #222; }
-.topnav a:hover { color: var(--accent); }
+.topnav a { text-decoration: none; color: var(--text); }
+.topnav a:hover { color: var(--accent-text); }
 .topnav .brand { font-weight: 700; }
 .topnav .right { margin-left: auto; color: var(--muted); }
 .topnav-logout { margin: 0; display: inline; }
 .topnav-logout button {
     background: none; border: none; padding: 0; margin: 0; cursor: pointer;
-    font: inherit; text-decoration: none; color: #222;
+    font: inherit; text-decoration: none; color: var(--text);
 }
-.topnav-logout button:hover { color: var(--accent); }
+.topnav-logout button:hover { color: var(--accent-text); }
 .topnav a[aria-current="page"] {
     font-weight: 600;
     text-decoration: underline;
@@ -116,10 +135,10 @@ button[type=submit] { width: auto; }
     border-color: var(--pico-primary-hover-border, #234a85);
     color: #fff; text-decoration: none;
 }
-.btn-secondary { background: #fff; color: var(--accent); border-color: var(--accent); }
-.btn-secondary:hover { background: #f0f4fa; color: var(--accent); text-decoration: none; }
+.btn-secondary { background: var(--surface); color: var(--accent-text); border-color: var(--accent-text); }
+.btn-secondary:hover { background: var(--secondary-hover); color: var(--accent-text); text-decoration: none; }
 
-.error { color: #b00020; margin-bottom: 1rem; }
+.error { color: var(--danger); margin-bottom: 1rem; }
 .muted { color: var(--muted); }
 .pill {
     display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px;
@@ -131,9 +150,9 @@ button[type=submit] { width: auto; }
     font-size: 0.75rem;
     margin: 0.1rem 0.2rem 0.1rem 0;
     text-decoration: none;
-    color: #222;
+    color: var(--text);
 }
-a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
+a.pill-tag:hover, .pill-tag-on { background: var(--tag-hover-bg); color: var(--accent-text); }
 .tag-filters { margin: 0.25rem 0 0.75rem; }
 .activity { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
 .activity .meta { color: var(--muted); font-size: 0.8rem; }
@@ -142,9 +161,9 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .next-action-form input[type=text] { width: auto; flex: 1; min-width: 12rem; }
 .next-action-form input[type=date] { width: auto; }
 .next-action-form button { width: auto; padding: 0.35rem 0.75rem; }
-.deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
-.pill-due { background: #fff3cd; color: #856404; }
-.pill-overdue { background: #fdecea; color: #b00020; }
+.deal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
+.pill-due { background: var(--due-bg); color: var(--due-text); }
+.pill-overdue { background: var(--overdue-bg); color: var(--overdue-text); }
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pipeline-board {
@@ -163,7 +182,7 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
     padding: 0.75rem;
 }
 .pipeline-column h2 { margin-top: 0; font-size: 0.95rem; }
-.pipeline-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; }
+.pipeline-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; }
 .pipeline-card select { margin-top: 0.4rem; }
 .stage-move-form { display: inline; }
 .stage-move-form button { padding: 0.15rem 0.5rem; }
@@ -172,13 +191,13 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .call-outcome-form input[type=text] { width: auto; flex: 1 1 8rem; min-width: 6rem; }
 .call-outcome-form button { width: auto; }
 .btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; border: var(--pico-border-width, 1px) solid var(--border); }
-.btn-outcome-no_answer { background: #fff; color: var(--muted); border-color: var(--border); }
-.btn-outcome-not_interested { background: #fff; color: #b00020; border-color: #b00020; }
+.btn-outcome-no_answer { background: var(--surface); color: var(--muted); border-color: var(--border); }
+.btn-outcome-not_interested { background: var(--surface); color: var(--danger); border-color: var(--danger); }
 .btn-outcome-won { background: #1e7e34; color: #fff; border-color: #1e7e34; }
 
 /* Tap-to-call: a real <a href="tel:..."> (the link shape mobile browsers
    handle reliably), styled plain so it doesn't look like a random link. */
-.btn-tel { color: var(--accent); text-decoration: underline; }
+.btn-tel { color: var(--accent-text); text-decoration: underline; }
 
 /* Focused mobile call view: one column, big tap targets, nothing else on
    the page competing for attention while a rep is mid-call. */
@@ -204,8 +223,8 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .call-view-new-offer { margin: 0.5rem 0 1rem; }
 .call-view-new-offer .form-row { margin-bottom: 0.5rem; }
 
-code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
-.api-key-new { background: #f0f7f0; border: 1px solid #cde5cd; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+code { background: var(--bg-alt); color: var(--code-text); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
+.api-key-new { background: var(--ok-bg); border: 1px solid var(--ok-border); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
 .api-key-value { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
 .api-key-value code { flex: 1; word-break: break-all; padding: 0.4rem 0.6rem; }
 

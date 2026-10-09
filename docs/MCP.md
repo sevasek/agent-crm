@@ -9,12 +9,15 @@ and write the CRM's data.
 
 ## What an agent can do
 
-Search and get partners, list and get deals and activities, get today's call
-queue and due follow-ups, read the service/stage/offer catalogue, ingest leads
-(same idempotent rules as `POST /api/v1/leads`), create and update partners and
-deals, move stages, record call outcomes, log timeline activities, manage
-services and offers, assign owners, bulk-update deals, and hand deal-scoped work
-to another agent or a person.
+Search and get partners, list and get opportunities, work leads
+(`create_lead`, `update_lead`, `get_lead`, `list_leads`, `find_duplicates`,
+`convert_lead`, `mark_lost`, `restore_deal`, `merge_leads`), get today's call
+queue and due follow-ups, read the catalogue and lost reasons, ingest leads
+(a missing `type` creates a lead; `"type": "opportunity"` keeps the partner
+and pipeline path), create and update partners and opportunities, move stages,
+record call outcomes, log timeline activities including `research`, manage
+services and offers, assign owners, bulk-update opportunities, and hand
+deal-record work to another agent or a person.
 
 It cannot delete records, reshape the pipeline (that is `CRM_STAGES_API_KEY`
 and `/admin/stages`), manage users, or send email.

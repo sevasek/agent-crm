@@ -6,6 +6,8 @@ Do not point two app processes at one sqlite file. Do not merge or deploy
 from a review PR until the shadow test below has been done on a **copy** of
 `crm.db`.
 
+The lead/opportunity schema (version 8) is a later upgrade. Do not run it as part of this cutover. Restore-only rollback and the breaking ingest default are in the changelog.
+
 The Health Check kickoff and the follow-on child deals are two stage
 automations you create after boot. The migration does not insert them, and
 a new database starts with none. The seed script and the equivalent MCP

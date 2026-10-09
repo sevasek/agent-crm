@@ -255,11 +255,15 @@ export BACKUP_DIR=instances/acme/backups
 ```bash
 python scripts/inject_leads.py --dry-run tests/fixtures/leads/example.json
 python scripts/inject_leads.py tests/fixtures/leads/example.json
+python scripts/inject_leads.py --type opportunity tests/fixtures/leads/example.json
 ```
 
-`service_slug` must already exist in your catalogue. Field meanings and matching
-rules are in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). To load contacts from
-markdown files, see `scripts/import_clients.py`.
+A row with no `type` becomes a **lead** (no partner, not on the pipeline).
+`--type opportunity` keeps the older behaviour: match or create a partner and
+an opportunity. `service_slug` is required for an opportunity and optional for
+a lead; when set, it must already exist. Field meanings are in
+[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). `scripts/import_clients.py` still
+creates partners and opportunities unless you pass `--type lead`.
 
 ## Docs
 

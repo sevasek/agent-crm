@@ -11,11 +11,14 @@ A database newer than the running code refuses to start. No ORM.
 
 ## Entities
 
-- `partners`: people and companies.
+- **Partner**: a person or a company that has been confirmed. One row in `partners`.
+- **Lead**: a deal record with `type = 'lead'`. Unqualified. It keeps its own contact columns and does not need a partner or a service.
+- **Opportunity**: a deal record with `type = 'opportunity'`. The qualified pursuit of one service for one partner. Only opportunities use pipeline stages.
+- **Deal record**: one row in `deals`. It is either a lead or an opportunity.
 - `services`: what you sell (the catalogue).
-- `deals`: one pursuit of a service by a partner. Carries pipeline state.
-- `deal_tags`: labels on a deal (a campaign slug, a region, anything else).
-- `activities`: the timeline.
+- `lost_reasons`: operator-configured reasons a lead or an opportunity was lost. Lost is `active = 0` plus a reason, not a stage.
+- `deal_tags`: labels on a deal record (a campaign slug, a region, anything else).
+- `activities`: the timeline. `partner_id` may be null when the row is tied to a lead. `type = 'research'` can store `source_url`.
 - `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
 - `delegated_tasks`: deal-scoped work handed to another agent or a person.
 - `stage_automations`, `stage_automation_actions`: rules that run when a deal enters a stage. Empty until an operator adds one.
@@ -348,25 +351,24 @@ deal, moving between two `is_won` stages, or entering `is_lost` does not fire.
 
 ## Lead ingest
 
-**`POST /api/v1/leads`** takes up to 100 leads per call (`X-API-Key:
+**`POST /api/v1/leads`** takes up to 100 rows per call (`X-API-Key:
 $CRM_API_KEY`, header only, fail-closed when unset, rate-limited, body capped).
-The CLI `scripts/inject_leads.py` runs the same logic in-process. Per lead
-(`app/services/leads.py::ingest_lead`):
+The CLI `scripts/inject_leads.py` runs the same logic in-process.
 
-1. `service_slug` must exist, else `invalid_service`.
-2. `name` is required, else `invalid`. Email or phone is also required.
-3. `company_name`, if given, finds or creates a company partner by exact name,
-   and the person's `parent_id` points at it.
-4. `is_company`, if truthy, stores the lead itself as a company. Use it for
-   sources that only have a business name. It is different from `company_name`,
-   which creates a separate parent record.
-5. The existing partner is matched by email, then phone + name, then website +
-   name, then exact name within the same parent and company flag. Otherwise a
-   new partner is created.
-6. If the partner already has an open deal for that service, nothing new is
-   created (`duplicate_open_deal`), so a job can re-run over the same source
-   data safely. Otherwise the deal is created (`created` for a new partner,
-   `existing_partner_new_deal` for an existing one).
+**Breaking:** a row with no `type` creates a **lead**. It does not create a partner
+and it does not enter the pipeline. The response sets `type_defaulted: true` and
+the HTTP response sets `Deprecation: type omitted; default is now lead`.
+Send `"type": "opportunity"` (or `inject_leads.py --type opportunity`) when the
+row is already qualified and should create or match a partner and an opportunity.
+
+For `type = lead`:
+
+1. `service_slug` is optional. If it is set, it must exist (`invalid_service`).
+2. `name` or `company_name` is required, and the row needs an identity (email, phone, website, LinkedIn, or company name).
+3. A strong duplicate (email, or phone and name, or website and name) fills empty fields on the oldest open lead or opportunity. Weak keys do not auto-merge.
+4. Otherwise a lead is created. If the email matches exactly one partner, `partner_id` is set and the partner is not changed.
+
+For `type = opportunity`, the previous rules still apply: match or create a partner, then create an opportunity unless an open one already exists for that partner and service (`duplicate_open_deal` / `existing_partner_new_deal`).
 
 Re-runs fill empty partner and deal fields and never overwrite values an
 operator edited. Only these keys are read; everything else is dropped:

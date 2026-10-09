@@ -29,6 +29,11 @@ insert services, stages, or prices.
 
 ## In scope
 
+Leads and opportunities are in scope. A lead is an unqualified signal with its
+own contact fields. An opportunity is the qualified pursuit of one service for
+one partner. The CRM calculates fit and conversion readiness. It does not
+decide whether a lead is worth pursuit. That judgement stays in the agent.
+
 - **Contacts**: one `partners` table for companies and people.
 - **Interaction tracking**: an `activities` timeline per contact and deal.
 - **Lead and pipeline management**: `deals` and the stage pipeline. This is the core.

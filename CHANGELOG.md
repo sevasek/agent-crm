@@ -12,7 +12,20 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking:** `POST /api/v1/leads`, MCP `ingest_leads`, and `scripts/inject_leads.py` create a **lead** when `type` is omitted. They no longer create a partner and a pipeline opportunity. Send `"type": "opportunity"` or `--type opportunity` to keep the previous behaviour. The REST response sets `Deprecation: type omitted; default is now lead` and `type_defaulted: true`. Client import does not inherit this default.
+- **Breaking:** `list_deals` hides lost records unless `include_lost` is true. The pipeline Lost column is empty until the lost filter is on.
+- **Breaking:** `set_deal_stage` and `record_call_outcome` reject a lead (`not_an_opportunity`) and a lost record (`deal_lost`). `not_interested` marks the record lost with reason "Not a fit" instead of moving it to the lost stage.
+- **Breaking:** `is_lost` cannot be turned on for a new or existing stage that does not already have it (`invalid_stage_role`). `GET /api/v1/stages` marks `is_lost` with `deprecated_fields`.
+- Schema version 8 rebuilds `deals`, `activities`, and `delegated_tasks` so a lead can exist without a partner or a service. Rollback is restore-only: stop the app, restore `pre-migrate-v7-to-v8-*.db`, and deploy the previous image. Records created after the migration are lost on rollback. The previous image refuses a schema 8 database.
+
 ### Added
+
+- Lead and opportunity tools: `create_lead`, `update_lead`, `get_lead`, `list_leads`, `find_duplicates`, `convert_lead`, `mark_lost`, `restore_deal`, `merge_leads`, and lost-reason tools. Admin pages at `/leads` and `/lost-reasons` (`/admin/lost-reasons` redirects there).
+- `scripts/opportunities_to_leads.py` moves chosen open opportunities back to leads. Dry-run by default. It does not run on boot and the migration never guesses.
+
+### Added (earlier on this branch)
 
 - Stage automations (schema v7). Named rules, empty until an operator adds
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.

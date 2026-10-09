@@ -245,7 +245,22 @@ def find_duplicates(*, lead_id=None, exclude_id=None, **fields):
     for deal in deals:
         if exclude_id and deal["id"] == exclude_id:
             continue
-        found = _matched_keys(probe, deal)
+        candidate = deal
+        if deal.get("type") == "opportunity" and deal.get("partner_id"):
+            partner = get_partner(deal["partner_id"]) or {}
+            candidate = dict(deal)
+            if _empty(candidate.get("email")):
+                candidate["email"] = partner.get("email")
+            if _empty(candidate.get("phone")):
+                candidate["phone"] = partner.get("phone")
+            if _empty(candidate.get("website")):
+                candidate["website"] = partner.get("website")
+            if _empty(candidate.get("company_name")) and partner.get("is_company"):
+                candidate["company_name"] = partner.get("name")
+            if _empty(candidate.get("contact_name")) and not partner.get("is_company"):
+                candidate["contact_name"] = partner.get("name")
+                candidate["name"] = partner.get("name")
+        found = _matched_keys(probe, candidate)
         if not found:
             continue
         hits.append({
@@ -416,7 +431,7 @@ def _apply_tags(deal_id, fields):
     return None
 
 
-def create_lead(**raw):
+def create_lead(*, log_create=True, **raw):
     before_partners = _partner_count()
     fields, error = _clean_lead_fields(raw, partial=False)
     if error:
@@ -464,7 +479,8 @@ def create_lead(**raw):
     tag_error = _apply_tags(deal_id, fields)
     if tag_error:
         return _fail("invalid")
-    log_activity(None, "system", "Lead created", deal_id=deal_id)
+    if log_create:
+        log_activity(None, "system", "Lead created", deal_id=deal_id)
     if _partner_count() != before_partners:
         return _fail("invalid")
     lead = get_deal(deal_id)

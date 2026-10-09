@@ -71,7 +71,7 @@ def parse_client_file(path) -> dict:
     return parse_client_markdown(text)
 
 
-def import_client(record: dict, source_label: str = "markdown-import") -> dict:
+def import_client(record: dict, source_label: str = "markdown-import", record_type: str = "opportunity") -> dict:
     """Find-or-create company, person, and optional deal. Never duplicates an
     open deal for the same partner+service. Fills only empty partner fields on
     a re-run so later CRM edits are not overwritten.
@@ -80,6 +80,8 @@ def import_client(record: dict, source_label: str = "markdown-import") -> dict:
     """
     if not record or (not record.get("company") and not record.get("name")):
         return {"status": "invalid"}
+    if record_type == "lead":
+        return _import_client_as_lead(record, source_label)
 
     result = {"status": "ok", "company_id": None, "partner_id": None, "deal_id": None}
 
@@ -194,7 +196,35 @@ def import_client(record: dict, source_label: str = "markdown-import") -> dict:
     return result
 
 
-def import_paths(paths, dry_run: bool = False) -> list:
+def _import_client_as_lead(record: dict, source_label: str) -> dict:
+    """Opt-in research import. Does not create a partner."""
+    from app.services.lead_records import create_lead
+
+    created = create_lead(
+        log_create=False,
+        company_name=(record.get("company") or "").strip(),
+        contact_name=(record.get("name") or "").strip(),
+        email=(record.get("email") or "").strip(),
+        phone=(record.get("phone") or "").strip(),
+        website=(record.get("website") or "").strip(),
+        title=(record.get("title") or "").strip(),
+        source=record.get("source") or source_label,
+        pain_points=record.get("pain_points") or "",
+        goals=record.get("goals") or "",
+        service_slug=(record.get("service_slug") or "").strip() or None,
+    )
+    if not created.get("ok"):
+        return {"status": "invalid", "type": "lead"}
+    return {
+        "status": "ok",
+        "type": "lead",
+        "lead_id": created["lead"]["id"],
+        "deal_id": created["lead"]["id"],
+        "partner_id": created["lead"].get("partner_id"),
+    }
+
+
+def import_paths(paths, dry_run: bool = False, record_type: str = "opportunity") -> list:
     """Import every `*.md` in the given files/directories. Skip README.md.
 
     A single unreadable file is recorded as `status=error` and the rest of
@@ -216,7 +246,7 @@ def import_paths(paths, dry_run: bool = False) -> list:
         elif not record:
             entry["status"] = "invalid"
         else:
-            imported = import_client(record)
+            imported = import_client(record, record_type=record_type)
             entry.update(imported)
         results.append(entry)
     return results

@@ -25,15 +25,32 @@ from app.services.client_import import import_paths
 
 
 def main() -> int:
-    args = [a for a in sys.argv[1:] if a != "--dry-run"]
-    dry_run = "--dry-run" in sys.argv[1:]
+    raw = sys.argv[1:]
+    dry_run = "--dry-run" in raw
+    record_type = "opportunity"
+    args = []
+    index = 0
+    while index < len(raw):
+        item = raw[index]
+        if item == "--dry-run":
+            index += 1
+            continue
+        if item == "--type" and index + 1 < len(raw):
+            record_type = raw[index + 1]
+            index += 2
+            continue
+        args.append(item)
+        index += 1
+    if record_type not in ("lead", "opportunity"):
+        print("type must be lead or opportunity", file=sys.stderr)
+        return 1
     if not args:
-        print("Usage: python scripts/import_clients.py [--dry-run] <dir-or-file.md> [...]")
+        print("Usage: python scripts/import_clients.py [--dry-run] [--type lead|opportunity] <dir-or-file.md> [...]")
         print("Docker: bind-mount the clients dir; compose exec cannot see a host path.")
         return 1
 
     init_db()
-    results = import_paths(args, dry_run=dry_run)
+    results = import_paths(args, dry_run=dry_run, record_type=record_type)
     if not results:
         print("No markdown files found.")
         return 1

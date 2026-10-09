@@ -24,6 +24,8 @@ SUCCESS_STATUSES = frozenset({
     "created",
     "duplicate_open_deal",
     "existing_partner_new_deal",
+    "duplicate_open_lead",
+    "duplicate_open_opportunity",
 })
 
 USAGE = (
@@ -173,6 +175,12 @@ def run(argv=None):
         help="parse and print name/email/service_slug; no DB writes and no HTTP",
     )
     parser.add_argument(
+        "--type",
+        choices=("lead", "opportunity"),
+        default=None,
+        help="Default record type when a row omits type. opportunity keeps the old partner-and-deal behaviour.",
+    )
+    parser.add_argument(
         "--http",
         metavar="URL",
         help="POST to URL/api/v1/leads (e.g. http://127.0.0.1:8000) instead of in-process",
@@ -186,6 +194,10 @@ def run(argv=None):
 
     args = parser.parse_args(argv)
     leads, error = load_leads(args.files)
+    if args.type and leads:
+        for lead in leads:
+            if isinstance(lead, dict) and "type" not in lead:
+                lead["type"] = args.type
     if error:
         print(error, file=sys.stderr)
         if error == "no files given":

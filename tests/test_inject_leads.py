@@ -52,7 +52,7 @@ def test_dry_run_fixture_prints_fields_and_writes_nothing(db, capsys):
 def test_in_process_inject_against_db_fixture(db, capsys):
     create_service("Consulting", "consulting")
 
-    code = CLI.run([str(FIXTURE)])
+    code = CLI.run(["--type", "opportunity", str(FIXTURE)])
     captured = capsys.readouterr()
 
     assert code == 0
@@ -71,10 +71,10 @@ def test_in_process_inject_against_db_fixture(db, capsys):
 
 def test_in_process_duplicate_exits_zero(db, capsys):
     create_service("Consulting", "consulting")
-    assert CLI.run([str(FIXTURE)]) == 0
+    assert CLI.run(["--type", "opportunity", str(FIXTURE)]) == 0
     capsys.readouterr()
 
-    code = CLI.run([str(FIXTURE)])
+    code = CLI.run(["--type", "opportunity", str(FIXTURE)])
     captured = capsys.readouterr()
     assert code == 0
     assert "duplicate_open_deal" in captured.out
@@ -97,7 +97,7 @@ def test_in_process_non_string_email_is_coerced(db, tmp_path, capsys):
         ]
     }), encoding="utf-8")
 
-    code = CLI.run([str(payload)])
+    code = CLI.run(["--type", "opportunity", str(payload)])
     captured = capsys.readouterr()
 
     assert code == 0
@@ -126,7 +126,7 @@ def test_in_process_invalid_item_does_not_sink_batch(db, tmp_path, capsys):
         ]
     }), encoding="utf-8")
 
-    code = CLI.run([str(payload)])
+    code = CLI.run(["--type", "opportunity", str(payload)])
     captured = capsys.readouterr()
 
     assert code == 1
@@ -165,7 +165,7 @@ def test_in_process_ingest_exception_does_not_sink_batch(db, tmp_path, capsys, m
 
     monkeypatch.setattr(CLI, "ingest_lead", boom)
 
-    code = CLI.run([str(payload)])
+    code = CLI.run(["--type", "opportunity", str(payload)])
     captured = capsys.readouterr()
 
     assert code == 1
@@ -188,7 +188,7 @@ def test_mixed_results_exits_one():
 
 
 def test_in_process_unknown_service_exits_one(db, capsys):
-    code = CLI.run([str(FIXTURE)])
+    code = CLI.run(["--type", "opportunity", str(FIXTURE)])
     captured = capsys.readouterr()
     assert code == 1
     assert "invalid_service" in captured.out

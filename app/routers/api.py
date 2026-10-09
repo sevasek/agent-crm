@@ -180,13 +180,20 @@ async def create_leads(request: Request, x_api_key: str = Header(default="")):
     if len(leads) > MAX_LEADS:
         return _json_error("too_many_leads", 422)
 
+    type_omitted = any(isinstance(lead, dict) and "type" not in lead for lead in leads)
     results = []
     for lead in leads:
         if not isinstance(lead, dict):
             results.append({"email": "", "status": "invalid"})
             continue
         results.append(ingest_lead(lead))
-    return {"results": results}
+    payload = {"results": results}
+    if type_omitted:
+        return JSONResponse(
+            payload,
+            headers={"Deprecation": "type omitted; default is now lead"},
+        )
+    return payload
 
 
 # ==================== Pipeline stages ====================

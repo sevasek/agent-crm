@@ -124,7 +124,8 @@ def annotate_deals(deals, today=None):
     return [annotate_deal(d, today=today, won_stage_keys=won) for d in deals]
 
 
-def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None, tags=None):
+def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None, tags=None,
+                   record_type="opportunity"):
     """Open deals whose `next_action_date` is today or earlier, oldest date first.
 
     `stage` is applied in SQL via list_deals, so `?due=1&stage=qualified`
@@ -136,6 +137,7 @@ def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None, ta
     due = []
     for deal in list_deals(
         stage=stage or None, owner_key=owner_key, service_slug=service_slug, tags=tags,
+        type=record_type,
     ):
         annotated = annotate_deal(deal, today=today, won_stage_keys=won)
         if annotated["due_status"]:

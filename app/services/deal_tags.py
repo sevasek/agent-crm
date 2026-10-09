@@ -218,10 +218,12 @@ def list_tags() -> list:
     """Tags currently in use, with how many deals carry each one."""
     with get_db() as db:
         rows = db.execute(
-            """SELECT tag, COUNT(*) AS count
+            """SELECT deal_tags.tag AS tag, COUNT(*) AS count
                FROM deal_tags
-               GROUP BY tag
-               ORDER BY tag"""
+               JOIN deals ON deals.id = deal_tags.deal_id
+               WHERE deals.active = 1
+               GROUP BY deal_tags.tag
+               ORDER BY deal_tags.tag"""
         ).fetchall()
     return [{"tag": row["tag"], "count": row["count"]} for row in rows]
 

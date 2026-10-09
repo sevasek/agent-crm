@@ -280,6 +280,7 @@ def update_deal_fields(deal_id: int, **fields):
     allowed = {
         "source", "value_estimate", "pain_points", "goals", "next_action", "next_action_date",
         "offer_id", "owner_key", "external_ref", "parent_deal_id",
+        "probability", "priority", "expected_close",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "source" in updates:
@@ -409,6 +410,16 @@ def record_call_outcome(deal_id: int, outcome: str, note: str = "") -> bool:
     deal = get_deal(deal_id)
     if not deal:
         return False
+
+    if outcome == "not_interested":
+        note = sanitize_text(note, max_len=1000, allow_newlines=True)
+        body = "Call outcome: Not interested"
+        if note:
+            body += f" — {note}"
+        log_activity(deal["partner_id"], "call", body, deal_id=deal_id)
+        from app.services.lead_records import mark_lost
+        marked = mark_lost(deal_id, lost_reason="Not a fit", note=note)
+        return bool(marked.get("ok"))
 
     label, target = _CALL_OUTCOME_MAP[outcome]
     target_stage = _resolve_call_outcome_target(target)

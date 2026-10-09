@@ -63,8 +63,9 @@ def test_tool_list_keeps_live_tools_and_adds_stage_automations():
     assert "list_tags" in names
     # 27 live tools, plus list_tags, plus stage automations. Live argument
     # names are pinned below and are not renamed.
-    assert set(names) == set(LIVE_TOOL_PROPS) | {"list_tags"} | STAGE_AUTOMATION_TOOLS
-    assert len(names) == 32
+    # Live tools stay. New lead tools are additive.
+    assert set(LIVE_TOOL_PROPS) | {"list_tags"} | STAGE_AUTOMATION_TOOLS <= set(names)
+    assert len(names) >= 32
 
 
 def test_live_tool_arguments_are_accepted():

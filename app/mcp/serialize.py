@@ -88,6 +88,7 @@ def stage_brief(stage):
         "triggers_nurture": bool(stage.get("triggers_nurture")),
         "is_won": bool(stage.get("is_won")),
         "is_lost": bool(stage.get("is_lost")),
+        **({"deprecated_fields": ["is_lost"]} if stage.get("is_lost") else {}),
     })
 
 

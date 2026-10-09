@@ -381,11 +381,10 @@ on #46. Do not vendor SortableJS from this file.
 **Do not implement this.** Needs a decision; it is not launch work.
 `docs/SCOPE.md` already lists dark mode as out of scope for launch.
 
-- **Tom Select / Choices.js** for the partner/service `<select>` fields, but
-  only if a customer actually has enough partners or services that a plain
-  `<select>` becomes hard to scroll (check `partner_form.html` and
-  `service_form.html` for which dropdowns those are). Don't add this
-  speculatively.
+- **Tom Select** (Choices.js was not used) is vendored for one control: the
+  partner picker `#partner_id` on the deal form
+  ([#88](https://github.com/sevasek/agent-crm/issues/88)). Do not add it to
+  other `<select>` fields from this file.
 - **Alpine.js** only if a specific interaction needs client-side state that
   htmx can't express server-side (e.g. a multi-step form section that
   toggles without a round-trip). Nothing identified in the current templates
@@ -395,8 +394,8 @@ on #46. Do not vendor SortableJS from this file.
   hand-picked ones don't), then remove the `data-theme="light"` lock added
   in Phase 1 step 4.
 
-Do not vendor Tom Select or Alpine, and do not unlock dark mode, from this
-file.
+Do not vendor Alpine, and do not unlock dark mode, from this
+file. Tom Select stays limited to the deal-form partner picker.
 
 ---
 

@@ -1,0 +1,33 @@
+/* Deal-form partner picker only. Linked from deal_form.html, not style.css. */
+
+.form-row .ts-wrapper {
+    width: 100%;
+}
+
+.form-row .ts-wrapper .ts-control {
+    font-size: 1rem;
+    line-height: 1.5;
+    min-height: calc(1.5em + 1.5rem);
+    border-color: var(--border, #ddd);
+    border-radius: var(--pico-border-radius, 0.25rem);
+    background: #fff;
+}
+
+.form-row .ts-wrapper.focus .ts-control {
+    border-color: var(--accent, #2c5aa0);
+    box-shadow: 0 0 0 0.2rem var(--pico-primary-focus, rgba(44, 90, 160, 0.25));
+}
+
+.form-row .ts-dropdown {
+    font-size: 1rem;
+    z-index: 30;
+}
+
+.form-row .ts-dropdown .option,
+.form-row .ts-dropdown .no-results {
+    padding: 0.5rem 0.75rem;
+}
+
+select#partner_id.ts-hidden-accessible {
+    height: 1px !important;
+}

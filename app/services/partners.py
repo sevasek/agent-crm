@@ -177,6 +177,8 @@ def create_partner(name, is_company=False, parent_id=None, email="", phone="", w
 
 
 def get_partner(partner_id: int):
+    if not partner_id:
+        return None
     with get_db() as db:
         row = db.execute("SELECT * FROM partners WHERE id = ?", (partner_id,)).fetchone()
         return dict(row) if row else None

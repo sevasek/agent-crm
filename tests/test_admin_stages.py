@@ -47,6 +47,29 @@ def test_create_stage_duplicate_shows_error(logged_in_client, db):
     assert "already exists" in resp.text
 
 
+def test_edit_lost_stage_label_keeps_is_lost(logged_in_client, db):
+    resp = logged_in_client.post("/stages/lost/edit", data={
+        "label": "Archived",
+        "is_lost": "on",
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    stage = pipeline_stages.get_stage("lost")
+    assert stage["label"] == "Archived"
+    assert stage["is_lost"] == 1
+
+
+def test_edit_stage_cannot_turn_is_lost_on(logged_in_client, db):
+    resp = logged_in_client.post("/stages/proposal/edit", data={
+        "label": "Proposal",
+        "is_lost": "on",
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+    })
+    assert resp.status_code == 400
+    assert pipeline_stages.get_stage("proposal")["is_lost"] == 0
+    assert pipeline_stages.get_stage("proposal")["label"] == "Proposal"
+
+
 def test_edit_stage_label_and_roles(logged_in_client, db):
     resp = logged_in_client.post("/stages/proposal/edit", data={
         "label": "Demo booked", "is_qualified_pool": "on",

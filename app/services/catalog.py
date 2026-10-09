@@ -36,6 +36,8 @@ def create_service(name, slug, description="", nurture_list_slug=""):
 
 
 def get_service(service_id: int):
+    if not service_id:
+        return None
     with get_db() as db:
         row = db.execute("SELECT * FROM services WHERE id = ?", (service_id,)).fetchone()
         return dict(row) if row else None

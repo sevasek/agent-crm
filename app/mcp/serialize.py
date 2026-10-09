@@ -17,6 +17,11 @@ _DEAL_FIELDS = (
     "pain_points", "goals", "next_action", "next_action_date", "offer_id",
     "owner_key", "external_ref", "parent_deal_id",
     "created_at", "updated_at", "closed_at",
+    "type", "name", "contact_name", "company_name", "email", "phone", "website",
+    "title", "address", "linkedin_url", "x_url", "instagram_url", "facebook_url",
+    "youtube_url", "industry", "team_size", "preferred_channel",
+    "probability", "priority", "expected_close", "date_conversion",
+    "active", "lost_reason_id", "lost_note", "merged_into_id",
     "partner_name", "service_name", "service_slug",
     "tags",
 )

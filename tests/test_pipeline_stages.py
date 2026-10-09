@@ -78,9 +78,30 @@ def test_create_stage_rejects_won_and_lost_together(db):
 def test_update_stage_rejects_won_and_lost_together(db):
     stage, error = pipeline_stages.update_stage("won", is_lost=True)
     assert stage is None
-    assert error == "won_lost_conflict"
-    # Original stage is untouched.
+    assert error == "invalid_stage_role"
+    # Original stage is untouched. Turning is_lost on is refused even when
+    # the stage is already won; that 0→1 change is invalid_stage_role.
     assert pipeline_stages.get_stage("won")["is_lost"] == 0
+
+
+def test_create_stage_refuses_new_lost_role(db):
+    stage, error = pipeline_stages.create_stage("archived", "Archived", is_lost=True)
+    assert stage is None
+    assert error == "invalid_stage_role"
+
+
+def test_update_lost_stage_label_keeps_existing_lost_role(db):
+    stage, error = pipeline_stages.update_stage("lost", label="Archived", is_lost=True)
+    assert error is None
+    assert stage["label"] == "Archived"
+    assert stage["is_lost"] == 1
+
+
+def test_update_stage_rejects_won_on_an_existing_lost_stage(db):
+    stage, error = pipeline_stages.update_stage("lost", is_won=True)
+    assert stage is None
+    assert error == "won_lost_conflict"
+    assert pipeline_stages.get_stage("lost")["is_won"] == 0
 
 
 def test_update_unknown_stage_not_found(db):

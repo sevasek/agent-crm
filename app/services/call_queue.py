@@ -243,6 +243,8 @@ def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
         JOIN partners ON partners.id = deals.partner_id
         JOIN services ON services.id = deals.service_id
         WHERE deals.stage IN ({stage_placeholders})
+          AND deals.type = 'opportunity'
+          AND deals.active = 1
           AND partners.phone IS NOT NULL
           AND TRIM(partners.phone) != ''
     """

@@ -266,6 +266,43 @@ def test_children_are_scoped_idempotent_and_skip_a_missing_service(db):
     assert get_service_by_slug("it-support") is not None
 
 
+def test_lost_child_does_not_block_a_new_child(db):
+    services, offer, _other = _catalog()
+    _automation, error = create_automation(
+        "Spawn follow-ons",
+        "hc_presented",
+        service_slug="health-check",
+        actions=[{
+            "type": "spawn_child_deals",
+            "service_slugs": ["automation-delivery", "automations-support"],
+        }],
+    )
+    assert error is None
+    _partner, deal_id = _deal(services, stage="hc_in_delivery", offer_id=offer["id"])
+    assert set_deal_stage(deal_id, "hc_presented") is True
+    delivery = next(
+        child for child in list_deals(parent_deal_id=deal_id)
+        if child["service_slug"] == "automation-delivery"
+    )
+    with db.get_db() as conn:
+        conn.execute("UPDATE deals SET active = 0 WHERE id = ?", (delivery["id"],))
+        conn.commit()
+    set_deal_stage(deal_id, "hc_in_delivery")
+    assert set_deal_stage(deal_id, "hc_presented") is True
+    visible = [
+        child for child in list_deals(parent_deal_id=deal_id)
+        if child["service_slug"] == "automation-delivery"
+    ]
+    assert len(visible) == 1
+    assert visible[0]["id"] != delivery["id"]
+    assert visible[0]["active"] == 1
+    with db.get_db() as conn:
+        lost = conn.execute(
+            "SELECT active FROM deals WHERE id = ?", (delivery["id"],)
+        ).fetchone()
+    assert lost["active"] == 0
+
+
 def test_only_the_entered_stage_runs(db):
     services, _offer, _other = _catalog()
     _kickoff()

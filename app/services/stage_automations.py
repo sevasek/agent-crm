@@ -585,12 +585,21 @@ def _run_task(automation, deal, stage_key, config):
 
 
 def _open_child(parent_id, service_id):
+    """An open child is active and not in an is_won stage.
+
+    A lost child (active = 0) does not block a new child for that service.
+    """
     from app.services.deals import list_deals
 
-    closed = pipeline_stages.closed_stage_keys()
-    for child in list_deals(parent_deal_id=parent_id, service_id=service_id):
-        if child.get("stage") not in closed:
-            return child
+    won = pipeline_stages.won_stage_keys()
+    for child in list_deals(
+        parent_deal_id=parent_id, service_id=service_id, include_lost=True,
+    ):
+        if child.get("active") in (0, False):
+            continue
+        if child.get("stage") in won:
+            continue
+        return child
     return None
 
 

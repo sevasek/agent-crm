@@ -57,6 +57,14 @@ def test_due_today_and_overdue_and_future():
 def test_closed_deals_are_not_gated():
     assert deal_due_status({"stage": "won", "next_action_date": "2026-08-01"}, today=TODAY, closed_stage_keys=_CLOSED) is None
     assert deal_due_status({"stage": "lost", "next_action_date": "2026-08-01"}, today=TODAY, closed_stage_keys=_CLOSED) is None
+    assert deal_due_status(
+        {"stage": "qualified", "active": 0, "next_action_date": "2026-08-01"},
+        today=TODAY, won_stage_keys={"won"},
+    ) is None
+    assert deal_due_status(
+        {"stage": "won", "active": 1, "next_action_date": "2026-08-01"},
+        today=TODAY, won_stage_keys={"won"},
+    ) is None
 
 
 def test_annotate_days_overdue():

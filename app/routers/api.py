@@ -205,6 +205,8 @@ def _serialize_stage(stage: dict) -> dict:
     out = dict(stage)
     for field in _STAGE_BOOL_FIELDS:
         out[field] = bool(out.get(field))
+    if stage.get("is_lost"):
+        out["deprecated_fields"] = ["is_lost"]
     return out
 
 

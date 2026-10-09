@@ -152,7 +152,30 @@ def test_update_stage_creating_won_lost_conflict_422(client, db, monkeypatch):
     _set_key(monkeypatch)
     resp = client.patch("/api/v1/stages/won", json={"is_lost": True}, headers=_headers())
     assert resp.status_code == 422
-    assert resp.json()["error"] == "won_lost_conflict"
+    assert resp.json()["error"] == "invalid_stage_role"
+
+
+def test_create_stage_refuses_is_lost(client, db, monkeypatch):
+    _set_key(monkeypatch)
+    resp = client.post("/api/v1/stages", json={
+        "key": "archived", "label": "Archived", "is_lost": True,
+    }, headers=_headers())
+    assert resp.status_code == 422
+    assert resp.json()["error"] == "invalid_stage_role"
+
+
+def test_get_stages_marks_is_lost_deprecated(client, db, monkeypatch):
+    _set_key(monkeypatch)
+    listed = client.get("/api/v1/stages", headers=_headers())
+    assert listed.status_code == 200
+    stages = listed.json()["stages"]
+    lost = next(stage for stage in stages if stage["key"] == "lost")
+    fresh = next(stage for stage in stages if stage["key"] == "new")
+    assert lost["deprecated_fields"] == ["is_lost"]
+    assert "deprecated_fields" not in fresh
+    one = client.get("/api/v1/stages/lost", headers=_headers())
+    assert one.status_code == 200
+    assert one.json()["stage"]["deprecated_fields"] == ["is_lost"]
 
 
 def test_update_missing_stage_404(client, db, monkeypatch):

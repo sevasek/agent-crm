@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class SchemaVersionError(RuntimeError):
@@ -194,7 +194,8 @@ CREATE INDEX IF NOT EXISTS idx_stage_automation_actions_automation
 """
 
 
-# Additive-only. Do not DROP or RENAME columns in this series.
+# Additive-only, except a reviewed table rebuild that only relaxes
+# constraints. See docs/adr/0001-lead-opportunity-model.md.
 _SCHEMA_V1 = """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -573,6 +574,317 @@ def migrate_006(db) -> None:
         )
 
 
+# Tests set this to 5 to force a rollback after DROP TABLE deals (ADR §6.2
+# step 5). Production leaves it None.
+REBUILD_FAIL_AFTER_STEP = None
+
+# Columns copied by name. New columns take their DDL defaults. Do not use
+# SELECT *: older files have a different physical order (ADR §6.2 step 3).
+_DEAL_COPY_COLUMNS = (
+    "id", "partner_id", "service_id", "stage", "source", "value_estimate",
+    "pain_points", "goals", "next_action", "next_action_date",
+    "created_at", "updated_at", "closed_at", "offer_id", "owner_key",
+    "external_ref", "parent_deal_id",
+)
+
+_ACTIVITY_COPY_COLUMNS = (
+    "id", "partner_id", "deal_id", "type", "body", "occurred_at", "created_at",
+)
+
+_TASK_COPY_COLUMNS = (
+    "id", "deal_id", "partner_id", "title", "brief", "owner", "status",
+    "due_date", "created_by", "result_notes", "webhook_notified_at",
+    "webhook_last_attempt_at", "webhook_last_error", "created_at", "updated_at",
+)
+
+_DEALS_REBUILD_SQL = """
+CREATE TABLE deals_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id INTEGER REFERENCES partners(id),
+    service_id INTEGER REFERENCES services(id),
+    stage TEXT NOT NULL DEFAULT 'new',
+    source TEXT,
+    value_estimate REAL,
+    pain_points TEXT,
+    goals TEXT,
+    next_action TEXT,
+    next_action_date TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    closed_at TEXT,
+    offer_id INTEGER REFERENCES offers(id),
+    owner_key TEXT,
+    external_ref TEXT,
+    parent_deal_id INTEGER REFERENCES deals(id),
+    type TEXT NOT NULL DEFAULT 'opportunity',
+    name TEXT,
+    contact_name TEXT,
+    company_name TEXT,
+    email TEXT,
+    phone TEXT,
+    website TEXT,
+    title TEXT,
+    address TEXT,
+    linkedin_url TEXT,
+    x_url TEXT,
+    instagram_url TEXT,
+    facebook_url TEXT,
+    youtube_url TEXT,
+    industry TEXT,
+    team_size INTEGER,
+    preferred_channel TEXT,
+    probability INTEGER,
+    priority INTEGER NOT NULL DEFAULT 0,
+    expected_close TEXT,
+    date_conversion TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    lost_reason_id INTEGER REFERENCES lost_reasons(id),
+    lost_note TEXT,
+    merged_into_id INTEGER REFERENCES deals(id)
+)
+"""
+
+_ACTIVITIES_REBUILD_SQL = """
+CREATE TABLE activities_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id INTEGER REFERENCES partners(id),
+    deal_id INTEGER REFERENCES deals(id),
+    type TEXT NOT NULL,
+    body TEXT,
+    occurred_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    source_url TEXT
+)
+"""
+
+_TASKS_REBUILD_SQL = """
+CREATE TABLE delegated_tasks_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id INTEGER NOT NULL REFERENCES deals(id),
+    partner_id INTEGER REFERENCES partners(id),
+    title TEXT NOT NULL,
+    brief TEXT,
+    owner TEXT NOT NULL DEFAULT 'agent',
+    status TEXT NOT NULL DEFAULT 'delegated',
+    due_date TEXT,
+    created_by TEXT,
+    result_notes TEXT,
+    webhook_notified_at TEXT,
+    webhook_last_attempt_at TEXT,
+    webhook_last_error TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+_REBUILD_INDEXES = {
+    "deals": (
+        "CREATE INDEX idx_deals_partner ON deals(partner_id)",
+        "CREATE INDEX idx_deals_stage ON deals(stage)",
+        "CREATE INDEX idx_deals_owner ON deals(owner_key)",
+        "CREATE INDEX idx_deals_parent ON deals(parent_deal_id)",
+        "CREATE INDEX idx_deals_type_active ON deals(type, active)",
+        "CREATE INDEX idx_deals_email ON deals(email)",
+        "CREATE INDEX idx_deals_phone ON deals(phone)",
+        "CREATE INDEX idx_deals_website ON deals(website)",
+        "CREATE INDEX idx_deals_lost_reason ON deals(lost_reason_id)",
+        "CREATE INDEX idx_deals_merged_into ON deals(merged_into_id)",
+    ),
+    "activities": (
+        "CREATE INDEX idx_activities_partner ON activities(partner_id)",
+        "CREATE INDEX idx_activities_deal ON activities(deal_id)",
+    ),
+    "delegated_tasks": (
+        "CREATE INDEX idx_delegated_tasks_deal ON delegated_tasks(deal_id)",
+        "CREATE INDEX idx_delegated_tasks_owner_status ON delegated_tasks(owner, status)",
+    ),
+}
+
+_LOST_REASON_SEED = (
+    ("Not a fit", 0),
+    ("No budget", 0),
+    ("Not now", 1),
+    ("No response", 0),
+    ("Lost to competitor", 0),
+    ("Duplicate", 0),
+    ("Lost stage (migrated)", 0),
+)
+
+_FK_CHECK_TABLES = ("deals", "activities", "delegated_tasks", "deal_tags")
+
+
+def _sqlite_sequence_table(db):
+    return db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sqlite_sequence'"
+    ).fetchone()
+
+
+def _read_sequence(db, table: str):
+    """Current sqlite_sequence.seq, or None when the table has never inserted."""
+    if not _sqlite_sequence_table(db):
+        return None
+    row = db.execute(
+        "SELECT seq FROM sqlite_sequence WHERE name = ?", (table,)
+    ).fetchone()
+    if row is None:
+        return None
+    return row["seq"]
+
+
+def _restore_sequence(db, table: str, seq) -> None:
+    """Put the pre-rebuild high-water mark back so a deleted id is not reused.
+
+    DROP TABLE removes the old row. Copying zero rows does not create a new
+    one. Update when the rename left a row, else insert. Skip when step 1
+    found no row.
+    """
+    if seq is None:
+        return
+    if not _sqlite_sequence_table(db):
+        db.execute("CREATE TABLE sqlite_sequence(name, seq)")
+    row = db.execute(
+        "SELECT 1 FROM sqlite_sequence WHERE name = ?", (table,)
+    ).fetchone()
+    if row:
+        db.execute(
+            "UPDATE sqlite_sequence SET seq = ? WHERE name = ?",
+            (seq, table),
+        )
+    else:
+        db.execute(
+            "INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)",
+            (table, seq),
+        )
+    leftover = db.execute(
+        "SELECT 1 FROM sqlite_sequence WHERE name = ?", (f"{table}_new",)
+    ).fetchone()
+    if leftover:
+        db.execute("DELETE FROM sqlite_sequence WHERE name = ?", (f"{table}_new",))
+
+
+def _fk_signatures(db, table: str):
+    """(table, rowid, parent) tuples. fkid is ignored: a rebuild can renumber it."""
+    rows = db.execute(f"PRAGMA foreign_key_check({table})").fetchall()
+    signatures = set()
+    for row in rows:
+        keys = row.keys()
+        if "table" in keys:
+            signatures.add((row["table"], row["rowid"], row["parent"]))
+        else:
+            signatures.add((row[0], row[1], row[2]))
+    return signatures
+
+
+def _rebuild_table(db, table: str, create_sql: str, columns) -> None:
+    seq = _read_sequence(db, table)
+    present = _table_columns(db, table)
+    missing = [name for name in columns if name not in present]
+    if missing:
+        raise RuntimeError(
+            f"migrate_008 cannot copy {table}; missing columns: {', '.join(missing)}"
+        )
+    db.execute(create_sql)
+    quoted = ", ".join(columns)
+    db.execute(
+        f"INSERT INTO {table}_new ({quoted}) SELECT {quoted} FROM {table}"
+    )
+    old_count = db.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
+    new_count = db.execute(f"SELECT COUNT(*) AS n FROM {table}_new").fetchone()["n"]
+    if old_count != new_count:
+        raise RuntimeError(
+            f"migrate_008 {table} row count changed: {old_count} -> {new_count}"
+        )
+    # Do not rename the old table first. Since SQLite 3.26 a rename of
+    # deals to deals_old also rewrites foreign keys that point at it.
+    db.execute(f"DROP TABLE {table}")
+    if table == "deals" and REBUILD_FAIL_AFTER_STEP == 5:
+        raise RuntimeError("forced failure after step 5")
+    db.execute(f"ALTER TABLE {table}_new RENAME TO {table}")
+    for stmt in _REBUILD_INDEXES[table]:
+        db.execute(stmt)
+    _restore_sequence(db, table, seq)
+
+
+def migrate_008(db) -> None:
+    """Rebuild deals, activities and delegated_tasks for leads (ADR 0001).
+
+    Relaxes NOT NULL on partner and service foreign keys and adds lead
+    columns. Does not drop or rename an existing column. Every current deal
+    becomes type='opportunity'. Rows already in an is_lost stage become
+    lost (active=0) with reason "Lost stage (migrated)".
+    """
+    fk_on = int(db.execute("PRAGMA foreign_keys").fetchone()[0])
+    if fk_on == 1:
+        raise RuntimeError(
+            "migrate_008 requires PRAGMA foreign_keys = OFF. A future change "
+            "that turns foreign keys on must update this procedure."
+        )
+    # A test rewinds user_version on an already-upgraded file to re-run an
+    # earlier migration. The rebuild is not repeatable: a second copy would
+    # reset lead columns to their defaults. Skip when this migration's
+    # objects are already present.
+    if "type" in _table_columns(db, "deals") and _table_columns(db, "lost_reasons"):
+        return
+    before = set()
+    for table in _FK_CHECK_TABLES:
+        before |= _fk_signatures(db, table)
+
+    _rebuild_table(db, "deals", _DEALS_REBUILD_SQL, _DEAL_COPY_COLUMNS)
+    _rebuild_table(db, "activities", _ACTIVITIES_REBUILD_SQL, _ACTIVITY_COPY_COLUMNS)
+    _rebuild_table(db, "delegated_tasks", _TASKS_REBUILD_SQL, _TASK_COPY_COLUMNS)
+
+    db.execute(
+        """
+        CREATE TABLE lost_reasons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            triggers_nurture INTEGER NOT NULL DEFAULT 0,
+            active INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.executemany(
+        """
+        INSERT INTO lost_reasons (name, triggers_nurture)
+        VALUES (?, ?)
+        """,
+        _LOST_REASON_SEED,
+    )
+    db.execute(
+        """
+        UPDATE deals
+        SET active = 0,
+            lost_reason_id = (
+                SELECT id FROM lost_reasons WHERE name = 'Lost stage (migrated)'
+            ),
+            closed_at = COALESCE(closed_at, updated_at)
+        WHERE stage IN (SELECT key FROM pipeline_stages WHERE is_lost = 1)
+        """
+    )
+
+    after = set()
+    for table in _FK_CHECK_TABLES:
+        after |= _fk_signatures(db, table)
+    introduced = after - before
+    if introduced:
+        raise RuntimeError(
+            "migrate_008 foreign_key_check found new broken references: "
+            + ", ".join(repr(item) for item in sorted(introduced, key=str))
+        )
+    if before:
+        logger.warning(
+            "foreign_key_check: %d pre-existing broken reference(s) left in "
+            "place (the rebuild did not add them): %s",
+            len(before),
+            sorted(before, key=str),
+        )
+    integrity = [row[0] for row in db.execute("PRAGMA integrity_check").fetchall()]
+    if integrity != ["ok"]:
+        raise RuntimeError(f"migrate_008 integrity_check failed: {integrity}")
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
@@ -582,6 +894,7 @@ MIGRATIONS = {
     5: migrate_005,
     6: migrate_006,
     7: migrate_007,
+    8: migrate_008,
 }
 
 

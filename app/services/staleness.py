@@ -77,11 +77,19 @@ def activity_display_body(body: str) -> str:
     return body
 
 
-def deal_due_status(deal, today=None, action_date=None, closed_stage_keys=None):
-    """`due` / `overdue` / None. Closed deals and undated deals are not gated."""
-    if closed_stage_keys is None:
-        closed_stage_keys = pipeline_stages.closed_stage_keys()
-    if deal.get("stage") in closed_stage_keys:
+def deal_due_status(deal, today=None, action_date=None, closed_stage_keys=None,
+                    won_stage_keys=None):
+    """`due` / `overdue` / None. Lost records and won stages are not gated.
+
+    Open is `active = 1` and a stage that is not `is_won`. `closed_stage_keys`
+    is still accepted for callers that pass the old set explicitly.
+    """
+    if deal.get("active") in (0, False):
+        return None
+    if won_stage_keys is None and closed_stage_keys is None:
+        won_stage_keys = pipeline_stages.won_stage_keys()
+    blocked = won_stage_keys if won_stage_keys is not None else closed_stage_keys
+    if blocked and deal.get("stage") in blocked:
         return None
     if action_date is None:
         action_date = parse_action_date(deal.get("next_action_date"))
@@ -95,12 +103,13 @@ def deal_due_status(deal, today=None, action_date=None, closed_stage_keys=None):
     return None
 
 
-def annotate_deal(deal, today=None, closed_stage_keys=None):
+def annotate_deal(deal, today=None, closed_stage_keys=None, won_stage_keys=None):
     today = today or operator_today()
-    if closed_stage_keys is None:
-        closed_stage_keys = pipeline_stages.closed_stage_keys()
     action_date = parse_action_date(deal.get("next_action_date"))
-    status = deal_due_status(deal, today=today, action_date=action_date, closed_stage_keys=closed_stage_keys)
+    status = deal_due_status(
+        deal, today=today, action_date=action_date,
+        closed_stage_keys=closed_stage_keys, won_stage_keys=won_stage_keys,
+    )
     days_overdue = (today - action_date).days if action_date and status else None
     annotated = dict(deal)
     annotated["action_date"] = action_date
@@ -111,8 +120,8 @@ def annotate_deal(deal, today=None, closed_stage_keys=None):
 
 def annotate_deals(deals, today=None):
     today = today or operator_today()
-    closed_stage_keys = pipeline_stages.closed_stage_keys()
-    return [annotate_deal(d, today=today, closed_stage_keys=closed_stage_keys) for d in deals]
+    won = pipeline_stages.won_stage_keys()
+    return [annotate_deal(d, today=today, won_stage_keys=won) for d in deals]
 
 
 def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None, tags=None):
@@ -123,12 +132,12 @@ def list_due_deals(today=None, stage=None, owner_key=None, service_slug=None, ta
     `tags` matches deals that carry every listed tag.
     """
     today = today or operator_today()
-    closed_stage_keys = pipeline_stages.closed_stage_keys()
+    won = pipeline_stages.won_stage_keys()
     due = []
     for deal in list_deals(
         stage=stage or None, owner_key=owner_key, service_slug=service_slug, tags=tags,
     ):
-        annotated = annotate_deal(deal, today=today, closed_stage_keys=closed_stage_keys)
+        annotated = annotate_deal(deal, today=today, won_stage_keys=won)
         if annotated["due_status"]:
             due.append(annotated)
     due.sort(key=lambda d: (

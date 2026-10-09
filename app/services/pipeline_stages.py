@@ -59,6 +59,10 @@ def qualified_pool_keys() -> set:
     return _keys_with_role("is_qualified_pool")
 
 
+def won_stage_keys() -> set:
+    return _keys_with_role("is_won")
+
+
 def closed_stage_keys() -> set:
     return _keys_with_role("is_won") | _keys_with_role("is_lost")
 
@@ -74,6 +78,8 @@ def create_stage(key: str, label: str, *, position=None, is_default=False,
         return None, "label_required"
     if is_won and is_lost:
         return None, "won_lost_conflict"
+    if is_lost:
+        return None, "invalid_stage_role"
     with get_db() as db:
         if db.execute("SELECT id FROM pipeline_stages WHERE key = ?", (key,)).fetchone():
             return None, "duplicate_key"
@@ -114,6 +120,10 @@ def update_stage(key: str, **fields):
             updates[flag] = int(bool(updates[flag]))
     resulting_won = updates.get("is_won", stage["is_won"])
     resulting_lost = updates.get("is_lost", stage["is_lost"])
+    # 0 → 1 is refused. A stage that already has is_lost may keep it,
+    # because the admin form sends every flag on each save.
+    if updates.get("is_lost") and not stage["is_lost"]:
+        return None, "invalid_stage_role"
     if resulting_won and resulting_lost:
         return None, "won_lost_conflict"
     if not updates:

@@ -139,7 +139,8 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
     won = pipeline_stages.won_stage_keys()
     with get_db() as db:
         query = """SELECT * FROM deals
-            WHERE partner_id = ? AND service_id = ? AND active = 1"""
+            WHERE partner_id = ? AND service_id = ? AND active = 1
+              AND type = 'opportunity'"""
         params = [partner_id, service_id]
         if won:
             placeholders = ",".join("?" * len(won))
@@ -340,6 +341,18 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
         db.commit()
 
     log_activity(deal["partner_id"], "system", stage_changed_body(old_stage, new_stage), deal_id=deal_id)
+
+    # A move into an existing is_lost stage also marks the record lost.
+    # Leads do not use stages; the MCP stage tools reject them. This shim
+    # covers opportunity moves that still target the deprecated role.
+    if (
+        stage_meta["is_lost"]
+        and "active" in deal
+        and deal.get("active") != 0
+        and deal.get("type") != "lead"
+    ):
+        from app.services.lead_records import mark_lost
+        mark_lost(deal_id, lost_reason="Lost stage (migrated)")
 
     if stage_meta["triggers_nurture"]:
         partner = get_partner(deal["partner_id"])

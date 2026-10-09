@@ -133,7 +133,7 @@ def _website_key(value: str) -> str:
 def create_partner(name, is_company=False, parent_id=None, email="", phone="", website="", title="",
                     address="", social_url="", preferred_channel="", industry="", team_size=None,
                     linkedin_url="", x_url="", instagram_url="", facebook_url="", youtube_url="",
-                    owner_key=""):
+                    owner_key="", db=None):
     name = sanitize_text(name, max_len=200)
     socials = apply_social_fields({}, {
         "linkedin_url": linkedin_url,
@@ -143,37 +143,115 @@ def create_partner(name, is_company=False, parent_id=None, email="", phone="", w
         "youtube_url": youtube_url,
         "social_url": social_url,
     })
-    with get_db() as db:
-        db.execute("""
-            INSERT INTO partners (
-                is_company, parent_id, name, email, phone, website, title,
-                address, social_url, preferred_channel, industry, team_size,
-                linkedin_url, x_url, instagram_url, facebook_url, youtube_url,
-                owner_key
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (
-            1 if is_company else 0,
-            parent_id or None,
-            name,
-            sanitize_text(email, max_len=254) or None,
-            sanitize_text(phone, max_len=50) or None,
-            sanitize_text(website, max_len=254) or None,
-            sanitize_text(title, max_len=120) or None,
-            sanitize_text(address, max_len=300) or None,
-            socials["social_url"],
-            _clean_preferred_channel(preferred_channel),
-            sanitize_text(industry, max_len=120) or None,
-            _clean_team_size(team_size),
-            socials["linkedin_url"],
-            socials["x_url"],
-            socials["instagram_url"],
-            socials["facebook_url"],
-            socials["youtube_url"],
-            clean_owner_key(owner_key),
-        ))
-        db.commit()
+    params = (
+        1 if is_company else 0,
+        parent_id or None,
+        name,
+        sanitize_text(email, max_len=254) or None,
+        sanitize_text(phone, max_len=50) or None,
+        sanitize_text(website, max_len=254) or None,
+        sanitize_text(title, max_len=120) or None,
+        sanitize_text(address, max_len=300) or None,
+        socials["social_url"],
+        _clean_preferred_channel(preferred_channel),
+        sanitize_text(industry, max_len=120) or None,
+        _clean_team_size(team_size),
+        socials["linkedin_url"],
+        socials["x_url"],
+        socials["instagram_url"],
+        socials["facebook_url"],
+        socials["youtube_url"],
+        clean_owner_key(owner_key),
+    )
+    sql = """
+        INSERT INTO partners (
+            is_company, parent_id, name, email, phone, website, title,
+            address, social_url, preferred_channel, industry, team_size,
+            linkedin_url, x_url, instagram_url, facebook_url, youtube_url,
+            owner_key
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    if db is not None:
+        db.execute(sql, params)
         return db.execute("SELECT last_insert_rowid()").fetchone()[0]
+    with get_db() as conn:
+        conn.execute(sql, params)
+        conn.commit()
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def match_existing_partner(*, email, name, phone, website, is_company, parent_id):
+    """Identity waterfall: email, then phone+name, then website+name, then name+parent.
+
+    Returns the first match. Ingest depends on this single-match behaviour.
+    """
+    if email:
+        partner = get_partner_by_email(email)
+        if partner:
+            return partner
+    if phone:
+        partner = get_partner_by_phone_and_name(name, phone, is_company=is_company)
+        if partner:
+            return partner
+    if website:
+        partner = get_partner_by_website_and_name(name, website, is_company=is_company)
+        if partner:
+            return partner
+    return get_person_by_name(name, parent_id=parent_id, is_company=is_company)
+
+
+def partner_match_candidates(*, email, name, phone, website, is_company, parent_id):
+    """Every partner at the first ingest-order step that matches.
+
+    One row means link it. More than one means the caller must stop.
+    """
+    email = (email or "").strip().lower()
+    if email:
+        with get_db() as db:
+            rows = db.execute(
+                "SELECT * FROM partners WHERE lower(email) = ?", (email,)
+            ).fetchall()
+        if rows:
+            return [dict(row) for row in rows]
+    if phone and (name or "").strip():
+        digits = phone_digits(phone)
+        if digits:
+            with get_db() as db:
+                rows = db.execute(
+                    """SELECT * FROM partners
+                       WHERE lower(name) = lower(?) AND phone IS NOT NULL AND TRIM(phone) != ''""",
+                    ((name or "").strip(),),
+                ).fetchall()
+            matched = []
+            for row in rows:
+                partner = dict(row)
+                if phone_digits(partner.get("phone")) != digits:
+                    continue
+                if is_company is None or bool(partner["is_company"]) == bool(is_company):
+                    matched.append(partner)
+            if matched:
+                return matched
+    if website and (name or "").strip():
+        key = _website_key(website)
+        if key:
+            with get_db() as db:
+                rows = db.execute(
+                    """SELECT * FROM partners
+                       WHERE lower(name) = lower(?) AND website IS NOT NULL AND TRIM(website) != ''""",
+                    ((name or "").strip(),),
+                ).fetchall()
+            matched = []
+            for row in rows:
+                partner = dict(row)
+                if _website_key(partner.get("website")) != key:
+                    continue
+                if is_company is None or bool(partner["is_company"]) == bool(is_company):
+                    matched.append(partner)
+            if matched:
+                return matched
+    found = get_person_by_name(name, parent_id=parent_id, is_company=is_company)
+    return [found] if found else []
 
 
 def get_partner(partner_id: int):

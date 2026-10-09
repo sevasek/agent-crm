@@ -50,6 +50,43 @@ def test_noop_when_partner_has_no_email(monkeypatch):
     assert "no email" in message
 
 
+def test_mark_lost_nurture_uses_lead_fields_when_there_is_no_partner(db, monkeypatch):
+    from app.services.catalog import create_service, update_service
+    from app.services.lead_records import create_lead, mark_lost
+    from app.services.activities import list_activities_for_deal
+
+    _configure(monkeypatch)
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None, **kwargs):
+        captured.update(json=json)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.nurture.httpx.post", fake_post)
+    service_id = create_service("Consulting", "consulting-nurture", nurture_list_slug="automation-interest")
+    assert service_id
+    lead = create_lead(
+        company_name="Harbour", email="pm@h.example", service_slug="consulting-nurture", log_create=False,
+    )["lead"]
+    result = mark_lost(lead["id"], lost_reason="Not now", note="next year")
+    assert result["ok"] is True
+    assert result["nurture"]["status"] == "sent"
+    assert captured["json"]["partner_id"] is None
+    assert captured["json"]["email"] == "pm@h.example"
+    assert captured["json"]["type"] == "lead"
+    assert captured["json"]["lost_reason"] == "Not now"
+
+    bare = create_lead(company_name="No Service", email="nosvc@h.example", log_create=False)["lead"]
+    missed = mark_lost(bare["id"], lost_reason="Not now")
+    assert missed["nurture"]["status"] == "failed"
+    assert any("nurture" in (row["body"] or "").lower() for row in list_activities_for_deal(bare["id"]))
+
+    quiet = create_lead(company_name="Budget", email="budget@h.example", log_create=False)["lead"]
+    no_send = mark_lost(quiet["id"], lost_reason="No budget")
+    assert no_send["nurture"] is None
+    update_service  # imported so a missing slug can be set if the create helper ignores it
+
+
 def test_successful_hand_off_posts_expected_payload(monkeypatch):
     _configure(monkeypatch, token="test-token")
     captured = {}

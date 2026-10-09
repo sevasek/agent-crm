@@ -247,3 +247,24 @@ def test_calls_page_shows_ranked_row(logged_in_client):
     assert "Not a prediction" not in resp.text
     assert "the weights are listed below" not in resp.text
     assert "$8000 (≥ $5k)" not in resp.text
+
+
+def test_queue_skips_leads_and_lost_opportunities(db):
+    from app.services.lead_records import create_lead, mark_lost
+
+    sid = create_service("Consulting", "consulting-queue")
+    pid = create_partner("Ada Queue", phone="0400 333 444", email="ada-queue@x.example")
+    deal_id = create_deal(pid, sid, source="referral")
+    set_deal_stage(deal_id, "qualified")
+    lead = create_lead(
+        company_name="Lead Co", phone="0400 333 444", partner_id=pid,
+        service_slug="consulting-queue", log_create=False,
+    )["lead"]
+    with get_db() as conn:
+        conn.execute("UPDATE deals SET stage = 'qualified' WHERE id = ?", (lead["id"],))
+        conn.commit()
+    ids = {row["id"] for row in list_todays_calls()}
+    assert deal_id in ids
+    assert lead["id"] not in ids
+    mark_lost(deal_id, lost_reason="Not a fit")
+    assert deal_id not in {row["id"] for row in list_todays_calls()}

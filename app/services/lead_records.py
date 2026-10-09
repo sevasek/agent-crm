@@ -665,7 +665,39 @@ def mark_lost(deal_id, *, lost_reason_id=None, lost_reason=None, note=None):
     log_activity(deal.get("partner_id"), "system", f"Marked lost: {reason['name']}", deal_id=deal_id)
     record = get_deal(deal_id)
     record["lost_reason"] = reason["name"]
-    return {"ok": True, "record": record, "nurture": None}
+    nurture = _nurture_after_loss(record, reason) if reason.get("triggers_nurture") else None
+    return {"ok": True, "record": record, "nurture": nurture}
+
+
+def _nurture_after_loss(deal, reason):
+    from app.services.nurture import FAILED, enroll_partner_in_nurture
+
+    service = get_service(deal.get("service_id")) if deal.get("service_id") else None
+    if not service or not (service.get("nurture_list_slug") or "").strip():
+        log_activity(
+            deal.get("partner_id"), "system",
+            "Nurture hand-off failed: no nurture list slug on the service",
+            deal_id=deal["id"],
+        )
+        return {"status": FAILED, "message": "no nurture list slug"}
+    partner = get_partner(deal.get("partner_id")) if deal.get("partner_id") else None
+    if not partner:
+        partner = {
+            "id": None,
+            "name": deal.get("contact_name") or deal.get("company_name") or deal.get("name") or "",
+            "email": deal.get("email"),
+        }
+    status, message = enroll_partner_in_nurture(
+        partner, service, deal_id=deal["id"],
+        record_type=deal.get("type"), lost_reason=reason["name"],
+    )
+    if status != "skipped":
+        log_activity(
+            deal.get("partner_id"), "system",
+            f"Nurture enrollment {'succeeded' if status == 'sent' else 'failed'}: {message}",
+            deal_id=deal["id"],
+        )
+    return {"status": status, "message": message}
 
 
 def restore_deal(deal_id):

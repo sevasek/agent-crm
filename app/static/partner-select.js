@@ -7,9 +7,21 @@
     var select = document.getElementById("partner_id");
     if (!select || select.tagName !== "SELECT") return;
     if (typeof TomSelect !== "function" || select.tomselect) return;
-    new TomSelect(select, {
+    var picker = new TomSelect(select, {
         create: false,
         allowEmptyOption: false,
-        maxOptions: null
+        maxOptions: null,
+        closeAfterSelect: true,
+        refreshThrottle: 0
+    });
+    // A pending search refresh can reopen the list after Enter. Cancel it
+    // and close so the chosen partner stays selected.
+    picker.on("item_add", function () {
+        if (picker.refreshTimeout) {
+            window.clearTimeout(picker.refreshTimeout);
+            picker.refreshTimeout = null;
+        }
+        picker.setTextboxValue("");
+        picker.close();
     });
 })();

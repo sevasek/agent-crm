@@ -14,6 +14,14 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Added
 
+- Lead / opportunity model (schema 8, `migrate_008`, ADR 0001). One `deals`
+  table with `type`, nullable `partner_id` / `service_id`, `lost_reasons`,
+  `mark_lost` / `restore_deal` / `convert_lead` / `merge_leads`, MCP lead
+  tools, admin Leads and Lost reasons pages. P1–P7 ship together; do not
+  deploy an intermediate phase live.
+- Optional `scripts/opportunities_to_leads.py` to move early-stage
+  opportunities back to leads (dry-run by default). The migration does
+  not run it.
 - Stage automations (schema v7). Named rules, empty until an operator adds
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
   Entering the chosen stage can create a delegated task and/or child deals
@@ -31,7 +39,32 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   The entrypoint chowns that directory when it exists.
 - `.github/workflows/deploy.yml`, skipped unless repository variables
   `DEPLOY_ENABLED=true` and `DEPLOY_REPOSITORY` equals this repository.
-- [`docs/cutover-from-sevasek-crm.md`](docs/cutover-from-sevasek-crm.md).
+-   [`docs/cutover-from-sevasek-crm.md`](docs/cutover-from-sevasek-crm.md).
+
+### Changed
+
+- **Breaking.** `POST /api/v1/leads`, MCP `ingest_leads` and
+  `inject_leads.py` default to `type=lead` and no longer create a partner.
+  Send `"type": "opportunity"` (CLI `--type opportunity`) to keep the old
+  path. Omitting `type` on REST sets a Deprecation header and
+  `type_defaulted`. Client import is unchanged (opportunity) unless
+  `--type lead`.
+- **Breaking.** `list_deals` (and the admin deals list / pipeline) hide
+  lost records (`active=0`) by default. Pass `include_lost=true` or use
+  the Lost filter. The seeded Lost column is empty unless that filter is
+  on.
+- **Breaking.** `set_deal_stage` and `record_call_outcome` reject a lead
+  (`not_an_opportunity`) and a lost record (`deal_lost`).
+- **Breaking.** `not_interested` marks the opportunity lost with reason
+  "Not a fit" and does not move it to the lost stage.
+- **Breaking.** Creating a new `is_lost` stage is refused
+  (`invalid_stage_role`). The seeded Lost stage label can still be edited.
+  Lost is `active=0` plus a lost reason, not a stage.
+- Rollback for this release is restore-only: stop the app and
+  `staleness-cron`, restore `pre-migrate-v7-to-v8-*.db`, deploy the
+  previous (schema 7) image. Schema 8 records created after the
+  migration are lost on rollback. The previous code refuses a schema 8
+  database.
 
 ## [0.1.0] - 2026-10-06
 

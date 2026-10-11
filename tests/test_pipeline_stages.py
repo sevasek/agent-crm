@@ -13,6 +13,7 @@ def test_default_pipeline_is_seeded(db):
     assert pipeline_stages.default_stage_key() == "new"
     assert pipeline_stages.qualified_pool_keys() == {"qualified"}
     assert pipeline_stages.closed_stage_keys() == {"won", "lost"}
+    assert pipeline_stages.won_stage_keys() == {"won"}
 
 
 def test_create_stage_appends_at_end_by_default(db):
@@ -67,6 +68,12 @@ def test_update_stage_toggles_roles(db):
     assert error is None
     assert stage["is_qualified_pool"] == 1
     assert pipeline_stages.qualified_pool_keys() == {"qualified", "proposal"}
+
+
+def test_create_stage_rejects_is_lost(db):
+    stage, error = pipeline_stages.create_stage("dead", "Dead", is_lost=True)
+    assert stage is None
+    assert error == "invalid_stage_role"
 
 
 def test_create_stage_rejects_won_and_lost_together(db):

@@ -587,9 +587,9 @@ def _run_task(automation, deal, stage_key, config):
 def _open_child(parent_id, service_id):
     from app.services.deals import list_deals
 
-    closed = pipeline_stages.closed_stage_keys()
+    won = pipeline_stages.won_stage_keys()
     for child in list_deals(parent_deal_id=parent_id, service_id=service_id):
-        if child.get("stage") not in closed:
+        if child.get("active", 1) and child.get("stage") not in won:
             return child
     return None
 

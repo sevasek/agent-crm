@@ -131,22 +131,22 @@ def get_deal(deal_id: int):
 
 
 def get_open_deal_for_partner_service(partner_id: int, service_id: int):
-    """Most recent non-closed deal this partner already has for this service, if any —
+    """Most recent open deal this partner already has for this service, if any —
     used by the lead-ingestion API to avoid piling up duplicate deals when an ETL job
-    re-submits the same lead on a later run."""
-    closed = pipeline_stages.closed_stage_keys()
+    re-submits the same lead on a later run.
+
+    Open is active = 1 and the stage is not is_won (ADR 0001 §2 / §5.8).
+    """
+    won = pipeline_stages.won_stage_keys()
     with get_db() as db:
-        if closed:
-            placeholders = ",".join("?" * len(closed))
-            query = f"""SELECT * FROM deals
-                WHERE partner_id = ? AND service_id = ? AND stage NOT IN ({placeholders})
-                ORDER BY created_at DESC LIMIT 1"""
-            params = (partner_id, service_id, *closed)
-        else:
-            query = """SELECT * FROM deals
-                WHERE partner_id = ? AND service_id = ?
-                ORDER BY created_at DESC LIMIT 1"""
-            params = (partner_id, service_id)
+        query = """SELECT * FROM deals
+            WHERE partner_id = ? AND service_id = ? AND active = 1"""
+        params = [partner_id, service_id]
+        if won:
+            placeholders = ",".join("?" * len(won))
+            query += f" AND stage NOT IN ({placeholders})"
+            params.extend(won)
+        query += " ORDER BY created_at DESC LIMIT 1"
         row = db.execute(query, params).fetchone()
         if not row:
             return None
@@ -157,19 +157,27 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
 
 def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
                service_id: int = None, service_slug: str = None, deal_ids=None,
-               parent_deal_id: int = None, tags=None):
+               parent_deal_id: int = None, tags=None, type: str = "opportunity",
+               include_lost: bool = False):
     wanted_tags, impossible = coerce_tag_filter(tags)
     if impossible:
         return []
+    record_type = type if type in ("opportunity", "lead", "all") else "opportunity"
+    # LEFT JOIN so a lead with a null partner/service is not dropped (§5.8).
     query = """
         SELECT deals.*, partners.name AS partner_name, services.name AS service_name,
                services.slug AS service_slug
         FROM deals
-        JOIN partners ON partners.id = deals.partner_id
-        JOIN services ON services.id = deals.service_id
+        LEFT JOIN partners ON partners.id = deals.partner_id
+        LEFT JOIN services ON services.id = deals.service_id
         WHERE 1=1
     """
     params = []
+    if record_type != "all":
+        query += " AND deals.type = ?"
+        params.append(record_type)
+    if not include_lost:
+        query += " AND deals.active = 1"
     for tag in wanted_tags:
         query += (
             " AND EXISTS (SELECT 1 FROM deal_tags"

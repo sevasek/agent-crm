@@ -58,6 +58,26 @@ def test_edit_stage_label_and_roles(logged_in_client, db):
     assert stage["is_qualified_pool"] == 1
 
 
+def test_edit_lost_stage_label_resends_is_lost(logged_in_client, db):
+    resp = logged_in_client.post("/stages/lost/edit", data={
+        "label": "Closed lost", "is_lost": "on",
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    stage = pipeline_stages.get_stage("lost")
+    assert stage["label"] == "Closed lost"
+    assert stage["is_lost"] == 1
+
+
+def test_edit_stage_cannot_add_is_lost(logged_in_client, db):
+    resp = logged_in_client.post("/stages/proposal/edit", data={
+        "label": "Proposal", "is_lost": "on",
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+    })
+    assert resp.status_code == 400
+    assert pipeline_stages.get_stage("proposal")["is_lost"] == 0
+
+
 def test_edit_stage_unchecking_role_clears_it(logged_in_client, db):
     logged_in_client.post("/stages/qualified/edit", data={
         "label": "Qualified", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),

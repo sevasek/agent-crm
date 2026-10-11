@@ -44,26 +44,33 @@ def test_parse_action_date():
     assert parse_action_date("not-a-date") is None
 
 
-_CLOSED = {"won", "lost"}
+_WON = {"won"}
 
 
 def test_due_today_and_overdue_and_future():
-    assert deal_due_status({"stage": "qualified", "next_action_date": "2026-08-30"}, today=TODAY, closed_stage_keys=_CLOSED) == DUE
-    assert deal_due_status({"stage": "qualified", "next_action_date": "2026-08-20"}, today=TODAY, closed_stage_keys=_CLOSED) == OVERDUE
-    assert deal_due_status({"stage": "qualified", "next_action_date": "2026-09-01"}, today=TODAY, closed_stage_keys=_CLOSED) is None
-    assert deal_due_status({"stage": "qualified", "next_action_date": None}, today=TODAY, closed_stage_keys=_CLOSED) is None
+    assert deal_due_status({"stage": "qualified", "next_action_date": "2026-08-30"}, today=TODAY, won_stage_keys=_WON) == DUE
+    assert deal_due_status({"stage": "qualified", "next_action_date": "2026-08-20"}, today=TODAY, won_stage_keys=_WON) == OVERDUE
+    assert deal_due_status({"stage": "qualified", "next_action_date": "2026-09-01"}, today=TODAY, won_stage_keys=_WON) is None
+    assert deal_due_status({"stage": "qualified", "next_action_date": None}, today=TODAY, won_stage_keys=_WON) is None
 
 
 def test_closed_deals_are_not_gated():
-    assert deal_due_status({"stage": "won", "next_action_date": "2026-08-01"}, today=TODAY, closed_stage_keys=_CLOSED) is None
-    assert deal_due_status({"stage": "lost", "next_action_date": "2026-08-01"}, today=TODAY, closed_stage_keys=_CLOSED) is None
+    assert deal_due_status({"stage": "won", "next_action_date": "2026-08-01"}, today=TODAY, won_stage_keys=_WON) is None
+    assert deal_due_status({"stage": "lost", "active": 0, "next_action_date": "2026-08-01"}, today=TODAY, won_stage_keys=_WON) is None
+
+
+def test_lost_stage_with_active_is_still_open():
+    assert deal_due_status(
+        {"stage": "lost", "active": 1, "next_action_date": "2026-08-30"},
+        today=TODAY, won_stage_keys=_WON,
+    ) == DUE
 
 
 def test_annotate_days_overdue():
-    overdue = annotate_deal({"stage": "new", "next_action_date": "2026-08-20"}, today=TODAY, closed_stage_keys=_CLOSED)
+    overdue = annotate_deal({"stage": "new", "next_action_date": "2026-08-20"}, today=TODAY, won_stage_keys=_WON)
     assert overdue["due_status"] == OVERDUE
     assert overdue["days_overdue"] == 10
-    due = annotate_deal({"stage": "new", "next_action_date": "2026-08-30"}, today=TODAY, closed_stage_keys=_CLOSED)
+    due = annotate_deal({"stage": "new", "next_action_date": "2026-08-30"}, today=TODAY, won_stage_keys=_WON)
     assert due["due_status"] == DUE
     assert due["days_overdue"] == 0
 

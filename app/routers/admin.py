@@ -851,6 +851,7 @@ _STAGE_ERROR_MESSAGES = {
     "last_stage": "Can't delete the only remaining stage.",
     "not_found": "Stage not found.",
     "won_lost_conflict": "A stage can't be both Won and Lost.",
+    "invalid_stage_role": "The Lost stage role is deprecated. Mark a deal record lost instead of adding a Lost stage.",
 }
 
 

@@ -165,6 +165,7 @@ def test_app_js_inits_sortable_without_inline_script():
     app_js = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.js").read_text()
     assert "Sortable.create" in app_js
     assert "delayOnTouchOnly" in app_js
+    assert "forceFallback" in app_js
     assert "htmx.trigger" in app_js
     base = (Path(__file__).resolve().parents[1] / "app" / "templates" / "base.html").read_text()
     assert 'src="/static/vendor/Sortable.min.js"' in base

@@ -35,30 +35,46 @@ def populate_schema_7_sample(database, *, dangling_offer=False, null_closed_lost
 
     Returns a dict of ids and the expected closed_at for the null-closed lost deal.
     """
-    from app.services.activities import log_activity
     from app.services.catalog import create_service
-    from app.services.deal_tags import apply_deal_tags
-    from app.services.deals import create_deal, set_deal_stage
-    from app.services.delegated_tasks import create_task
     from app.services.partners import create_partner
 
     partner_id = create_partner("Acme Co", email="ops@acme.example", phone="0400111222")
     service_id = create_service("Consulting", "consulting-p1")
-    open_id = create_deal(
-        partner_id, service_id, source="referral", value_estimate=1800,
-        pain_points="Manual intake", goals="Book online",
-    )
-    lost_id = create_deal(partner_id, service_id, source="cold")
-    set_deal_stage(lost_id, "lost")
-    log_activity(partner_id, "note", "Kickoff notes", deal_id=open_id)
-    task, error, _created = create_task(open_id, "Send pack", owner="agent")
-    assert error is None
-    apply_deal_tags(open_id, replace=["campaign:p1-fixture"])
-
+    # Raw SQL so this fixture stays valid on schema 7 (no type/active/source_url).
     null_closed_id = None
     null_closed_updated_at = "2026-01-15T12:00:00"
     dangling_id = None
     with database.get_db() as db:
+        db.execute(
+            """INSERT INTO deals
+                   (partner_id, service_id, stage, source, value_estimate,
+                    pain_points, goals)
+               VALUES (?, ?, 'new', 'referral', 1800, 'Manual intake', 'Book online')""",
+            (partner_id, service_id),
+        )
+        open_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute(
+            """INSERT INTO deals (partner_id, service_id, stage, source, closed_at)
+               VALUES (?, ?, 'lost', 'cold', '2026-02-01T00:00:00')""",
+            (partner_id, service_id),
+        )
+        lost_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute(
+            """INSERT INTO activities (partner_id, deal_id, type, body)
+               VALUES (?, ?, 'note', 'Kickoff notes')""",
+            (partner_id, open_id),
+        )
+        db.execute(
+            """INSERT INTO delegated_tasks
+                   (deal_id, partner_id, title, owner, status)
+               VALUES (?, ?, 'Send pack', 'agent', 'delegated')""",
+            (open_id, partner_id),
+        )
+        task_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        db.execute(
+            "INSERT INTO deal_tags (deal_id, tag) VALUES (?, 'campaign:p1-fixture')",
+            (open_id,),
+        )
         if null_closed_lost:
             db.execute(
                 """INSERT INTO deals
@@ -84,7 +100,7 @@ def populate_schema_7_sample(database, *, dangling_offer=False, null_closed_lost
         "null_closed_id": null_closed_id,
         "null_closed_updated_at": null_closed_updated_at,
         "dangling_id": dangling_id,
-        "task_id": task["id"],
+        "task_id": task_id,
     }
 
 

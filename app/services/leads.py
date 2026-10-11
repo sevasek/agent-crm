@@ -18,10 +18,8 @@ from app.services.offers import get_offer
 from app.services.partners import (
     create_partner,
     get_company_by_name,
-    get_partner_by_email,
-    get_partner_by_phone_and_name,
-    get_partner_by_website_and_name,
     get_person_by_name,
+    match_existing_partner,
     update_partner,
 )
 
@@ -218,23 +216,6 @@ def _find_or_create_company(company_name: str):
     return create_partner(company_name, is_company=True)
 
 
-def _match_existing_partner(*, email, name, phone, website, is_company, parent_id):
-    """Identity waterfall: email, then phone+name, then website+name, then name+parent."""
-    if email:
-        partner = get_partner_by_email(email)
-        if partner:
-            return partner
-    if phone:
-        partner = get_partner_by_phone_and_name(name, phone, is_company=is_company)
-        if partner:
-            return partner
-    if website:
-        partner = get_partner_by_website_and_name(name, website, is_company=is_company)
-        if partner:
-            return partner
-    return get_person_by_name(name, parent_id=parent_id, is_company=is_company)
-
-
 def _deal_payload(lead: dict) -> dict:
     offer_id = lead.get("offer_id")
     if offer_id and not get_offer(offer_id):
@@ -301,7 +282,7 @@ def ingest_lead(lead: dict) -> dict:
     else:
         company_name_for_parent = company_name
 
-    partner = _match_existing_partner(
+    partner = match_existing_partner(
         email=email, name=name, phone=phone, website=website,
         is_company=is_company, parent_id=None,
     )

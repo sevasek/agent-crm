@@ -312,6 +312,66 @@ def update_deal_fields(deal_id: int, **fields):
         return cursor.rowcount > 0
 
 
+def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
+    """Archive a lead or opportunity. Returns (deal, None) or (None, error)."""
+    from app.services.lost_reasons import resolve_lost_reason
+
+    deal = get_deal(deal_id)
+    if not deal:
+        return None, "not_found"
+    if not deal.get("active", 1):
+        return None, "already_lost"
+    reason = resolve_lost_reason(lost_reason_id, lost_reason)
+    if not reason:
+        return None, "invalid_lost_reason"
+    now = datetime.utcnow().isoformat()
+    note_text = sanitize_text(note or "", max_len=2000, allow_newlines=True) or None
+    with get_db() as db:
+        db.execute(
+            """UPDATE deals
+               SET active = 0, lost_reason_id = ?, lost_note = ?,
+                   closed_at = ?, updated_at = ?
+               WHERE id = ?""",
+            (reason["id"], note_text, now, now, deal_id),
+        )
+        db.commit()
+    log_activity(
+        deal.get("partner_id"),
+        "system",
+        f"Marked lost: {reason['name']}" + (f" — {note_text}" if note_text else ""),
+        deal_id=deal_id,
+    )
+    return get_deal(deal_id), None
+
+
+def restore_deal(deal_id: int):
+    """Re-open a lost record. Merged records cannot be restored."""
+    deal = get_deal(deal_id)
+    if not deal:
+        return None, "not_found"
+    if deal.get("active", 1):
+        return None, "not_lost"
+    if deal.get("merged_into_id"):
+        return None, "merged"
+    stage = deal.get("stage")
+    if deal.get("type") == "opportunity":
+        meta = pipeline_stages.get_stage(stage)
+        if meta and meta["is_lost"]:
+            stage = pipeline_stages.default_stage_key()
+    now = datetime.utcnow().isoformat()
+    with get_db() as db:
+        db.execute(
+            """UPDATE deals
+               SET active = 1, lost_reason_id = NULL, lost_note = NULL,
+                   closed_at = NULL, stage = ?, updated_at = ?
+               WHERE id = ?""",
+            (stage, now, deal_id),
+        )
+        db.commit()
+    log_activity(deal.get("partner_id"), "system", "Restored from lost", deal_id=deal_id)
+    return get_deal(deal_id), None
+
+
 def set_deal_stage(deal_id: int, new_stage: str) -> bool:
     """Move a deal to a new stage. Fires nurture enrollment when the target
     stage has `triggers_nurture` set (not on every save), fires the deal-won
@@ -338,6 +398,13 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
         db.commit()
 
     log_activity(deal["partner_id"], "system", stage_changed_body(old_stage, new_stage), deal_id=deal_id)
+
+    if stage_meta["is_lost"]:
+        marked, lost_error = mark_lost(deal_id, lost_reason="Lost stage (migrated)")
+        if lost_error and lost_error not in ("already_lost",):
+            logger.warning("is_lost shim failed for deal %s: %s", deal_id, lost_error)
+        if marked:
+            deal = marked
 
     if stage_meta["triggers_nurture"]:
         partner = get_partner(deal["partner_id"])

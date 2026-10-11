@@ -13,10 +13,23 @@ def test_login_links_vendored_pico_before_app_css(client):
     assert pico in html
     assert app_css in html
     assert html.index(pico) < html.index(app_css)
-    assert 'data-theme="light"' in html
+    assert 'data-theme="light"' not in html
+    assert "<html lang=\"en\">" in html
     head = html.split("</head>", 1)[0]
     assert "http://" not in head
     assert "https://" not in head
+
+
+def test_style_css_pairs_custom_colors_for_dark_mode():
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "style.css").read_text()
+    assert "--bg-alt:" in css
+    assert '.pill-due { background: var(--pill-due-bg);' in css
+    assert '.pill-overdue { background: var(--pill-overdue-bg);' in css
+    assert "@media only screen and (prefers-color-scheme: dark)" in css
+    assert ':root:not([data-theme])' in css
+    assert '[data-theme="dark"]' in css
+    assert "--accent: #2c5aa0;" in css
+    assert "data-theme=\"light\" is locked" not in css
 
 
 def test_pico_stylesheet_is_served_from_static(client):

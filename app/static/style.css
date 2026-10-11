@@ -3,10 +3,28 @@
     --muted: #666;
     --bg-alt: #f7f7f7;
     --accent: #2c5aa0;
+    --fg: #222;
+    --bg: #fff;
+    --surface: #fff;
+    --link: #2c5aa0;
+    --error: #b00020;
+    --pill-due-bg: #fff3cd;
+    --pill-due-fg: #856404;
+    --pill-overdue-bg: #fdecea;
+    --pill-overdue-fg: #b00020;
+    --pill-tag-on-bg: #e7eef8;
+    --chip-hover: #f0f4fa;
+    --success-bg: #f0f7f0;
+    --success-border: #cde5cd;
+    --outcome-won: #1e7e34;
 }
 
-/* Pico.css primary tokens → existing brand blue. data-theme="light" is locked
-   in base.html so Pico's auto dark mode cannot override these. */
+/* Pico.css primary tokens → existing brand blue. Light values stay on :root
+   so the shipped look is unchanged when the OS is light (or data-theme=light).
+   Dark pairs use the same selectors Pico 2.1.1 uses: prefers-color-scheme
+   when <html> has no data-theme, plus [data-theme="dark"] for an explicit
+   override. --accent stays #2c5aa0 for filled buttons; --link lightens in
+   dark so brand-colored text meets contrast on Pico's dark page. */
 :root,
 [data-theme="light"] {
     --pico-primary: var(--accent);
@@ -21,13 +39,73 @@
     --pico-primary-inverse: #fff;
 }
 
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --border: #2a3140;
+        --muted: #7b8495;
+        --bg-alt: #1a1e28;
+        --fg: #c2c7d0;
+        --bg: rgb(19, 22.5, 30.5);
+        --surface: #1c212b;
+        --link: #7aa3e0;
+        --error: #f28b82;
+        --pill-due-bg: #3d3414;
+        --pill-due-fg: #f0c14b;
+        --pill-overdue-bg: #3d1a1c;
+        --pill-overdue-fg: #f5a5a0;
+        --pill-tag-on-bg: #1e2d4a;
+        --chip-hover: #1a2740;
+        --success-bg: #1a2e1f;
+        --success-border: #2d5a35;
+        --pico-primary: var(--link);
+        --pico-primary-background: var(--accent);
+        --pico-primary-border: var(--accent);
+        --pico-primary-hover: #9bb8ea;
+        --pico-primary-hover-background: #234a85;
+        --pico-primary-hover-border: #234a85;
+        --pico-primary-hover-underline: #9bb8ea;
+        --pico-primary-underline: var(--link);
+        --pico-primary-focus: rgba(122, 163, 224, 0.375);
+        --pico-primary-inverse: #fff;
+    }
+}
+
+[data-theme="dark"] {
+    --border: #2a3140;
+    --muted: #7b8495;
+    --bg-alt: #1a1e28;
+    --fg: #c2c7d0;
+    --bg: rgb(19, 22.5, 30.5);
+    --surface: #1c212b;
+    --link: #7aa3e0;
+    --error: #f28b82;
+    --pill-due-bg: #3d3414;
+    --pill-due-fg: #f0c14b;
+    --pill-overdue-bg: #3d1a1c;
+    --pill-overdue-fg: #f5a5a0;
+    --pill-tag-on-bg: #1e2d4a;
+    --chip-hover: #1a2740;
+    --success-bg: #1a2e1f;
+    --success-border: #2d5a35;
+    --pico-primary: var(--link);
+    --pico-primary-background: var(--accent);
+    --pico-primary-border: var(--accent);
+    --pico-primary-hover: #9bb8ea;
+    --pico-primary-hover-background: #234a85;
+    --pico-primary-hover-border: #234a85;
+    --pico-primary-hover-underline: #9bb8ea;
+    --pico-primary-underline: var(--link);
+    --pico-primary-focus: rgba(122, 163, 224, 0.375);
+    --pico-primary-inverse: #fff;
+}
+
 * { box-sizing: border-box; }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     margin: 0;
-    color: #222;
-    background: #fff;
+    color: var(--fg);
+    background: var(--bg);
 }
 
 .skip-link {
@@ -62,18 +140,18 @@ summary:focus-visible {
 .topnav {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start;
     gap: 0.75rem 1.5rem; padding: 0.75rem 1.5rem;
-    border-bottom: 1px solid var(--border); background: #fff;
+    border-bottom: 1px solid var(--border); background: var(--surface);
 }
-.topnav a { text-decoration: none; color: #222; }
-.topnav a:hover { color: var(--accent); }
+.topnav a { text-decoration: none; color: var(--fg); }
+.topnav a:hover { color: var(--link); }
 .topnav .brand { font-weight: 700; }
 .topnav .right { margin-left: auto; color: var(--muted); }
 .topnav-logout { margin: 0; display: inline; }
 .topnav-logout button {
     background: none; border: none; padding: 0; margin: 0; cursor: pointer;
-    font: inherit; text-decoration: none; color: #222;
+    font: inherit; text-decoration: none; color: var(--fg);
 }
-.topnav-logout button:hover { color: var(--accent); }
+.topnav-logout button:hover { color: var(--link); }
 .topnav a[aria-current="page"] {
     font-weight: 600;
     text-decoration: underline;
@@ -116,10 +194,10 @@ button[type=submit] { width: auto; }
     border-color: var(--pico-primary-hover-border, #234a85);
     color: #fff; text-decoration: none;
 }
-.btn-secondary { background: #fff; color: var(--accent); border-color: var(--accent); }
-.btn-secondary:hover { background: #f0f4fa; color: var(--accent); text-decoration: none; }
+.btn-secondary { background: var(--surface); color: var(--link); border-color: var(--accent); }
+.btn-secondary:hover { background: var(--chip-hover); color: var(--link); text-decoration: none; }
 
-.error { color: #b00020; margin-bottom: 1rem; }
+.error { color: var(--error); margin-bottom: 1rem; }
 .muted { color: var(--muted); }
 .pill {
     display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px;
@@ -131,9 +209,9 @@ button[type=submit] { width: auto; }
     font-size: 0.75rem;
     margin: 0.1rem 0.2rem 0.1rem 0;
     text-decoration: none;
-    color: #222;
+    color: var(--fg);
 }
-a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
+a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(--link); }
 .tag-filters { margin: 0.25rem 0 0.75rem; }
 .activity { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
 .activity .meta { color: var(--muted); font-size: 0.8rem; }
@@ -143,8 +221,8 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .next-action-form input[type=date] { width: auto; }
 .next-action-form button { width: auto; padding: 0.35rem 0.75rem; }
 .deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
-.pill-due { background: #fff3cd; color: #856404; }
-.pill-overdue { background: #fdecea; color: #b00020; }
+.pill-due { background: var(--pill-due-bg); color: var(--pill-due-fg); }
+.pill-overdue { background: var(--pill-overdue-bg); color: var(--pill-overdue-fg); }
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pipeline-board {
@@ -163,7 +241,7 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
     padding: 0.75rem;
 }
 .pipeline-column h2 { margin-top: 0; font-size: 0.95rem; }
-.pipeline-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; }
+.pipeline-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; }
 .pipeline-card select { margin-top: 0.4rem; }
 .stage-move-form { display: inline; }
 .stage-move-form button { padding: 0.15rem 0.5rem; }
@@ -172,13 +250,13 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .call-outcome-form input[type=text] { width: auto; flex: 1 1 8rem; min-width: 6rem; }
 .call-outcome-form button { width: auto; }
 .btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; border: var(--pico-border-width, 1px) solid var(--border); }
-.btn-outcome-no_answer { background: #fff; color: var(--muted); border-color: var(--border); }
-.btn-outcome-not_interested { background: #fff; color: #b00020; border-color: #b00020; }
-.btn-outcome-won { background: #1e7e34; color: #fff; border-color: #1e7e34; }
+.btn-outcome-no_answer { background: var(--surface); color: var(--muted); border-color: var(--border); }
+.btn-outcome-not_interested { background: var(--surface); color: var(--error); border-color: var(--error); }
+.btn-outcome-won { background: var(--outcome-won); color: #fff; border-color: var(--outcome-won); }
 
 /* Tap-to-call: a real <a href="tel:..."> (the link shape mobile browsers
    handle reliably), styled plain so it doesn't look like a random link. */
-.btn-tel { color: var(--accent); text-decoration: underline; }
+.btn-tel { color: var(--link); text-decoration: underline; }
 
 /* Focused mobile call view: one column, big tap targets, nothing else on
    the page competing for attention while a rep is mid-call. */
@@ -205,7 +283,7 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .call-view-new-offer .form-row { margin-bottom: 0.5rem; }
 
 code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
-.api-key-new { background: #f0f7f0; border: 1px solid #cde5cd; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.api-key-new { background: var(--success-bg); border: 1px solid var(--success-border); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
 .api-key-value { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
 .api-key-value code { flex: 1; word-break: break-all; padding: 0.4rem 0.6rem; }
 

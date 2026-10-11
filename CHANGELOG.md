@@ -12,6 +12,13 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Changed
+
+- Admin UI follows `prefers-color-scheme` again. The Phase 1
+  `data-theme="light"` lock is gone; custom colors (`--bg-alt`, pills, nav,
+  cards, errors, call-outcome chips) have light/dark pairs using the same
+  selectors Pico 2.1.1 uses. Filled brand buttons stay `#2c5aa0`. Closes #87.
+
 ### Added
 
 - Stage automations (schema v7). Named rules, empty until an operator adds

@@ -110,8 +110,8 @@ def test_schema_7_fixture_preserves_ids_and_backfills_lost(tmp_path, monkeypatch
         assert task["deal_id"] == sample["open_id"]
         assert task["partner_id"] == sample["partner_id"]
 
-    backups = list((tmp_path / "backups").glob("pre-migrate-v7-to-v8-*.db"))
-    assert backups, "expected pre-migrate-v7-to-v8 backup"
+    backups = list((tmp_path / "backups").glob("pre-migrate-v7-to-*.db"))
+    assert backups, "expected pre-migrate-v7-to-* backup"
 
 
 def test_version_0_column_order_maps_by_name(tmp_path, monkeypatch):

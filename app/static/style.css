@@ -159,6 +159,8 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
     padding-bottom: 0.5rem;
 }
 .pipeline-column {
+    display: flex;
+    flex-direction: column;
     flex: 1 1 12rem;
     min-width: 10rem;
     background: var(--bg-alt);
@@ -166,8 +168,13 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
     padding: 0.75rem;
 }
 .pipeline-column h2 { margin-top: 0; font-size: 0.95rem; }
-.pipeline-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; }
-.pipeline-card select { margin-top: 0.4rem; }
+.pipeline-card-list { min-height: 4.5rem; flex: 1 1 auto; }
+.pipeline-column:has(.pipeline-card) .pipeline-empty { display: none; }
+.pipeline-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; cursor: grab; }
+.pipeline-card.sortable-ghost { opacity: 0.4; }
+.pipeline-card.sortable-chosen,
+.pipeline-card.sortable-drag { cursor: grabbing; }
+.pipeline-card select { margin-top: 0.4rem; cursor: pointer; }
 .stage-move-form { display: inline; }
 .stage-move-form button { padding: 0.15rem 0.5rem; }
 

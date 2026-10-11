@@ -127,6 +127,7 @@ One table holds leads and opportunities (`type`). Schema 8 made
 | `lost_reason_id` | INTEGER | FK to `lost_reasons(id)`. Required when `active = 0`. |
 | `lost_note` | TEXT | Free text for the loss. |
 | `merged_into_id` | INTEGER | FK to `deals(id)`. Set by `merge_leads` on the source. |
+| `board_position` | INTEGER NOT NULL DEFAULT 0 | 0-based order within `stage` on the pipeline board. Schema v9. Drag-and-drop and `set_deal_stage(..., position=)` rewrite the column; a stage change without a position appends. The deals list still sorts by `updated_at`. |
 
 `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false`.
 Leads never appear in a pipeline stage column.
@@ -282,7 +283,9 @@ See [`MCP.md`](MCP.md) for the webhook behaviour.
 
 Operator configuration. Schema version 7 creates the tables and inserts no
 rows. A stage change runs nothing extra until someone adds an automation
-in the admin UI or over MCP.
+in the admin UI or over MCP. Schema version 9 adds `deals.board_position`
+for pipeline card order after the lead-model rebuild (schema 8); it does
+not rebuild `deals`.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -318,7 +321,7 @@ That is the post-sale model.
 ### Indexes
 
 `partners.parent_id`, `deals.partner_id`, `deals.stage`, `deals.owner_key`,
-`deals.parent_deal_id`, `activities.partner_id`, `activities.deal_id`,
+`deals.parent_deal_id`, `deals(stage, board_position)`, `activities.partner_id`, `activities.deal_id`,
 `pipeline_stages.position`, `api_keys.user_id`, `delegated_tasks.deal_id`,
 `delegated_tasks(owner, status)`, `deal_tags(tag)` (the primary key on
 `(deal_id, tag)` covers lookups by deal),

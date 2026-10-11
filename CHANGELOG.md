@@ -22,6 +22,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Optional `scripts/opportunities_to_leads.py` to move early-stage
   opportunities back to leads (dry-run by default). The migration does
   not run it.
+- Pipeline kanban drag-and-drop (SortableJS 1.15.7, vendored). Drop posts
+  to the existing `/deals/{id}/stage` form with an optional `position`
+  field so stage automations still run. Schema v9 adds
+  `deals.board_position` after the lead-model rebuild. The per-card stage
+  dropdown stays as the keyboard / no-JS fallback.
 - Stage automations (schema v7). Named rules, empty until an operator adds
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
   Entering the chosen stage can create a delegated task and/or child deals

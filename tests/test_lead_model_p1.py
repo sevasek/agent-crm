@@ -269,7 +269,7 @@ def test_fresh_and_migrated_schemas_match(tmp_path, monkeypatch):
 
     assert fresh_snap == migrated_snap
     with sqlite3.connect(fresh) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
 def test_list_deals_defaults_exclude_lost_and_leads(db):

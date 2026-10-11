@@ -513,6 +513,12 @@ def record_call_outcome(deal_id: int, outcome: str, note: str = "") -> bool:
         body += f" — {note}"
     log_activity(deal["partner_id"], "call", body, deal_id=deal_id)
 
+    if outcome == "not_interested":
+        marked, lost_error = mark_lost(deal_id, lost_reason="Not a fit", note=note)
+        if lost_error and lost_error not in ("already_lost",):
+            logger.warning("not_interested mark_lost failed for deal %s: %s", deal_id, lost_error)
+        return True
+
     if target_stage and target_stage != deal["stage"]:
         set_deal_stage(deal_id, target_stage)
 

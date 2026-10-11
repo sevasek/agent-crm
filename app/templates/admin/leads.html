@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Leads — crm{% endblock %}
+{% block content %}
+<h1>Leads</h1>
+<p class="muted">
+    Research candidates. A lead is not in the pipeline until you convert it to an
+    opportunity. Creating a lead does not create a partner.
+</p>
+<form method="get" action="/leads" style="margin-bottom:1rem;">
+    <div class="form-row">
+        <label for="q">Search</label>
+        <input type="text" id="q" name="q" value="{{ q }}" placeholder="Name, company, email, phone, website">
+    </div>
+    <div class="form-row">
+        <label for="owner">Owner</label>
+        <input type="text" id="owner" name="owner" value="{{ owner }}" placeholder="alice">
+    </div>
+    <div class="form-row">
+        <label for="source_prefix">Source prefix</label>
+        <input type="text" id="source_prefix" name="source_prefix" value="{{ source_prefix }}" placeholder="research:">
+    </div>
+    <div class="form-row">
+        <label for="tag">Tag</label>
+        <input type="text" id="tag" name="tag" value="{{ current_tag }}" placeholder="illawarra">
+    </div>
+    <div class="form-row">
+        <label>
+            <input type="checkbox" name="due" value="1" {% if current_due %}checked{% endif %}> Due only
+        </label>
+        <label>
+            <input type="checkbox" name="lost" value="1" {% if current_lost %}checked{% endif %}> Include lost
+        </label>
+    </div>
+    <div class="form-row">
+        <label for="sort">Sort</label>
+        <select id="sort" name="sort">
+            {% for key, label in [("updated", "Updated"), ("created", "Created"), ("fit", "Fit"), ("next_action_date", "Next action"), ("last_research", "Last researched")] %}
+            <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit">Filter</button>
+    <a class="btn" href="/leads/new">+ New lead</a>
+</form>
+{% if tag_error %}<p class="error" role="alert">{{ tag_error }}</p>{% endif %}
+<table>
+    <tr>
+        <th>Lead</th><th>Contact</th><th>Fit</th><th>Last researched</th>
+        <th>Next action</th><th></th>
+    </tr>
+    {% for d in leads %}
+    <tr>
+        <td>
+            <a href="/leads/{{ d.id }}">{{ d.company_name or d.contact_name or d.name or d.email or ("Lead #" ~ d.id) }}</a>
+            {% set record = d %}{% include "admin/_record_badges.html" %}
+            {% if d.tags %}
+            <div>
+                {% for tag in d.tags %}
+                <span class="pill pill-tag">{{ tag }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </td>
+        <td>
+            {{ d.contact_name or "" }}
+            {% if d.email %}<div class="muted">{{ d.email }}</div>{% endif %}
+            {% if d.phone %}<div class="muted">{{ d.phone }}</div>{% endif %}
+        </td>
+        <td class="score">{% if d.fit_score is not none %}{{ d.fit_score }}{% endif %}</td>
+        <td>{{ (d.last_researched_at or "")[:16] }}{% if d.research_note_count %} ({{ d.research_note_count }}){% endif %}</td>
+        <td>
+            {{ d.next_action or "" }}{% if d.next_action_date %} ({{ (d.next_action_date or "")[:10] }}){% endif %}
+        </td>
+        <td><a href="/leads/{{ d.id }}">Open</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">{% if q or owner or source_prefix or current_tag or current_due %}No leads match those filters.{% else %}No leads yet.{% endif %}</td></tr>
+    {% endfor %}
+</table>
+{% endblock %}

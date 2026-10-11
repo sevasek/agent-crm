@@ -1,0 +1,6 @@
+{% if record.get("type") %}
+<span class="pill pill-{{ record.type }}">{{ record.type }}</span>
+{% endif %}
+{% if record.get("active") == 0 %}
+<span class="pill pill-lost">lost</span>
+{% endif %}

@@ -145,6 +145,9 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
 .pill-due { background: #fff3cd; color: #856404; }
 .pill-overdue { background: #fdecea; color: #b00020; }
+.pill-lead { background: #e8f0fe; color: #1a4d8f; }
+.pill-opportunity { background: #e6f4ea; color: #1e6b34; }
+.pill-lost { background: #fdecea; color: #b00020; text-transform: lowercase; }
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pipeline-board {

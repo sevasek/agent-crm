@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}{{ "Lead" if lead else "New lead" }} — crm{% endblock %}
+{% block content %}
+<h1>
+    {% if lead %}{{ lead.company_name or lead.contact_name or lead.name or ("Lead #" ~ lead.id) }}
+    {% set record = lead %}{% include "admin/_record_badges.html" %}
+    {% else %}New lead{% endif %}
+</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+{% if lead and lead.conversion_readiness %}
+<p class="muted">
+    Conversion readiness:
+    {% if lead.conversion_readiness.ready %}ready{% else %}missing {{ lead.conversion_readiness.missing | join(", ") }}{% endif %}
+    · fit {{ lead.conversion_readiness.fit_score }}/{{ lead.conversion_readiness.fit_max }}
+    {% if lead.conversion_readiness.warnings %}
+    · {{ lead.conversion_readiness.warnings | join(", ") }}
+    {% endif %}
+</p>
+{% endif %}
+
+<form method="post" action="{{ '/leads/' ~ lead.id ~ '/edit' if lead else '/leads/new' }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="company_name">Company name</label>
+        <input type="text" id="company_name" name="company_name" value="{{ lead.company_name if lead and lead.company_name else form.company_name }}">
+    </div>
+    <div class="form-row">
+        <label for="contact_name">Contact name</label>
+        <input type="text" id="contact_name" name="contact_name" value="{{ lead.contact_name if lead and lead.contact_name else form.contact_name }}">
+    </div>
+    <div class="form-row">
+        <label for="name">Display name</label>
+        <input type="text" id="name" name="name" value="{{ lead.name if lead and lead.name else form.name }}">
+    </div>
+    <div class="form-row">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{{ lead.email if lead and lead.email else form.email }}">
+    </div>
+    <div class="form-row">
+        <label for="phone">Phone</label>
+        <input type="text" id="phone" name="phone" value="{{ lead.phone if lead and lead.phone else form.phone }}">
+    </div>
+    <div class="form-row">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" value="{{ lead.website if lead and lead.website else form.website }}">
+    </div>
+    <div class="form-row">
+        <label for="title">Title</label>
+        <input type="text" id="title" name="title" value="{{ lead.title if lead and lead.title else form.title }}">
+    </div>
+    <div class="form-row">
+        <label for="linkedin_url">LinkedIn URL</label>
+        <input type="text" id="linkedin_url" name="linkedin_url" value="{{ lead.linkedin_url if lead and lead.linkedin_url else form.linkedin_url }}">
+    </div>
+    <div class="form-row">
+        <label for="industry">Industry</label>
+        <input type="text" id="industry" name="industry" value="{{ lead.industry if lead and lead.industry else form.industry }}">
+    </div>
+    <div class="form-row">
+        <label for="team_size">Team size</label>
+        <input type="number" id="team_size" name="team_size" min="0" value="{% if lead and lead.team_size is not none %}{{ lead.team_size }}{% else %}{{ form.team_size }}{% endif %}">
+    </div>
+    <div class="form-row">
+        <label for="preferred_channel">Preferred contact channel</label>
+        <select id="preferred_channel" name="preferred_channel">
+            <option value="">— unspecified —</option>
+            {% for ch in ["email", "phone", "text"] %}
+            <option value="{{ ch }}" {% if (lead.preferred_channel if lead else form.preferred_channel) == ch %}selected{% endif %}>{{ ch }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="service_slug">Service</label>
+        <select id="service_slug" name="service_slug">
+            <option value="">— none yet —</option>
+            {% for s in services %}
+            <option value="{{ s.slug }}" {% if (lead_service_slug if lead else form.service_slug) == s.slug %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="source">Source</label>
+        <input type="text" id="source" name="source" value="{{ lead.source if lead and lead.source else form.source }}">
+    </div>
+    <div class="form-row">
+        <label for="pain_points">Pain points</label>
+        <textarea id="pain_points" name="pain_points">{{ lead.pain_points if lead and lead.pain_points else form.pain_points }}</textarea>
+    </div>
+    <div class="form-row">
+        <label for="goals">Goals</label>
+        <textarea id="goals" name="goals">{{ lead.goals if lead and lead.goals else form.goals }}</textarea>
+    </div>
+    <div class="form-row">
+        <label for="next_action">Next action</label>
+        <input type="text" id="next_action" name="next_action" value="{{ lead.next_action if lead and lead.next_action else form.next_action }}">
+    </div>
+    <div class="form-row">
+        <label for="next_action_date">Next action date</label>
+        <input type="date" id="next_action_date" name="next_action_date" value="{{ ((lead.next_action_date or '')[:10] if lead else form.next_action_date) }}">
+    </div>
+    <div class="form-row">
+        <label for="owner_key">Owner</label>
+        <input type="text" id="owner_key" name="owner_key" placeholder="alice" value="{{ lead.owner_key if lead and lead.owner_key else form.owner_key }}">
+    </div>
+    <div class="form-row">
+        <label for="tags">Tags</label>
+        <input type="text" id="tags" name="tags" placeholder="illawarra, research"
+               value="{% if form_tags is not none %}{{ form_tags }}{% elif lead and lead.tags %}{{ lead.tags | join(', ') }}{% endif %}">
+    </div>
+    <button type="submit">{{ "Save" if lead else "Create lead" }}</button>
+    <a class="btn-secondary btn" href="/leads">Back to leads</a>
+</form>
+
+{% if lead and lead.active %}
+<h2>Convert to opportunity</h2>
+<p class="muted">
+    Same rules as the <code>convert_lead</code> tool. The CRM does not invent a partner
+    unless you choose create or auto finds none.
+</p>
+{% if lead.possible_duplicates %}
+<p>Possible duplicates</p>
+<ul>
+    {% for dup in lead.possible_duplicates %}
+    <li>{{ dup.kind }} #{{ dup.id }} — {{ dup.matched_on | join(", ") }} ({{ dup.strength }})</li>
+    {% endfor %}
+</ul>
+{% endif %}
+{% if convert_candidates %}
+<p class="error" role="alert">More than one partner matches. Pick one and convert with Link.</p>
+<ul>
+    {% for c in convert_candidates %}
+    <li>#{{ c.id }} {{ c.name }}{% if c.email %} · {{ c.email }}{% endif %}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+<form method="post" action="/leads/{{ lead.id }}/convert" id="convert-lead-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="convert_service_slug">Service</label>
+        <select id="convert_service_slug" name="service_slug">
+            <option value="">{{ "Use the lead's service" if lead.service_id else "— pick a service —" }}</option>
+            {% for s in services %}
+            <option value="{{ s.slug }}" {% if lead_service_slug == s.slug %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="convert_stage">Stage</label>
+        <select id="convert_stage" name="stage">
+            <option value="">Default stage</option>
+            {% for s in stages %}
+            <option value="{{ s.key }}">{{ s.label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="partner_action">Partner action</label>
+        <select id="partner_action" name="partner_action">
+            <option value="auto">Auto (match or create)</option>
+            <option value="create">Create partners</option>
+            <option value="link" {% if convert_candidates %}selected{% endif %}>Link existing partner</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="partner_id">Partner (for Link)</label>
+        <select id="partner_id" name="partner_id">
+            <option value="">— select —</option>
+            {% for p in partners %}
+            <option value="{{ p.id }}" {% if convert_candidates and convert_candidates[0].id == p.id %}selected{% endif %}>{{ p.name }}{% if p.email %} · {{ p.email }}{% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="convert_value">Estimated value ($)</label>
+        <input type="number" id="convert_value" name="value_estimate" step="1">
+    </div>
+    <div class="form-row">
+        <label for="convert_next_action">Next action</label>
+        <input type="text" id="convert_next_action" name="next_action">
+    </div>
+    <div class="form-row">
+        <label for="convert_next_action_date">Next action date</label>
+        <input type="date" id="convert_next_action_date" name="next_action_date">
+    </div>
+    <div class="form-row">
+        <label for="convert_note">Note</label>
+        <textarea id="convert_note" name="note" placeholder="Why this lead is worth pursuit"></textarea>
+    </div>
+    <button type="submit">Convert lead</button>
+</form>
+
+<h2>Mark lost</h2>
+<form method="post" action="/leads/{{ lead.id }}/lost">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="lost_reason_id">Lost reason</label>
+        <select id="lost_reason" name="lost_reason" required>
+            <option value="">— select —</option>
+            {% for r in lost_reasons %}
+            <option value="{{ r.name }}">{{ r.name }}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="lost_note">Note</label>
+        <textarea id="lost_note" name="note"></textarea>
+    </div>
+    <button type="submit">Mark lost</button>
+</form>
+{% elif lead and not lead.active %}
+<p>
+    This lead is lost
+    {% if lead.lost_reason %}( {{ lead.lost_reason.name }} ){% endif %}.
+</p>
+{% if not lead.merged_into_id %}
+<form method="post" action="/leads/{{ lead.id }}/restore">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Restore</button>
+</form>
+{% else %}
+<p class="muted">Merged into #{{ lead.merged_into_id }}. Restore is not available.</p>
+{% endif %}
+{% endif %}
+
+{% if lead %}
+<h2>Research notes</h2>
+<form method="post" action="/leads/{{ lead.id }}/activities">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <select name="type" style="width:auto;">
+            <option value="research">Research</option>
+            <option value="note">Note</option>
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="source_url">Source URL</label>
+        <input type="text" id="source_url" name="source_url" placeholder="https://…">
+    </div>
+    <div class="form-row">
+        <textarea name="body" placeholder="What did you find?"></textarea>
+    </div>
+    <button type="submit">Add note</button>
+</form>
+{% for a in lead.activities or [] %}
+<div class="activity">
+    <span class="pill">{{ a.type }}</span>
+    {{ a.body or "" }}
+    {% if a.source_url %}<div><a href="{{ a.source_url }}" rel="noopener">{{ a.source_url }}</a></div>{% endif %}
+    <div class="meta">{{ a.occurred_at }}</div>
+</div>
+{% else %}
+<p class="muted">No research notes yet.</p>
+{% endfor %}
+{% endif %}
+{% endblock %}

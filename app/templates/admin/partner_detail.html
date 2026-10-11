@@ -36,7 +36,7 @@
 <h2>Deals</h2>
 {% for d in deals %}
 <div class="deal-card">
-    <strong>{{ d.service_name }}</strong> — <span class="pill">{{ d.stage }}</span>
+    <strong>{{ d.service_name }}</strong> — {% set record = d %}{% include "admin/_record_badges.html" %} <span class="pill">{{ d.stage }}</span>
     {% if d.value_estimate %}· ${{ "%.0f"|format(d.value_estimate) }}{% endif %}
     {% for tag in d.tags %}
     <a class="pill pill-tag" href="/deals?tag={{ tag }}">{{ tag }}</a>

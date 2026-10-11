@@ -2,7 +2,8 @@
     <h2>{{ col.stage.label }} <span class="muted">({{ col.deals|length }})</span></h2>
     {% for d in col.deals %}
     <div class="pipeline-card">
-        <a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>
+        {% if d.partner_id %}<a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">{{ d.company_name or d.name or ("Record #" ~ d.id) }}</span>{% endif %}
+        {% set record = d %}{% include "admin/_record_badges.html" %}
         <div class="muted">{{ d.service_name }}</div>
         {% if d.tags %}
         <div class="tag-filters">
@@ -21,6 +22,7 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="next" value="pipeline">
             {% if current_tag %}<input type="hidden" name="tag" value="{{ current_tag }}">{% endif %}
+            {% if current_lost %}<input type="hidden" name="lost" value="1">{% endif %}
             <select name="stage"
                     hx-post="/deals/{{ d.id }}/stage"
                     hx-include="closest form"

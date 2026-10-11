@@ -155,6 +155,7 @@ def test_non_dict_lead_item_is_invalid_not_500(client, monkeypatch):
             "leads": [
                 "not-a-dict",
                 {
+                    "type": "opportunity",
                     "name": "Jane Doe",
                     "email": "jane@acme.example",
                     "service_slug": "consulting",

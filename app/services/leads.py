@@ -1,24 +1,28 @@
 """Lead ingestion — the automation-facing write path (docs/DATA_MODEL.md → Lead ingest).
 
 One entry point, ingest_lead(), used by the /api/v1/leads endpoint and MCP.
-Each call is one lead: find-or-create the partner (email first, else
-phone+name, else website+name, else name scoped to parent company).
-Company-only and phone-only rows are valid (scraped niche lists often have
-no email). If name equals company_name, the deal lands on the company
-partner rather than a duplicate person. Fill any still-empty partner (and
-deal) fields on a match, then create a deal unless the partner already has
-a non-closed deal for the same service.
+Default type is lead (ADR 0001 Q1): a new row is a lead, not a partner.
+type=opportunity keeps the pre-ADR behaviour: find-or-create a partner
+(email first, else phone+name, else website+name, else name scoped to the
+parent company) and create an opportunity.
 """
 import math
 
 from app.services.catalog import get_service_by_slug
 from app.services.deal_tags import add_deal_tags, tags_from_lead
-from app.services.deals import create_deal, get_open_deal_for_partner_service, update_deal_fields
+from app.services.deals import (
+    create_deal,
+    get_deal,
+    get_open_deal_for_partner_service,
+    update_deal_fields,
+)
+from app.services.lead_records import create_lead, find_duplicates, lead_has_identity, update_lead
 from app.services.offers import get_offer
 from app.services.partners import (
     create_partner,
     get_company_by_name,
     get_person_by_name,
+    list_partners_by_email,
     match_existing_partner,
     update_partner,
 )
@@ -35,6 +39,7 @@ _FILLABLE_FIELDS = (
 _FILLABLE_DEAL_FIELDS = (
     "source", "value_estimate", "pain_points", "goals",
     "next_action", "next_action_date", "offer_id", "owner_key", "external_ref",
+    "probability", "priority", "expected_close",
 )
 
 
@@ -101,7 +106,10 @@ ALLOWED_LEAD_KEYS = (
     "team_size", "source", "value_estimate", "pain_points", "goals",
     "next_action", "next_action_date", "is_company",
     "owner_key", "offer_id", "external_ref", "tags",
+    "type", "probability", "priority", "expected_close",
 )
+
+DEPRECATION_TYPE_OMITTED = "type omitted; default is now lead"
 
 _TRUTHY_STRINGS = {"true", "1", "yes", "y"}
 
@@ -196,10 +204,12 @@ def sanitize_lead_payload(lead) -> dict:
         raw = lead.get(key)
         if key == "value_estimate":
             cleaned[key] = _as_number(raw)
-        elif key in ("team_size", "offer_id"):
+        elif key in ("team_size", "offer_id", "probability", "priority"):
             cleaned[key] = _as_number(raw, integer=True)
         elif key == "is_company":
             cleaned[key] = _as_bool(raw)
+        elif key == "type":
+            cleaned[key] = _as_text(raw).strip().lower()
         elif key == "tags":
             # None when omitted or not a list: a re-run leaves existing tags alone.
             # A list is merged; invalid entries are dropped, never a traceback.
@@ -230,6 +240,9 @@ def _deal_payload(lead: dict) -> dict:
         "offer_id": offer_id,
         "owner_key": lead.get("owner_key") or "",
         "external_ref": lead.get("external_ref") or "",
+        "probability": lead.get("probability"),
+        "priority": lead.get("priority"),
+        "expected_close": lead.get("expected_close") or "",
     }
 
 
@@ -245,14 +258,185 @@ def _fill_empty_deal_fields(deal: dict, incoming: dict) -> None:
         update_deal_fields(deal["id"], **updates)
 
 
-def ingest_lead(lead: dict) -> dict:
-    """Returns {"email": ..., "status": ...} — status is one of:
-    created / existing_partner_new_deal / duplicate_open_deal / invalid / invalid_service.
-    Successful statuses also include partner_id and deal_id.
-    Never raises on bad input — a malformed item in a batch should not sink the batch.
-    """
-    lead = sanitize_lead_payload(lead)
-    email = (lead.get("email") or "").strip()
+def _type_omitted(lead) -> bool:
+    if not isinstance(lead, dict) or "type" not in lead:
+        return True
+    raw = lead.get("type")
+    if raw is None or raw is False:
+        return True
+    if isinstance(raw, str) and not raw.strip():
+        return True
+    return False
+
+
+def _lead_names_from_ingest(lead: dict) -> dict:
+    """Map ingest name/company_name/is_company onto lead columns (ADR §7.1)."""
+    is_company = bool(lead.get("is_company"))
+    name = _text(lead.get("name"))
+    company_name = _text(lead.get("company_name"))
+    if is_company:
+        company = name or company_name
+        return {"name": company, "contact_name": "", "company_name": company}
+    return {
+        "name": name or company_name,
+        "contact_name": name,
+        "company_name": company_name,
+    }
+
+
+def _strong_open_deal_matches(probe: dict) -> list:
+    """Oldest-first open lead/opportunity matches on strong keys only (Q9)."""
+    hits, _err = find_duplicates(**probe)
+    strong = [
+        hit for hit in (hits or [])
+        if hit.get("strength") == "strong" and hit.get("kind") in ("lead", "opportunity")
+    ]
+    deals = []
+    for hit in strong:
+        deal = get_deal(hit["id"])
+        if deal:
+            deals.append(deal)
+    deals.sort(key=lambda row: (row.get("created_at") or "", row["id"]))
+    return deals
+
+
+def _fill_empty_lead_fields(deal: dict, lead: dict, names: dict) -> None:
+    incoming = {
+        "contact_name": names.get("contact_name") or "",
+        "company_name": names.get("company_name") or "",
+        "name": names.get("name") or "",
+        "email": _text(lead.get("email")),
+        "phone": _text(lead.get("phone")),
+        "website": _text(lead.get("website")),
+        "title": _text(lead.get("title")),
+        "address": _text(lead.get("address")),
+        "linkedin_url": _text(lead.get("linkedin_url")),
+        "x_url": _text(lead.get("x_url")),
+        "instagram_url": _text(lead.get("instagram_url")),
+        "facebook_url": _text(lead.get("facebook_url")),
+        "youtube_url": _text(lead.get("youtube_url")),
+        "industry": _text(lead.get("industry")),
+        "preferred_channel": _text(lead.get("preferred_channel")),
+        "source": _text(lead.get("source")),
+        "pain_points": _text(lead.get("pain_points")),
+        "goals": _text(lead.get("goals")),
+        "next_action": _text(lead.get("next_action")),
+        "next_action_date": _text(lead.get("next_action_date")),
+        "external_ref": _text(lead.get("external_ref")),
+        "expected_close": _text(lead.get("expected_close")),
+        "team_size": lead.get("team_size"),
+        "value_estimate": lead.get("value_estimate"),
+        "probability": lead.get("probability"),
+        "priority": lead.get("priority"),
+        "owner_key": _text(lead.get("owner_key")),
+        "service_slug": _text(lead.get("service_slug")),
+    }
+    filled = {k: v for k, v in incoming.items() if not _is_empty(v)}
+    update_lead(deal["id"], fill_empty_only=True, add_tags=lead.get("tags"), **filled)
+
+
+def _ingest_result(email, status, *, record_type, deal_id=None, partner_id=None,
+                   also_matched=None):
+    lead_id = deal_id if record_type == "lead" and deal_id is not None else None
+    return {
+        "email": email,
+        "status": status,
+        "type": record_type,
+        "deal_id": deal_id,
+        "lead_id": lead_id,
+        "partner_id": partner_id,
+        "also_matched": list(also_matched or []),
+    }
+
+
+def _ingest_as_lead(lead: dict, email: str) -> dict:
+    names = _lead_names_from_ingest(lead)
+    if not names["contact_name"] and not names["company_name"]:
+        return {"email": email, "status": "invalid"}
+    identity = {
+        **names,
+        "email": email,
+        "phone": _text(lead.get("phone")),
+        "website": _text(lead.get("website")),
+        "linkedin_url": _text(lead.get("linkedin_url")),
+    }
+    if not lead_has_identity(identity):
+        return {"email": email, "status": "invalid"}
+
+    service_slug = _text(lead.get("service_slug"))
+    if service_slug and not get_service_by_slug(service_slug):
+        return {"email": email, "status": "invalid_service"}
+
+    matches = _strong_open_deal_matches(identity)
+    if matches:
+        chosen = matches[0]
+        also = [row["id"] for row in matches[1:]]
+        if chosen.get("type") == "lead":
+            _fill_empty_lead_fields(chosen, lead, names)
+            status = "duplicate_open_lead"
+        else:
+            _fill_empty_deal_fields(chosen, _deal_payload(lead))
+            if lead.get("tags"):
+                add_deal_tags(chosen["id"], lead["tags"])
+            status = "duplicate_open_opportunity"
+        return _ingest_result(
+            email, status,
+            record_type=chosen.get("type") or "lead",
+            deal_id=chosen["id"],
+            partner_id=chosen.get("partner_id"),
+            also_matched=also,
+        )
+
+    partner_id = None
+    if email:
+        email_hits = list_partners_by_email(email)
+        if len(email_hits) == 1:
+            partner_id = email_hits[0]["id"]
+
+    created, error = create_lead(
+        company_name=names["company_name"],
+        contact_name=names["contact_name"],
+        name=names["name"],
+        email=email,
+        phone=_text(lead.get("phone")),
+        website=_text(lead.get("website")),
+        title=_text(lead.get("title")),
+        address=_text(lead.get("address")),
+        linkedin_url=_text(lead.get("linkedin_url")),
+        x_url=_text(lead.get("x_url")),
+        instagram_url=_text(lead.get("instagram_url")),
+        facebook_url=_text(lead.get("facebook_url")),
+        youtube_url=_text(lead.get("youtube_url")),
+        industry=_text(lead.get("industry")),
+        team_size=lead.get("team_size"),
+        preferred_channel=_text(lead.get("preferred_channel")),
+        source=_text(lead.get("source")),
+        tags=lead.get("tags"),
+        pain_points=_text(lead.get("pain_points")),
+        goals=_text(lead.get("goals")),
+        value_estimate=lead.get("value_estimate"),
+        probability=lead.get("probability"),
+        priority=lead.get("priority") or 0,
+        expected_close=_text(lead.get("expected_close")),
+        next_action=_text(lead.get("next_action")),
+        next_action_date=_text(lead.get("next_action_date")),
+        owner_key=_text(lead.get("owner_key")),
+        external_ref=_text(lead.get("external_ref")),
+        service_slug=service_slug,
+        partner_id=partner_id,
+    )
+    if error:
+        return {"email": email, "status": error}
+    return _ingest_result(
+        email, "created",
+        record_type="lead",
+        deal_id=created["id"],
+        partner_id=created.get("partner_id"),
+    )
+
+
+def _ingest_as_opportunity(lead: dict, email: str) -> dict:
+    """Pre-ADR ingest: find-or-create partner and create an opportunity."""
     company_name = _text(lead.get("company_name"))
     name = (lead.get("name") or "").strip() or company_name
     service_slug = (lead.get("service_slug") or "").strip()
@@ -322,12 +506,12 @@ def ingest_lead(lead: dict) -> dict:
             # tags omitted (None) leaves the set alone. A list merges.
             if lead.get("tags"):
                 add_deal_tags(existing_deal["id"], lead["tags"])
-            return {
-                "email": email,
-                "status": "duplicate_open_deal",
-                "partner_id": partner_id,
-                "deal_id": existing_deal["id"],
-            }
+            return _ingest_result(
+                email, "duplicate_open_deal",
+                record_type="opportunity",
+                deal_id=existing_deal["id"],
+                partner_id=partner_id,
+            )
 
     deal_id = create_deal(
         partner_id, service["id"],
@@ -342,10 +526,44 @@ def ingest_lead(lead: dict) -> dict:
         owner_key=deal_fields["owner_key"],
         external_ref=deal_fields["external_ref"],
         tags=lead.get("tags") or None,
+        probability=deal_fields.get("probability"),
+        priority=deal_fields.get("priority"),
+        expected_close=deal_fields.get("expected_close") or "",
     )
-    return {
-        "email": email,
-        "status": "created" if partner_is_new else "existing_partner_new_deal",
-        "partner_id": partner_id,
-        "deal_id": deal_id,
-    }
+    return _ingest_result(
+        email, "created" if partner_is_new else "existing_partner_new_deal",
+        record_type="opportunity",
+        deal_id=deal_id,
+        partner_id=partner_id,
+    )
+
+
+def ingest_lead(lead: dict) -> dict:
+    """Returns {"email": ..., "status": ...}. Default type is lead (Q1).
+
+    Opportunity statuses: created / existing_partner_new_deal /
+    duplicate_open_deal / invalid / invalid_service.
+    Lead statuses: created / duplicate_open_lead / duplicate_open_opportunity /
+    invalid / invalid_service.
+    Never raises on bad input — a malformed item in a batch should not sink
+    the batch.
+    """
+    type_omitted = _type_omitted(lead)
+    lead = sanitize_lead_payload(lead)
+    email = (lead.get("email") or "").strip()
+    record_type = (lead.get("type") or "").strip().lower()
+    if not record_type:
+        record_type = "lead"
+    elif record_type not in ("lead", "opportunity"):
+        result = {"email": email, "status": "invalid"}
+        if type_omitted:
+            result["type_defaulted"] = True
+        return result
+
+    if record_type == "opportunity":
+        result = _ingest_as_opportunity(lead, email)
+    else:
+        result = _ingest_as_lead(lead, email)
+    if type_omitted:
+        result["type_defaulted"] = True
+    return result

@@ -23,12 +23,16 @@ from app.services.leads import ingest_lead
 SUCCESS_STATUSES = frozenset({
     "created",
     "duplicate_open_deal",
+    "duplicate_open_lead",
+    "duplicate_open_opportunity",
     "existing_partner_new_deal",
 })
 
 USAGE = (
-    "Usage: python scripts/inject_leads.py [--dry-run] [--http URL] FILE [FILE ...]\n"
-    "Load a leads JSON file (see docs/DATA_MODEL.md, Lead ingest) and ingest it."
+    "Usage: python scripts/inject_leads.py [--dry-run] [--http URL] "
+    "[--type lead|opportunity] FILE [FILE ...]\n"
+    "Load a leads JSON file (see docs/DATA_MODEL.md, Lead ingest) and ingest it. "
+    "Default type is lead. --type opportunity keeps the pre-ADR partner+deal path."
 )
 
 
@@ -63,6 +67,20 @@ def load_leads(paths):
         return None, "empty leads list"
 
     return all_leads, None
+
+
+def apply_default_type(leads, record_type):
+    """Set type on each item that omitted it, so CLI --type is explicit."""
+    out = []
+    for lead in leads:
+        if not isinstance(lead, dict):
+            out.append(lead)
+            continue
+        if lead.get("type") in (None, ""):
+            lead = dict(lead)
+            lead["type"] = record_type
+        out.append(lead)
+    return out
 
 
 def payload_from_leads(leads):
@@ -178,6 +196,13 @@ def run(argv=None):
         help="POST to URL/api/v1/leads (e.g. http://127.0.0.1:8000) instead of in-process",
     )
     parser.add_argument(
+        "--type",
+        choices=("lead", "opportunity"),
+        default="lead",
+        help="Default record type when a row omits type (default: lead). "
+             "Use opportunity to keep the pre-ADR partner+deal path.",
+    )
+    parser.add_argument(
         "files",
         nargs="*",
         metavar="FILE",
@@ -191,6 +216,8 @@ def run(argv=None):
         if error == "no files given":
             print(USAGE, file=sys.stderr)
         return 1
+
+    leads = apply_default_type(leads, args.type)
 
     if args.dry_run:
         print_dry_run(leads)

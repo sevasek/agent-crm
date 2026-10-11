@@ -80,7 +80,8 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
                  next_action: str = "", next_action_date: str = "", pain_points: str = "", goals: str = "",
                  created_note: str = "Deal created", stage: str = None, offer_id: int = None,
                  owner_key: str = "", external_ref: str = "", parent_deal_id=None,
-                 attach_default_offer: bool = True, tags=None):
+                 attach_default_offer: bool = True, tags=None,
+                 probability=None, priority=None, expected_close=""):
     if not stage or not pipeline_stages.get_stage(stage):
         stage = pipeline_stages.default_stage_key()
     if offer_id and get_offer(offer_id):
@@ -90,14 +91,27 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
     else:
         offer_id = None
     cleaned_parent, _parent_error = validate_parent_link(None, parent_deal_id, partner_id)
+    try:
+        priority_value = int(priority) if priority not in (None, "") else 0
+    except (TypeError, ValueError):
+        priority_value = 0
+    if priority_value < 0 or priority_value > 3:
+        priority_value = 0
+    try:
+        probability_value = int(probability) if probability not in (None, "") else None
+    except (TypeError, ValueError):
+        probability_value = None
+    if probability_value is not None and (probability_value < 0 or probability_value > 100):
+        probability_value = None
     with get_db() as db:
         db.execute("""
             INSERT INTO deals (
                 partner_id, service_id, stage, source, value_estimate,
                 pain_points, goals, next_action, next_action_date, offer_id,
-                owner_key, external_ref, parent_deal_id
+                owner_key, external_ref, parent_deal_id,
+                probability, priority, expected_close
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             partner_id, service_id, stage,
             sanitize_text(source, max_len=120) or None,
@@ -110,6 +124,9 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
             clean_owner_key(owner_key),
             sanitize_text(external_ref, max_len=200) or None,
             cleaned_parent,
+            probability_value,
+            priority_value,
+            sanitize_text(expected_close, max_len=32) or None,
         ))
         db.commit()
         deal_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -277,6 +294,7 @@ def update_deal_fields(deal_id: int, **fields):
     allowed = {
         "source", "value_estimate", "pain_points", "goals", "next_action", "next_action_date",
         "offer_id", "owner_key", "external_ref", "parent_deal_id",
+        "probability", "priority", "expected_close",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "source" in updates:
@@ -301,6 +319,24 @@ def update_deal_fields(deal_id: int, **fields):
         if error:
             return False
         updates["parent_deal_id"] = cleaned
+    if "probability" in updates:
+        try:
+            value = int(updates["probability"]) if updates["probability"] not in (None, "") else None
+        except (TypeError, ValueError):
+            value = None
+        if value is not None and (value < 0 or value > 100):
+            value = None
+        updates["probability"] = value
+    if "priority" in updates:
+        try:
+            value = int(updates["priority"]) if updates["priority"] not in (None, "") else 0
+        except (TypeError, ValueError):
+            value = 0
+        if value < 0 or value > 3:
+            value = 0
+        updates["priority"] = value
+    if "expected_close" in updates:
+        updates["expected_close"] = sanitize_text(updates["expected_close"] or "", max_len=32) or None
     if not updates:
         return False
     updates["updated_at"] = datetime.utcnow().isoformat()

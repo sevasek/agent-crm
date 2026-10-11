@@ -25,15 +25,39 @@ from app.services.client_import import import_paths
 
 
 def main() -> int:
-    args = [a for a in sys.argv[1:] if a != "--dry-run"]
-    dry_run = "--dry-run" in sys.argv[1:]
+    raw = sys.argv[1:]
+    dry_run = "--dry-run" in raw
+    record_type = "opportunity"
+    args = []
+    i = 0
+    while i < len(raw):
+        token = raw[i]
+        if token == "--dry-run":
+            i += 1
+            continue
+        if token == "--type" and i + 1 < len(raw):
+            record_type = raw[i + 1]
+            i += 2
+            continue
+        if token.startswith("--type="):
+            record_type = token.split("=", 1)[1]
+            i += 1
+            continue
+        args.append(token)
+        i += 1
+    if record_type not in ("lead", "opportunity"):
+        print("Usage: python scripts/import_clients.py [--dry-run] [--type lead|opportunity] "
+              "<dir-or-file.md> [...]")
+        return 1
     if not args:
-        print("Usage: python scripts/import_clients.py [--dry-run] <dir-or-file.md> [...]")
+        print("Usage: python scripts/import_clients.py [--dry-run] [--type lead|opportunity] "
+              "<dir-or-file.md> [...]")
         print("Docker: bind-mount the clients dir; compose exec cannot see a host path.")
+        print("Default type is opportunity (confirmed clients). --type lead is opt-in.")
         return 1
 
     init_db()
-    results = import_paths(args, dry_run=dry_run)
+    results = import_paths(args, dry_run=dry_run, record_type=record_type)
     if not results:
         print("No markdown files found.")
         return 1

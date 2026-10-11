@@ -71,15 +71,21 @@ def parse_client_file(path) -> dict:
     return parse_client_markdown(text)
 
 
-def import_client(record: dict, source_label: str = "markdown-import") -> dict:
+def import_client(record: dict, source_label: str = "markdown-import",
+                  record_type: str = "opportunity") -> dict:
     """Find-or-create company, person, and optional deal. Never duplicates an
     open deal for the same partner+service. Fills only empty partner fields on
     a re-run so later CRM edits are not overwritten.
+
+    record_type defaults to opportunity (confirmed clients). `--type lead`
+    is opt-in and does not inherit the ingest default.
 
     Returns a result dict with `status` and any ids.
     """
     if not record or (not record.get("company") and not record.get("name")):
         return {"status": "invalid"}
+    if (record_type or "opportunity") == "lead":
+        return _import_client_as_lead(record, source_label)
 
     result = {"status": "ok", "company_id": None, "partner_id": None, "deal_id": None}
 
@@ -194,7 +200,7 @@ def import_client(record: dict, source_label: str = "markdown-import") -> dict:
     return result
 
 
-def import_paths(paths, dry_run: bool = False) -> list:
+def import_paths(paths, dry_run: bool = False, record_type: str = "opportunity") -> list:
     """Import every `*.md` in the given files/directories. Skip README.md.
 
     A single unreadable file is recorded as `status=error` and the rest of
@@ -216,10 +222,100 @@ def import_paths(paths, dry_run: bool = False) -> list:
         elif not record:
             entry["status"] = "invalid"
         else:
-            imported = import_client(record)
+            imported = import_client(record, record_type=record_type)
             entry.update(imported)
         results.append(entry)
     return results
+
+
+def _import_client_as_lead(record: dict, source_label: str) -> dict:
+    """Research-style markdown: create a lead, never a partner."""
+    from app.services.lead_records import create_lead, find_duplicates, update_lead
+
+    company = (record.get("company") or "").strip()
+    name = (record.get("name") or "").strip()
+    email = (record.get("email") or "").strip()
+    phone = (record.get("phone") or "").strip()
+    website = (record.get("website") or "").strip()
+    probe = {
+        "email": email,
+        "phone": phone,
+        "website": website,
+        "company_name": company,
+        "contact_name": name,
+        "name": name or company,
+    }
+    hits, _err = find_duplicates(**probe)
+    strong = [
+        hit for hit in (hits or [])
+        if hit.get("strength") == "strong" and hit.get("kind") in ("lead", "opportunity")
+    ]
+    if strong:
+        from app.services.deals import get_deal
+        chosen = get_deal(strong[0]["id"])
+        if chosen and chosen.get("type") == "lead":
+            incoming = {
+                "contact_name": name,
+                "company_name": company,
+                "email": email,
+                "phone": phone,
+                "website": website,
+                "title": record.get("title") or "",
+                "industry": record.get("industry") or "",
+                "team_size": record.get("team_size"),
+                "source": record.get("source") or source_label,
+                "pain_points": record.get("pain_points") or "",
+                "goals": record.get("goals") or "",
+                "next_action": record.get("next_action") or "",
+                "next_action_date": record.get("next_action_date") or "",
+                "service_slug": (record.get("service_slug") or "").strip(),
+                "value_estimate": _optional_float(record.get("value_estimate")),
+            }
+            filled = {k: v for k, v in incoming.items() if v not in (None, "")}
+            update_lead(chosen["id"], fill_empty_only=True, **filled)
+        return {
+            "status": "ok",
+            "company_id": None,
+            "partner_id": chosen.get("partner_id") if chosen else None,
+            "deal_id": chosen["id"] if chosen else None,
+            "deal": "duplicate_open_lead" if chosen and chosen.get("type") == "lead"
+            else "duplicate_open_opportunity",
+            "type": chosen.get("type") if chosen else "lead",
+        }
+
+    created, error = create_lead(
+        company_name=company,
+        contact_name=name,
+        name=name or company,
+        email=email,
+        phone=phone,
+        website=website,
+        title=record.get("title") or "",
+        address=record.get("address") or "",
+        industry=record.get("industry") or "",
+        team_size=record.get("team_size"),
+        preferred_channel=record.get("preferred_channel") or "",
+        source=record.get("source") or source_label,
+        pain_points=record.get("pain_points") or "",
+        goals=record.get("goals") or "",
+        value_estimate=_optional_float(record.get("value_estimate")),
+        next_action=record.get("next_action") or "",
+        next_action_date=record.get("next_action_date") or "",
+        service_slug=(record.get("service_slug") or "").strip(),
+    )
+    if error:
+        return {"status": error, "company_id": None, "partner_id": None, "deal_id": None}
+    notes = (record.get("notes") or "").strip()
+    if notes:
+        log_activity(None, "note", notes, deal_id=created["id"])
+    return {
+        "status": "ok",
+        "company_id": None,
+        "partner_id": created.get("partner_id"),
+        "deal_id": created["id"],
+        "deal": "created",
+        "type": "lead",
+    }
 
 
 def _expand_paths(paths):

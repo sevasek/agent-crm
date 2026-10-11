@@ -44,6 +44,7 @@ def test_ingest_phone_company_no_email(client, db, monkeypatch):
     _enable(monkeypatch)
     create_service("Dead Lead Reactivation", "dead-lead-reactivation")
     lead = {
+        "type": "opportunity",
         "company_name": "Northside Cafe",
         "phone": "0400 333 444",
         "service_slug": "dead-lead-reactivation",
@@ -64,6 +65,7 @@ def test_call_queue_returns_new_dead_leads_with_phone(client, db, monkeypatch):
     _enable(monkeypatch)
     create_service("Dead Lead Reactivation", "dead-lead-reactivation")
     ingest, _ = call(client, "ingest_leads", {"leads": [{
+        "type": "opportunity",
         "company_name": "Southside Cafe",
         "phone": "0400 333 555",
         "service_slug": "dead-lead-reactivation",

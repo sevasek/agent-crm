@@ -214,3 +214,53 @@ code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; fo
 .wide-form-table td input[type=number] { min-width: 4rem; }
 .call-view-outcome-form { flex-direction: column; align-items: stretch; }
 .call-view-outcome-form button, .call-view-outcome-form input[type=text] { width: 100%; }
+
+/* Tom Select is only initialised on #partner_id. Match Pico form controls. */
+.ts-wrapper {
+    width: 100%;
+    min-height: 0;
+}
+.ts-wrapper .ts-control,
+.ts-wrapper.single .ts-control {
+    background: var(--pico-form-element-background-color, #fff);
+    background-image: none;
+    border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
+    border-radius: var(--pico-border-radius, 0.25rem);
+    box-shadow: none;
+    color: inherit;
+    font-size: 1rem;
+    line-height: var(--pico-line-height, 1.5);
+    min-height: calc(1rem * var(--pico-line-height, 1.5) + var(--pico-form-element-spacing-vertical, 0.75rem) * 2);
+    padding: var(--pico-form-element-spacing-vertical, 0.75rem) var(--pico-form-element-spacing-horizontal, 1rem);
+}
+.ts-wrapper.focus .ts-control {
+    border-color: var(--pico-primary-border, var(--accent));
+    box-shadow: 0 0 0 var(--pico-outline-width, 0.125rem) var(--pico-primary-focus, rgba(44, 90, 160, 0.25));
+}
+.ts-wrapper .ts-control,
+.ts-wrapper .ts-control input,
+.ts-dropdown {
+    color: inherit;
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: var(--pico-line-height, 1.5);
+}
+.ts-dropdown {
+    background: #fff;
+    border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
+    border-radius: var(--pico-border-radius, 0.25rem);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+    z-index: 20;
+}
+.ts-dropdown-content { max-height: 16rem; }
+.ts-dropdown .option,
+.ts-dropdown .no-results {
+    padding: 0.5rem 0.75rem;
+}
+.ts-dropdown .active {
+    background: var(--pico-primary-background, var(--accent));
+    color: var(--pico-primary-inverse, #fff);
+}
+.ts-dropdown .option .highlight {
+    background: rgba(44, 90, 160, 0.18);
+}

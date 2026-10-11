@@ -19,13 +19,13 @@
     --outcome-won: #1e7e34;
 }
 
-/* Pico.css primary tokens → existing brand blue. Light values stay on :root
-   so the shipped look is unchanged when the OS is light (or data-theme=light).
-   Dark pairs use the same selectors Pico 2.1.1 uses: prefers-color-scheme
-   when <html> has no data-theme, plus [data-theme="dark"] for an explicit
-   override. --accent stays #2c5aa0 for filled buttons; --link lightens in
-   dark so brand-colored text meets contrast on Pico's dark page. */
-:root,
+/* Pico.css primary tokens → existing brand blue. The light selector must
+   match Pico's own `:root:not([data-theme=dark])` specificity or Pico's
+   default teal (#0172ad) wins once <html> has no data-theme.
+   Dark pairs use Pico 2.1.1's selectors: prefers-color-scheme when <html>
+   has no data-theme, plus [data-theme="dark"]. --accent stays #2c5aa0 for
+   filled buttons; --link lightens in dark so brand text meets contrast. */
+:root:not([data-theme="dark"]),
 [data-theme="light"] {
     --pico-primary: var(--accent);
     --pico-primary-background: var(--accent);

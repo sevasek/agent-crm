@@ -29,6 +29,7 @@ def test_style_css_pairs_custom_colors_for_dark_mode():
     assert ':root:not([data-theme])' in css
     assert '[data-theme="dark"]' in css
     assert "--accent: #2c5aa0;" in css
+    assert ':root:not([data-theme="dark"])' in css
     assert "data-theme=\"light\" is locked" not in css
 
 

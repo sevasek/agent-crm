@@ -133,11 +133,15 @@ def _public_base():
 
 def crm_links(deal_id: int, partner_id: int):
     base = _public_base()
-    return {
-        "partner": f"{base}/partners/{partner_id}",
+    links = {
         "deal": f"{base}/deals/{deal_id}/edit",
         "call": f"{base}/deals/{deal_id}/call",
     }
+    if partner_id:
+        links["partner"] = f"{base}/partners/{partner_id}"
+    else:
+        links["partner"] = None
+    return links
 
 
 _WEBHOOK_ERROR_MAX = 500

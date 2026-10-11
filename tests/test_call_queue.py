@@ -3,7 +3,8 @@ from datetime import datetime, timedelta
 from app.database import get_db
 from app.services.partners import create_partner
 from app.services.catalog import create_service
-from app.services.deals import create_deal, set_deal_stage, stage_changed_body, stage_changed_to_like
+from app.services.deals import create_deal, mark_lost, set_deal_stage, stage_changed_body, stage_changed_to_like
+from app.services.lead_records import create_lead
 from app.services.call_queue import (
     score_deal, list_todays_calls, CALL_QUEUE_LIMIT, SCORE_MAX,
     VALUE_MAX, SOURCE_MAX, CONTACT_MAX, RECENCY_MAX,
@@ -129,6 +130,20 @@ def test_undialable_phone_excluded(db):
     deal_id = create_deal(pid, sid)
     set_deal_stage(deal_id, "qualified")
     assert list_todays_calls() == []
+
+
+def test_leads_and_lost_opportunities_never_appear(db):
+    sid = create_service("Consulting", "consulting")
+    lead, _ = create_lead(
+        company_name="Lead Cafe", phone="0400 999 001", service_slug="consulting",
+    )
+    pid = create_partner("Lost Cafe", is_company=True, phone="0400 999 002")
+    lost_id = create_deal(pid, sid)
+    set_deal_stage(lost_id, "qualified")
+    mark_lost(lost_id, lost_reason="Not a fit")
+    ids = [c["id"] for c in list_todays_calls(include_new=True)]
+    assert lead["id"] not in ids
+    assert lost_id not in ids
 
 
 def test_include_new_returns_dialable_new_stage_deals(db):

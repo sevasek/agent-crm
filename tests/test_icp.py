@@ -147,3 +147,23 @@ def test_build_matchable_row():
     assert row["industry"] == "Childcare"
     assert row["source"] == "referral"
     assert row["value_estimate"] == 5000
+
+
+def test_lead_scores_from_own_columns_not_linked_partner():
+    partner = {"industry": "Partner Industry", "team_size": 99, "email": "partner@x.example", "is_company": 1}
+    lead = {
+        "type": "lead",
+        "company_name": "Harbour Physio",
+        "contact_name": "",
+        "industry": "Physiotherapy",
+        "team_size": 8,
+        "email": "pm@harbour.example",
+        "source": "research:directory",
+    }
+    row = icp.build_matchable_row(partner, lead)
+    assert row["industry"] == "Physiotherapy"
+    assert row["team_size"] == 8
+    assert row["email"] == "pm@harbour.example"
+    assert row["is_company"] is True
+    lead_with_contact = dict(lead, contact_name="Pat Manager")
+    assert icp.build_matchable_row(partner, lead_with_contact)["is_company"] is False

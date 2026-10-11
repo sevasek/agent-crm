@@ -139,6 +139,29 @@ def test_webhook_fires_once_for_agent_delegated(db, monkeypatch):
     assert len(calls) == 1
 
 
+def test_webhook_allows_null_partner_on_lead(db, monkeypatch):
+    from app.services.lead_records import create_lead
+
+    monkeypatch.setenv("TASK_WEBHOOK_URL", "http://agent.test/tasks")
+    monkeypatch.setenv("BASE_URL", "https://crm.example.com")
+    calls = []
+
+    def fake_post(url, json=None, headers=None, timeout=None, **kwargs):
+        calls.append(json)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.delegated_tasks.httpx.post", fake_post)
+    lead, error = create_lead(company_name="Lead Cafe")
+    assert error is None
+    task, task_error, _ = create_task(lead["id"], "Research the company", owner="agent")
+    assert task_error is None
+    assert task["webhook"]["notified"] is True
+    payload = calls[0]
+    assert payload["partner_id"] is None
+    assert payload["crm_links"]["partner"] is None
+    assert payload["crm_links"]["deal"] == f"https://crm.example.com/deals/{lead['id']}/edit"
+
+
 def test_webhook_on_status_change_to_delegated(db, monkeypatch):
     monkeypatch.setenv("TASK_WEBHOOK_URL", "http://agent.test/tasks")
     calls = []

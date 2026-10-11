@@ -46,6 +46,7 @@
     if (!partner || typeof TomSelect === "undefined") return;
     if (partner.tomselect) return;
     new TomSelect(partner, {
+        plugins: ["dropdown_input"],
         allowEmptyOption: true,
         create: false,
         maxOptions: null,

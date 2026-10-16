@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 9
 
 
 class SchemaVersionError(RuntimeError):
@@ -167,7 +167,35 @@ def _run_sql(db, script: str) -> None:
         db.execute(stmt)
 
 
-# Additive-only. Do not DROP or RENAME columns in this series.
+# Operator-defined stage automations. Empty on a new database. Same DDL is
+# applied to an already-versioned file by migrate_007 (CREATE IF NOT EXISTS).
+_STAGE_AUTOMATION_SQL = """
+CREATE TABLE IF NOT EXISTS stage_automations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    stage_key TEXT NOT NULL,
+    service_id INTEGER,
+    offer_id INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stage_automations_stage
+    ON stage_automations(stage_key, enabled);
+CREATE TABLE IF NOT EXISTS stage_automation_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    automation_id INTEGER NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    action_type TEXT NOT NULL,
+    config TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_stage_automation_actions_automation
+    ON stage_automation_actions(automation_id, position);
+"""
+
+
+# Additive-only, except a reviewed table rebuild that only relaxes
+# constraints. See docs/adr/0001-lead-opportunity-model.md.
 _SCHEMA_V1 = """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -360,7 +388,7 @@ _SCHEMA_V1 = """
             PRIMARY KEY (deal_id, tag)
         );
         CREATE INDEX IF NOT EXISTS idx_deal_tags_tag ON deal_tags(tag);
-"""
+""" + _STAGE_AUTOMATION_SQL
 
 
 def _apply_additive_columns(db) -> None:
@@ -512,6 +540,17 @@ def migrate_005(db) -> None:
     )
 
 
+def migrate_007(db) -> None:
+    """Stage automations: named rules that run when a deal enters a stage.
+
+    New installs get the tables from _SCHEMA_V1 and this is a no-op.
+    A database already at version 6 does not re-run _SCHEMA_V1, so the
+    tables are created here. No rows are inserted; nothing runs until an
+    operator adds an automation.
+    """
+    _run_sql(db, _STAGE_AUTOMATION_SQL)
+
+
 def migrate_006(db) -> None:
     """Per-database install_id mixed into the session cookie signer.
 
@@ -535,6 +574,333 @@ def migrate_006(db) -> None:
         )
 
 
+# Test hook: migrate_008 calls this with the table name after DROP TABLE
+# (step 5). Tests use it to force a rollback after the first drop.
+_migrate_008_after_drop = None
+
+LOST_REASON_SEEDS = (
+    ("Not a fit", 0),
+    ("No budget", 0),
+    ("Not now", 1),
+    ("No response", 0),
+    ("Lost to competitor", 0),
+    ("Duplicate", 0),
+    ("Lost stage (migrated)", 0),
+)
+
+_FK_CHECK_TABLES = ("deals", "activities", "delegated_tasks", "deal_tags")
+
+_DEALS_COPY_COLUMNS = (
+    "id", "partner_id", "service_id", "stage", "source", "value_estimate",
+    "pain_points", "goals", "next_action", "next_action_date",
+    "created_at", "updated_at", "closed_at", "offer_id", "owner_key",
+    "external_ref", "parent_deal_id",
+)
+_ACTIVITIES_COPY_COLUMNS = (
+    "id", "partner_id", "deal_id", "type", "body", "occurred_at", "created_at",
+)
+_DELEGATED_TASKS_COPY_COLUMNS = (
+    "id", "deal_id", "partner_id", "title", "brief", "owner", "status",
+    "due_date", "created_by", "result_notes", "webhook_notified_at",
+    "webhook_last_attempt_at", "webhook_last_error", "created_at", "updated_at",
+)
+
+_DEALS_NEW_DDL = """
+CREATE TABLE deals_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id INTEGER REFERENCES partners(id),
+    service_id INTEGER REFERENCES services(id),
+    stage TEXT NOT NULL DEFAULT 'new',
+    source TEXT,
+    value_estimate REAL,
+    pain_points TEXT,
+    goals TEXT,
+    next_action TEXT,
+    next_action_date TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    closed_at TEXT,
+    offer_id INTEGER REFERENCES offers(id),
+    owner_key TEXT,
+    external_ref TEXT,
+    parent_deal_id INTEGER REFERENCES deals_new(id),
+    type TEXT NOT NULL DEFAULT 'opportunity',
+    name TEXT,
+    contact_name TEXT,
+    company_name TEXT,
+    email TEXT,
+    phone TEXT,
+    website TEXT,
+    title TEXT,
+    address TEXT,
+    linkedin_url TEXT,
+    x_url TEXT,
+    instagram_url TEXT,
+    facebook_url TEXT,
+    youtube_url TEXT,
+    industry TEXT,
+    team_size INTEGER,
+    preferred_channel TEXT,
+    probability INTEGER,
+    priority INTEGER NOT NULL DEFAULT 0,
+    expected_close TEXT,
+    date_conversion TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    lost_reason_id INTEGER REFERENCES lost_reasons(id),
+    lost_note TEXT,
+    merged_into_id INTEGER REFERENCES deals_new(id)
+)
+"""
+
+_ACTIVITIES_NEW_DDL = """
+CREATE TABLE activities_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    partner_id INTEGER REFERENCES partners(id),
+    deal_id INTEGER REFERENCES deals(id),
+    type TEXT NOT NULL,
+    body TEXT,
+    occurred_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    source_url TEXT
+)
+"""
+
+_DELEGATED_TASKS_NEW_DDL = """
+CREATE TABLE delegated_tasks_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id INTEGER NOT NULL REFERENCES deals(id),
+    partner_id INTEGER REFERENCES partners(id),
+    title TEXT NOT NULL,
+    brief TEXT,
+    owner TEXT NOT NULL DEFAULT 'agent',
+    status TEXT NOT NULL DEFAULT 'delegated',
+    due_date TEXT,
+    created_by TEXT,
+    result_notes TEXT,
+    webhook_notified_at TEXT,
+    webhook_last_attempt_at TEXT,
+    webhook_last_error TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+)
+"""
+
+_LOST_REASONS_DDL = """
+CREATE TABLE IF NOT EXISTS lost_reasons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT UNIQUE NOT NULL,
+    triggers_nurture INTEGER NOT NULL DEFAULT 0,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT,
+    updated_at TEXT
+)
+"""
+
+_DEALS_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_deals_partner ON deals(partner_id)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_stage ON deals(stage)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_owner ON deals(owner_key)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_parent ON deals(parent_deal_id)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_type_active ON deals(type, active)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_email ON deals(email)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_phone ON deals(phone)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_website ON deals(website)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_lost_reason ON deals(lost_reason_id)",
+    "CREATE INDEX IF NOT EXISTS idx_deals_merged_into ON deals(merged_into_id)",
+)
+_ACTIVITIES_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_activities_partner ON activities(partner_id)",
+    "CREATE INDEX IF NOT EXISTS idx_activities_deal ON activities(deal_id)",
+)
+_DELEGATED_TASKS_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_delegated_tasks_deal ON delegated_tasks(deal_id)",
+    "CREATE INDEX IF NOT EXISTS idx_delegated_tasks_owner_status ON delegated_tasks(owner, status)",
+)
+
+
+def _fk_violation_keys(db) -> set:
+    """(table, rowid, parent) from PRAGMA foreign_key_check. Ignores fkid."""
+    keys = set()
+    for table in _FK_CHECK_TABLES:
+        for row in db.execute(f"PRAGMA foreign_key_check({table})").fetchall():
+            keys.add((row[0], row[1], row[2]))
+    return keys
+
+
+def _sqlite_sequence(db, table: str):
+    try:
+        row = db.execute(
+            "SELECT seq FROM sqlite_sequence WHERE name = ?", (table,)
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
+    if row is None:
+        return None
+    return int(row[0])
+
+
+def _restore_sequence(db, table: str, seq: int) -> None:
+    existing = db.execute(
+        "SELECT seq FROM sqlite_sequence WHERE name = ?", (table,)
+    ).fetchone()
+    if existing:
+        db.execute(
+            "UPDATE sqlite_sequence SET seq = ? WHERE name = ?",
+            (seq, table),
+        )
+    else:
+        db.execute(
+            "INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)",
+            (table, seq),
+        )
+
+
+def _rebuild_table(db, table: str, new_ddl: str, copy_columns, indexes) -> None:
+    """Rebuild one table per ADR 0001 §6.2 steps 1–8."""
+    seq = _sqlite_sequence(db, table)
+    new_name = f"{table}_new"
+    db.execute(new_ddl)
+    cols = ", ".join(copy_columns)
+    db.execute(f"INSERT INTO {new_name} ({cols}) SELECT {cols} FROM {table}")
+    old_count = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+    new_count = db.execute(f"SELECT COUNT(*) FROM {new_name}").fetchone()[0]
+    if old_count != new_count:
+        raise RuntimeError(
+            f"migrate_008 row count mismatch for {table}: {old_count} -> {new_count}"
+        )
+    db.execute(f"DROP TABLE {table}")
+    hook = _migrate_008_after_drop
+    if hook is not None:
+        hook(table)
+    db.execute(f"ALTER TABLE {new_name} RENAME TO {table}")
+    for stmt in indexes:
+        db.execute(stmt)
+    if seq is not None:
+        _restore_sequence(db, table, seq)
+
+
+def _seed_lost_reasons(db) -> None:
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for name, triggers_nurture in LOST_REASON_SEEDS:
+        db.execute(
+            """INSERT OR IGNORE INTO lost_reasons
+                   (name, triggers_nurture, active, created_at, updated_at)
+               VALUES (?, ?, 1, ?, ?)""",
+            (name, triggers_nurture, now, now),
+        )
+
+
+def _backfill_lead_model(db) -> None:
+    """ADR 0001 §6.3: every existing deal is an opportunity; lost-stage → lost."""
+    row = db.execute(
+        "SELECT id FROM lost_reasons WHERE name = ?",
+        ("Lost stage (migrated)",),
+    ).fetchone()
+    if not row:
+        raise RuntimeError("migrate_008: missing seed lost reason 'Lost stage (migrated)'")
+    reason_id = row[0]
+    lost_keys = [
+        r[0] for r in db.execute(
+            "SELECT key FROM pipeline_stages WHERE is_lost = 1"
+        ).fetchall()
+    ]
+    if not lost_keys:
+        return
+    placeholders = ",".join("?" * len(lost_keys))
+    db.execute(
+        f"""UPDATE deals
+            SET active = 0,
+                lost_reason_id = ?,
+                closed_at = CASE
+                    WHEN closed_at IS NULL THEN updated_at
+                    ELSE closed_at
+                END
+            WHERE stage IN ({placeholders})""",
+        (reason_id, *lost_keys),
+    )
+
+
+def migrate_008(db) -> None:
+    """Rebuild deals, activities, delegated_tasks for the lead/opportunity model.
+
+    Relaxes NOT NULL on partner_id/service_id (and activities/delegated_tasks
+    partner_id), adds lead columns, lost_reasons, and backfills existing
+    deals as opportunities. See docs/adr/0001-lead-opportunity-model.md §6.
+    """
+    fk_on = db.execute("PRAGMA foreign_keys").fetchone()[0]
+    if fk_on:
+        raise RuntimeError(
+            "migrate_008 requires PRAGMA foreign_keys = 0; a future change "
+            "that turns on foreign keys must update this procedure "
+            "(docs/adr/0001-lead-opportunity-model.md §6.2 step 0)"
+        )
+    before_violations = _fk_violation_keys(db)
+
+    _rebuild_table(db, "deals", _DEALS_NEW_DDL, _DEALS_COPY_COLUMNS, _DEALS_INDEXES)
+    _rebuild_table(
+        db, "activities", _ACTIVITIES_NEW_DDL, _ACTIVITIES_COPY_COLUMNS, _ACTIVITIES_INDEXES,
+    )
+    _rebuild_table(
+        db,
+        "delegated_tasks",
+        _DELEGATED_TASKS_NEW_DDL,
+        _DELEGATED_TASKS_COPY_COLUMNS,
+        _DELEGATED_TASKS_INDEXES,
+    )
+
+    db.execute(_LOST_REASONS_DDL)
+    _seed_lost_reasons(db)
+    _backfill_lead_model(db)
+
+    after_violations = _fk_violation_keys(db)
+    introduced = after_violations - before_violations
+    if introduced:
+        raise RuntimeError(
+            "migrate_008 introduced foreign key violations: "
+            + ", ".join(repr(item) for item in sorted(introduced))
+        )
+    if after_violations:
+        logger.warning(
+            "migrate_008: pre-existing foreign key violations remain "
+            "(foreign keys were never enforced): %s",
+            sorted(after_violations),
+        )
+
+    integrity = [row[0] for row in db.execute("PRAGMA integrity_check").fetchall()]
+    if integrity != ["ok"]:
+        raise RuntimeError(f"migrate_008 integrity_check failed: {integrity}")
+
+
+def migrate_009(db) -> None:
+    """Per-stage card order on the pipeline board (`deals.board_position`).
+
+    Additive only — does not rebuild `deals`. Existing cards are numbered
+    to match the previous board order (updated_at DESC within each stage).
+    Runs after migrate_008 so the lead-model rebuild does not have to
+    know about board_position.
+    """
+    _add_column_if_missing(
+        db, "deals", "board_position", "board_position INTEGER NOT NULL DEFAULT 0"
+    )
+    stages = [
+        row[0]
+        for row in db.execute("SELECT DISTINCT stage FROM deals").fetchall()
+    ]
+    for stage in stages:
+        rows = db.execute(
+            "SELECT id FROM deals WHERE stage = ? ORDER BY updated_at DESC, id DESC",
+            (stage,),
+        ).fetchall()
+        for pos, row in enumerate(rows):
+            db.execute(
+                "UPDATE deals SET board_position = ? WHERE id = ?",
+                (pos, row[0]),
+            )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_deals_stage_board ON deals(stage, board_position)"
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
@@ -543,6 +909,9 @@ MIGRATIONS = {
     4: migrate_004,
     5: migrate_005,
     6: migrate_006,
+    7: migrate_007,
+    8: migrate_008,
+    9: migrate_009,
 }
 
 

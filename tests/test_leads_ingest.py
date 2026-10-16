@@ -1,13 +1,20 @@
 from app.services.activities import list_activities_for_partner
 from app.services.catalog import create_service
 from app.services.deals import list_deals
-from app.services.leads import ingest_lead
+from app.services.leads import ingest_lead as _ingest_lead
 from app.services.partners import (
     get_partner,
     get_partner_by_email,
     list_partners,
     update_partner,
 )
+
+
+def ingest_lead(lead):
+    """Existing cases pin type=opportunity so they keep today's partner+deal path."""
+    if isinstance(lead, dict) and "type" not in lead:
+        lead = {**lead, "type": "opportunity"}
+    return _ingest_lead(lead)
 
 
 def _consulting(db):
@@ -176,8 +183,9 @@ def test_numeric_phone_does_not_sink_batch(client, db, monkeypatch):
     _consulting(db)
     resp = client.post("/api/v1/leads", json={
         "leads": [
-            {"name": "Numeric Phone", "phone": 61412345678, "service_slug": "consulting"},
+            {"type": "opportunity", "name": "Numeric Phone", "phone": 61412345678, "service_slug": "consulting"},
             {
+                "type": "opportunity",
                 "name": "Jane Doe",
                 "email": "jane@acme.example",
                 "service_slug": "consulting",

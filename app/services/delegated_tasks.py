@@ -32,6 +32,22 @@ def default_owner():
     return clean_owner_key(os.getenv("DELEGATE_DEFAULT_OWNER")) or "agent"
 
 
+def configured_task_owners():
+    """Owner slugs from DELEGATED_TASK_OWNERS, in order, with blanks dropped.
+
+    Empty when the env is unset. list_catalog includes `delegated_task_owners`
+    only then — the live sevasek CRM always sends paul, bethany, willow, joe,
+    unassigned, and other clients should not inherit that enum.
+    """
+    raw = os.getenv("DELEGATED_TASK_OWNERS") or ""
+    owners = []
+    for part in raw.split(","):
+        key = clean_owner_key(part)
+        if key and key not in owners:
+            owners.append(key)
+    return owners
+
+
 def clean_task_owner(value, default=None):
     if value is None or value == "":
         return default
@@ -117,11 +133,15 @@ def _public_base():
 
 def crm_links(deal_id: int, partner_id: int):
     base = _public_base()
-    return {
-        "partner": f"{base}/partners/{partner_id}",
+    links = {
         "deal": f"{base}/deals/{deal_id}/edit",
         "call": f"{base}/deals/{deal_id}/call",
     }
+    if partner_id:
+        links["partner"] = f"{base}/partners/{partner_id}"
+    else:
+        links["partner"] = None
+    return links
 
 
 _WEBHOOK_ERROR_MAX = 500

@@ -26,8 +26,11 @@ def test_not_interested_marks_deal_lost(db):
     pid, _, deal_id = _qualified_deal(db)
     assert record_call_outcome(deal_id, "not_interested")
     deal = get_deal(deal_id)
-    assert deal["stage"] == "lost"
+    assert deal["active"] == 0
     assert deal["closed_at"] is not None
+    from app.services.lost_reasons import get_lost_reason
+    reason = get_lost_reason(deal["lost_reason_id"])
+    assert reason["name"] == "Not a fit"
 
 
 def test_interested_moves_to_nurture(db):

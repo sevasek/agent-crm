@@ -1,25 +1,43 @@
 # Data model
 
-Entities, schema, the deal pipeline, nurture hand-off, deal-won invoice
-hand-off and lead ingest. For what
+Glossary, schema, the opportunity pipeline, nurture hand-off, deal-won
+invoice hand-off and lead ingest. For what
 the app does and does not attempt, see [`SCOPE.md`](SCOPE.md). For the agent
 interface, see [`MCP.md`](MCP.md).
 
 The schema lives in `app/database.py`. `PRAGMA user_version` is the schema
-version; numbered additive migrations run inside a transaction on startup.
-A database newer than the running code refuses to start. No ORM.
+version; numbered migrations run inside a transaction on startup.
+Migrations are additive-only except the reviewed schema 8 rebuild
+(`migrate_008`, ADR 0001). A database newer than the running code refuses
+to start. No ORM.
 
-## Entities
+## Glossary
 
-- `partners`: people and companies.
-- `services`: what you sell (the catalogue).
-- `deals`: one pursuit of a service by a partner. Carries pipeline state.
-- `deal_tags`: labels on a deal (a campaign slug, a region, anything else).
-- `activities`: the timeline.
-- `pipeline_stages`, `offers`, `icp_criteria`: operator-defined configuration.
-- `delegated_tasks`: deal-scoped work handed to another agent or a person.
-- `users`, `api_keys`, `mcp_oauth_clients`, `mcp_oauth_used_codes`: auth plumbing.
-- `app_install`: single-row per-database `install_id` mixed into the session cookie signer so a copied `SECRET_KEY` cannot replay sessions onto another instance.
+These terms replace the older "Entities" list. Do not use "deal" alone in
+new documentation: use **lead**, **opportunity** or **deal record**.
+
+| Term | Definition |
+|---|---|
+| **Partner** | A person or a company that the operator or the agent has confirmed as a real party. One row in `partners`. |
+| **Company partner** | A partner with `is_company = 1`. |
+| **Person partner** | A partner with `is_company = 0`. A person partner can have a parent company partner (`parent_id`). |
+| **Deal record** | One row in `deals`. A deal record is a lead or an opportunity. |
+| **Lead** | A deal record with `type = 'lead'`. An unqualified signal. It keeps its own contact data. It can exist without a partner and without a service. |
+| **Opportunity** | A deal record with `type = 'opportunity'`. The qualified pursuit of one service for one partner. It must have a partner and a service. Only opportunities use pipeline stages. |
+| **Conversion** | The operation that changes a lead into an opportunity. The record keeps its `id`. Conversion sets `type = 'opportunity'` and `date_conversion`. |
+| **Open** | A deal record with `active = 1` that is not in an `is_won` stage. |
+| **Won** | An opportunity in a stage with `is_won = 1`. |
+| **Lost** | A deal record with `active = 0` and a `lost_reason_id`. Lost is not a stage. |
+| **Lost reason** | One row in `lost_reasons`. Operator configuration. |
+| **Merged** | A lost deal record with `merged_into_id` set. The CRM does not delete merged records. |
+| **Research note** | An `activities` row with `type = 'research'`. |
+| **Fit score** | The sum of weights of the matching `icp_criteria`. A lead scores from its own columns. An opportunity scores from the partner. |
+| **Conversion readiness** | Missing data that conversion needs. Information, not a gate. |
+| **Customer** | A partner with one or more won opportunities. Calculated, not stored. |
+
+Other tables: `services` (catalogue), `deal_tags`, `activities`,
+`pipeline_stages`, `offers`, `icp_criteria`, `delegated_tasks`,
+`stage_automations`, `users`, `api_keys`, OAuth tables, `app_install`.
 
 ### Why one `partners` table
 
@@ -75,23 +93,44 @@ The catalogue. Operator-defined and empty on a fresh install.
 
 ### `deals`
 
+One table holds leads and opportunities (`type`). Schema 8 made
+`partner_id` and `service_id` nullable so a lead can exist without either.
+
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `partner_id` | INTEGER NOT NULL | FK to `partners(id)`. |
-| `service_id` | INTEGER NOT NULL | FK to `services(id)`. |
-| `stage` | TEXT NOT NULL DEFAULT 'new' | A `pipeline_stages.key`. Plain text, not a declared FK: deleting a stage that is in use is refused at the service layer. |
+| `partner_id` | INTEGER | FK to `partners(id)`. Required when `type = 'opportunity'`. Null on a research lead. |
+| `service_id` | INTEGER | FK to `services(id)`. Required when `type = 'opportunity'`. |
+| `type` | TEXT NOT NULL DEFAULT 'opportunity' | `lead` or `opportunity`. |
+| `stage` | TEXT NOT NULL DEFAULT 'new' | A `pipeline_stages.key`. Meaningful on opportunities only. |
 | `source` | TEXT | Free text (referral, cold outreach, website, ...). Feeds the call score. |
 | `value_estimate` | REAL | An estimate, not money. |
 | `pain_points`, `goals` | TEXT | Per deal, not per partner: the same partner may pursue a different service later with different aims. |
 | `next_action` | TEXT | What to do next. |
 | `next_action_date` | TEXT | ISO date. Drives due and overdue flags and the daily follow-up check. |
 | `created_at`, `updated_at` | TEXT | |
-| `closed_at` | TEXT | Set when the stage enters a won or lost stage. |
+| `closed_at` | TEXT | Set when an opportunity enters `is_won`, or when any deal record is marked lost. Cleared on restore. |
 | `offer_id` | INTEGER | FK to `offers(id)`. Defaults to the default offer on create. |
 | `owner_key` | TEXT | Owner slug. |
 | `external_ref` | TEXT | Caller's own id, for example from a source system. A value that is a `campaign:` tag slug is copied onto a tag the first time `deal_tags` is created; the ref itself is left unchanged. |
-| `parent_deal_id` | INTEGER | FK to `deals(id)`. Links a follow-on deal to its parent. Same partner required; cycles rejected at the service layer. This is the post-sale primitive (issue #10): not `delivery_status`, invoice state, or a second pipeline. |
+| `parent_deal_id` | INTEGER | FK to `deals(id)`. Follow-on opportunity only (not a lead). Same partner required; cycles rejected at the service layer. |
+| `name`, `contact_name`, `company_name` | TEXT | Lead contact / title. A linked partner does not fill these for scoring. |
+| `email`, `phone`, `website`, `title`, `address` | TEXT | Lead contact columns. |
+| `linkedin_url`, `x_url`, `instagram_url`, `facebook_url`, `youtube_url` | TEXT | Lead social URLs. |
+| `industry`, `preferred_channel` | TEXT | Lead profile. `preferred_channel` is `email`, `phone` or `text`. |
+| `team_size` | INTEGER | Non-negative. Bad input becomes null. |
+| `probability` | INTEGER | 0–100. Set by the agent or operator, not calculated. |
+| `priority` | INTEGER NOT NULL DEFAULT 0 | 0–3. |
+| `expected_close` | TEXT | ISO date. |
+| `date_conversion` | TEXT | Set once by `convert_lead`. |
+| `active` | INTEGER NOT NULL DEFAULT 1 | 0 = lost. |
+| `lost_reason_id` | INTEGER | FK to `lost_reasons(id)`. Required when `active = 0`. |
+| `lost_note` | TEXT | Free text for the loss. |
+| `merged_into_id` | INTEGER | FK to `deals(id)`. Set by `merge_leads` on the source. |
+| `board_position` | INTEGER NOT NULL DEFAULT 0 | 0-based order within `stage` on the pipeline board. Schema v9. Drag-and-drop and `set_deal_stage(..., position=)` rewrite the column; a stage change without a position appends. The deals list still sorts by `updated_at`. |
+
+`list_deals()` defaults to `type = 'opportunity'` and `include_lost = false`.
+Leads never appear in a pipeline stage column.
 
 ### `deal_tags`
 
@@ -113,6 +152,22 @@ Writes:
 
 Schema v2 (`migrate_002`) creates `deal_tags` and copies any `external_ref` whose lowercased form is a `campaign:` slug onto a tag. Later startups do not repeat that copy, so removing a tag sticks. `external_ref` is not rewritten.
 
+### `lost_reasons`
+
+Operator configuration, seeded once like pipeline stages.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT UNIQUE NOT NULL | |
+| `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | `mark_lost` with this reason posts the nurture webhook. |
+| `active` | INTEGER NOT NULL DEFAULT 1 | Inactive reasons stay on old records but leave pickers. |
+| `created_at`, `updated_at` | TEXT | |
+
+Seed names: "Not a fit", "No budget", "Not now" (`triggers_nurture = 1`),
+"No response", "Lost to competitor", "Duplicate", "Lost stage (migrated)".
+Managed at `/lost-reasons` (and `/admin/lost-reasons`) and via MCP.
+
 ### `activities`
 
 The timeline, one row per interaction.
@@ -120,10 +175,11 @@ The timeline, one row per interaction.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `partner_id` | INTEGER NOT NULL | FK to `partners(id)`. A partner has a timeline before any deal exists. |
+| `partner_id` | INTEGER | FK to `partners(id)`. Nullable so a lead can have research notes before a partner exists. |
 | `deal_id` | INTEGER | FK to `deals(id)`. Null for partner-level notes. |
-| `type` | TEXT NOT NULL | `call`, `email`, `meeting`, `note` or `system`. `system` marks entries the app wrote (stage changes, webhook outcomes, follow-up flags). Anything else falls back to `note`. |
+| `type` | TEXT NOT NULL | `call`, `email`, `meeting`, `note`, `system` or `research`. Anything else falls back to `note`. |
 | `body` | TEXT | |
+| `source_url` | TEXT | http/https only, max 2,000 characters. Used on research notes. |
 | `occurred_at`, `created_at` | TEXT | |
 
 ### `pipeline_stages`
@@ -139,7 +195,7 @@ The pipeline itself, in board-column order. `deals.stage` stores the `key`.
 | `is_default` | INTEGER NOT NULL DEFAULT 0 | Where a new deal starts. Setting it clears the flag elsewhere. |
 | `is_qualified_pool` | INTEGER NOT NULL DEFAULT 0 | Deals here are candidates for the call queue. |
 | `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | Entering this stage fires the nurture webhook. |
-| `is_won`, `is_lost` | INTEGER NOT NULL DEFAULT 0 | Entering sets `closed_at` and marks the deal closed for follow-ups. Entering `is_won` from a non-won stage also fires the deal-won webhook. A stage cannot be both. |
+| `is_won`, `is_lost` | INTEGER NOT NULL DEFAULT 0 | `is_won` still closes an opportunity and can fire the deal-won webhook. `is_lost` is deprecated: lost is `active = 0` plus a lost reason. Creating a new lost stage is refused. A move into an existing lost stage also runs `mark_lost`. |
 | `created_at`, `updated_at` | TEXT | |
 
 Seeded once on first start, then just data. Edit it in `/admin/stages`, or with
@@ -211,7 +267,7 @@ project manager: a title, a brief, an owner and a status tied to a deal.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `deal_id` | INTEGER NOT NULL | FK to `deals(id)`. |
-| `partner_id` | INTEGER NOT NULL | FK to `partners(id)`. |
+| `partner_id` | INTEGER | FK to `partners(id)`. Null when the deal record is a lead without a partner. |
 | `title` | TEXT NOT NULL | |
 | `brief` | TEXT | |
 | `owner` | TEXT NOT NULL DEFAULT 'agent' | Free-form slug. |
@@ -222,6 +278,35 @@ project manager: a title, a brief, an owner and a status tied to a deal.
 | `created_at`, `updated_at` | TEXT | |
 
 See [`MCP.md`](MCP.md) for the webhook behaviour.
+
+### `stage_automations` and `stage_automation_actions`
+
+Operator configuration. Schema version 7 creates the tables and inserts no
+rows. A stage change runs nothing extra until someone adds an automation
+in the admin UI or over MCP. Schema version 9 adds `deals.board_position`
+for pipeline card order after the lead-model rebuild (schema 8); it does
+not rebuild `deals`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT NOT NULL UNIQUE COLLATE NOCASE | The operator's label. Rename does not change `id`. |
+| `enabled` | INTEGER NOT NULL DEFAULT 1 | `0` skips the row. |
+| `stage_key` | TEXT NOT NULL | Fires when a deal enters this stage. |
+| `service_id` | INTEGER | Null matches every service. A missing service row does not fire. |
+| `offer_id` | INTEGER | Null matches every offer. Combined with `service_id` as AND. |
+| `created_at`, `updated_at` | TEXT | |
+
+Actions are child rows (`position`, `action_type`, `config` JSON).
+
+| `action_type` | Config | Effect |
+|---|---|---|
+| `delegated_task` | `owner`, `title`, `brief`, `due_in_days` | One task. Title and brief may use `{partner_name}`, `{deal_id}`, `{stage}`, `{service_name}`, `{service_slug}`, `{automation_name}`. |
+| `spawn_child_deals` | `service_ids` | Child deals, same partner, `parent_deal_id` set, `source` `automation:<automation id>`, no offer and no price. |
+
+At most one action of each type. An open task with the same title and owner,
+or an open child of that service, is not duplicated when the deal enters the
+stage again.
 
 ### Post-sale / follow-on deals
 
@@ -236,11 +321,13 @@ That is the post-sale model.
 ### Indexes
 
 `partners.parent_id`, `deals.partner_id`, `deals.stage`, `deals.owner_key`,
-`deals.parent_deal_id`, `activities.partner_id`, `activities.deal_id`,
+`deals.parent_deal_id`, `deals(stage, board_position)`, `activities.partner_id`, `activities.deal_id`,
 `pipeline_stages.position`, `api_keys.user_id`, `delegated_tasks.deal_id`,
 `delegated_tasks(owner, status)`, `deal_tags(tag)` (the primary key on
-`(deal_id, tag)` covers lookups by deal). `offers` and `icp_criteria` are
-small and scanned in full.
+`(deal_id, tag)` covers lookups by deal),
+`stage_automations(stage_key, enabled)`,
+`stage_automation_actions(automation_id, position)`.
+`offers` and `icp_criteria` are small and scanned in full.
 
 ## Scoring
 
@@ -260,8 +347,10 @@ The queue shows the top 10. **Fit score** is the `icp_criteria` sum above.
 
 ## Follow-ups
 
-Open (not won or lost) deals whose `next_action_date` is today or earlier are
-due. The deals list shows Due Today and Overdue pills and has a Due filter.
+Open opportunities (`active = 1`, stage not `is_won`) whose
+`next_action_date` is today or earlier are due. Lost records are skipped.
+The deals list shows Due Today and Overdue pills and has a Due filter. Leads
+stay out of the staleness gate.
 `scripts/staleness_gate.py` exits 1 when any are due and logs one `system`
 activity per due date (idempotent on re-run). "Today" uses `TZ`. The
 `staleness-cron` service runs the gate on start and daily at 08:00.
@@ -318,40 +407,43 @@ deal, moving between two `is_won` stages, or entering `is_lost` does not fire.
 
 ## Lead ingest
 
-**`POST /api/v1/leads`** takes up to 100 leads per call (`X-API-Key:
+**`POST /api/v1/leads`** takes up to 100 items per call (`X-API-Key:
 $CRM_API_KEY`, header only, fail-closed when unset, rate-limited, body capped).
-The CLI `scripts/inject_leads.py` runs the same logic in-process. Per lead
-(`app/services/leads.py::ingest_lead`):
+The CLI `scripts/inject_leads.py` runs the same logic in-process.
 
-1. `service_slug` must exist, else `invalid_service`.
-2. `name` is required, else `invalid`. Email or phone is also required.
-3. `company_name`, if given, finds or creates a company partner by exact name,
-   and the person's `parent_id` points at it.
-4. `is_company`, if truthy, stores the lead itself as a company. Use it for
-   sources that only have a business name. It is different from `company_name`,
-   which creates a separate parent record.
-5. The existing partner is matched by email, then phone + name, then website +
-   name, then exact name within the same parent and company flag. Otherwise a
-   new partner is created.
-6. If the partner already has an open deal for that service, nothing new is
-   created (`duplicate_open_deal`), so a job can re-run over the same source
-   data safely. Otherwise the deal is created (`created` for a new partner,
-   `existing_partner_new_deal` for an existing one).
+Default `type` is **lead**. That creates a deal record only — no partner.
+A job that still needs a partner and an opportunity must send
+`"type": "opportunity"` (CLI: `--type opportunity`). When REST omits
+`type`, the response includes `type_defaulted` and the header
+`Deprecation: type omitted; default is now lead`.
 
-Re-runs fill empty partner and deal fields and never overwrite values an
-operator edited. Only these keys are read; everything else is dropped:
-`name`, `email`, `company_name`, `service_slug`, `phone`, `title`, `website`,
-`address`, `social_url`, `linkedin_url`, `x_url`, `instagram_url`,
-`facebook_url`, `youtube_url`, `preferred_channel`, `industry`, `team_size`,
-`source`, `value_estimate`, `pain_points`, `goals`, `next_action`,
-`next_action_date`, `is_company`, `owner_key`, `offer_id`, `external_ref`,
-`tags`. `tags`, when present, is an array of slugs merged onto the deal.
-Omitting it leaves any tags the deal already has. Invalid slugs in the array
-are dropped.
-Numbers are coerced and bad types become `invalid` or null, never a traceback.
+Per item (`app/services/leads.py::ingest_lead`):
 
-The CLI exits 0 only when every lead is `created`, `duplicate_open_deal` or
-`existing_partner_new_deal`.
+1. `service_slug` must exist when a service is required, else `invalid_service`.
+2. Identity is required (company, contact, email, phone, website or LinkedIn).
+3. **Lead (default):** match an open lead or opportunity on strong keys only
+   (email; phone + name; website + name). A strong match fill-empties that
+   record. Weak-key-only matches create a new lead. The partners table is
+   unchanged.
+4. **Opportunity (`type=opportunity`):** the previous path. Match or create a
+   partner, then create or fill-empty an open opportunity for that partner
+   and service (`created`, `existing_partner_new_deal`,
+   `duplicate_open_deal`).
+
+`scripts/import_clients.py` does **not** inherit this default. It still
+creates a partner and an opportunity. `--type lead` is opt-in.
+
+Re-runs fill empty fields and never overwrite values an operator edited.
+Allowed keys include the previous contact fields plus `type`,
+`probability`, `priority` and `expected_close`. `tags`, when present, is
+an array of slugs merged onto the deal record.
+
+The CLI exits 0 when every item is a success status, including
+`duplicate_open_lead` and `duplicate_open_opportunity`.
+
+An optional cleanup script `scripts/opportunities_to_leads.py` can move
+early-stage opportunities back to leads (`--stage` repeatable, dry-run
+by default, `--apply` to write). The migration never runs it.
 
 **Why an API rather than direct database access:** the database is one sqlite
 file with a single-writer assumption. A second process touching it would break

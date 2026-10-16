@@ -8,11 +8,15 @@ downloaded once and committed into `app/static/vendor/`. Nothing is loaded
 from a CDN at runtime — see `README.md` / `docs/DEPLOY.md`, this app must work
 fully offline and self-hosted. No `package.json`, no Node, no build step.
 
-**Status (verified on `main`, 2026-10-06):** Phases 1–3 have shipped.
-Do not re-vendor Pico or htmx, do not redo the polish pass, and do not
-re-implement the pipeline / call-outcome swaps. The phase notes below are
-history so a future agent can see *how* it was done — they are not a
-backlog.
+**Status (verified on `main`, 2026-10-16):** Phases 1–4 have shipped, real
+dark mode shipped as [#87](https://github.com/sevasek/agent-crm/issues/87)
+(split out of #47), and the searchable partner dropdown shipped as
+[#88](https://github.com/sevasek/agent-crm/issues/88) (Tom Select on the
+new-deal form). Do not re-vendor Pico, htmx, or SortableJS, do not redo the
+polish pass, and do not re-implement the pipeline / call-outcome swaps or the
+kanban drag wiring. The phase notes below are history so a future agent can
+see *how* it was done — they are not a backlog. Anything left in Phase 5 is
+still deferred; do not implement it from this file.
 
 Phases 4 and 5 were decided on 2026-10-06 — no longer "pending a decision."
 Phase 5 (originally three bundled items) was split into separate issues
@@ -20,21 +24,16 @@ since the three items had different outcomes:
 
 | Phase | What | Status | Tracking |
 |---|---|---|---|
-| 1 | Vendored Pico.css 2.1.1, `data-theme="light"` | **Shipped** | [#43](https://github.com/sevasek/agent-crm/issues/43), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
+| 1 | Vendored Pico.css 2.1.1, `data-theme="light"` | **Shipped** (lock later removed in #87) | [#43](https://github.com/sevasek/agent-crm/issues/43), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 2 | Polish custom CSS on top of Pico | **Shipped** | [#44](https://github.com/sevasek/agent-crm/issues/44), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 3 | Vendored htmx 2.0.11, pipeline oob swaps, call-outcome swaps | **Shipped** | [#45](https://github.com/sevasek/agent-crm/issues/45), [PR #62](https://github.com/sevasek/agent-crm/pull/62) |
-| 4 | SortableJS drag-and-drop kanban | **Scheduled** — next sprint | [#46](https://github.com/sevasek/agent-crm/issues/46) |
-| 5a | Real dark mode (unlock + redo `--bg-alt`/`.pill-*` as light/dark pairs) | **Scheduled** | [#87](https://github.com/sevasek/agent-crm/issues/87) |
-| 5b | Searchable dropdowns (Tom Select/Choices.js) | **Scheduled** — field(s) to target still need confirming, see #88 | [#88](https://github.com/sevasek/agent-crm/issues/88) |
+| 4 | SortableJS drag-and-drop kanban | **Shipped** | [#46](https://github.com/sevasek/agent-crm/issues/46) |
+| 5a | Real dark mode (unlock + redo `--bg-alt`/`.pill-*` as light/dark pairs) | **Shipped** | [#87](https://github.com/sevasek/agent-crm/issues/87) |
+| 5b | Searchable dropdowns (Tom Select/Choices.js) | **Shipped for the new-deal partner picker** — other selects are still plain; confirm scope before extending | [#88](https://github.com/sevasek/agent-crm/issues/88) |
 | 5c | Alpine.js for client-side UI state | **Decided against** — nothing identified needs it; don't add speculatively | [#47](https://github.com/sevasek/agent-crm/issues/47) (closed) |
 
-Dark mode is being unlocked per #87 (supersedes the "stays locked to light
-for launch" note in `docs/SCOPE.md` — update that doc when #87 ships).
-`data-theme="light"` in `app/templates/base.html` (added in Phase 1) stays
-in place until #87 actually ships; don't remove it from this file.
-
 Pinned versions live in `app/static/vendor/VENDOR.md` (Pico 2.1.1, htmx
-2.0.11 as of the shipping PRs).
+2.0.11, SortableJS 1.15.7 as of the shipping PRs).
 
 ---
 
@@ -367,26 +366,72 @@ commit.
 
 ---
 
-## Phase 4 — SortableJS drag-and-drop kanban (DEFERRED, [#46](https://github.com/sevasek/agent-crm/issues/46))
+## Phase 4 — SortableJS drag-and-drop kanban (SHIPPED, [#46](https://github.com/sevasek/agent-crm/issues/46))
 
-**Do not implement this.** Needs a decision; it is not launch work.
+**Do not re-run these steps.** History of how SortableJS 1.15.7 was vendored
+and wired to the existing stage POST. Owner decision 2026-10-06 scheduled
+this after Phase 3; the GitHub issue overrides the earlier "do not
+implement" note in this file.
 
-Turning the pipeline's per-card `<select>` into actual drag-and-drop is real
-scope: a new endpoint that accepts "deal X moved to stage Y, position Z",
-touch-device testing (the call view already proves mobile matters here),
-and it depends on Phase 3's htmx work being in place and stable first (drag
-libraries pair with htmx via the `htmx-ext-sortable` pattern: SortableJS
-fires a DOM event on drop, an htmx listener turns it into the same
-`hx-post` the dropdown already uses). Phase 3 has shipped; this phase is
-still out of launch-week scope. Revisit after launch with its own plan
-on #46. Do not vendor SortableJS from this file.
+1. Vendor SortableJS the same way as Pico / htmx:
+   ```bash
+   curl -fSL -o app/static/vendor/Sortable.min.js \
+     https://cdn.jsdelivr.net/npm/sortablejs@1.15.7/Sortable.min.js
+   ```
+   Confirm it is real JS (`/*! Sortable 1.15.7`), not an HTML error page.
+   Record the version in `app/static/vendor/VENDOR.md`. Load it from
+   `base.html` with `<script src="/static/vendor/Sortable.min.js">` —
+   CSP is `script-src 'self'`, so init lives in `app/static/app.js`.
+
+2. Each column has a `.pipeline-card-list` Sortable group (`group:
+   "pipeline"`). The "No deals." placeholder sits *outside* the list so
+   empty columns stay droppable. Touch uses `delay` / `delayOnTouchOnly` /
+   `touchStartThreshold` so scrolling the board does not steal every
+   gesture. The per-card `<select>` stays as the keyboard / no-JS fallback.
+
+3. On drop, `app.js` writes `stage` + `position` onto the card's existing
+   `.stage-form` and `htmx.trigger`s the select `change` — the same
+   `hx-post="/deals/{id}/stage"` the dropdown already uses
+   (`hx-swap="none"`, OOB column fragments). `change_deal_stage` accepts
+   an optional `position` form field and passes it to `set_deal_stage`.
+   Same-stage drops only rewrite `board_position` (no activity, no
+   automations). A dropdown change without `position` appends.
+
+4. Schema v9 (`migrate_009`) adds `deals.board_position INTEGER` after
+   the lead-model rebuild (`migrate_008`). Additive only — does not
+   rebuild `deals`.
+
+**Acceptance for Phase 4 (met with #46):** drag moves a card and both
+columns refresh via OOB swap; reorder within a column persists;
+dropdown / no-JS still works; mobile viewport can drag without losing
+scroll; `pytest` green including `tests/test_pipeline_dnd.py`.
 
 ---
 
-## Phase 5 — optional extras (DEFERRED, [#47](https://github.com/sevasek/agent-crm/issues/47))
+## Phase 5a — real dark mode (SHIPPED, [#87](https://github.com/sevasek/agent-crm/issues/87))
+
+**Do not re-run these steps.** History of the lock, then the unlock.
+
+Phase 1 forced `<html data-theme="light">` so Pico's auto dark mode could
+not clash with light-only custom colors. #87 (decision 2026-10-06, split
+out of #47) removed that lock and paired the app tokens:
+
+- Light values on `:root` / `[data-theme="light"]` are the shipped colors
+  (`--bg-alt: #f7f7f7`, `--accent: #2c5aa0`, the original `.pill-*` yellows
+  and reds, white nav/cards).
+- Dark values use Pico's own selectors: `@media (prefers-color-scheme: dark)`
+  on `:root:not([data-theme])`, plus `[data-theme="dark"]`. Surfaces follow
+  Pico's dark page (`#13171f`) and form/code greys; due/overdue pills keep
+  the same meaning with darker backgrounds and lighter text.
+- Brand fill stays `#2c5aa0`. Dark-mode *text* links use a lighter brand
+  blue (`--link: #7aa3e0`) so they stay readable on Pico's dark page.
+
+No theme toggle, no new vendor library. `docs/SCOPE.md` lists dark mode as
+in scope.
+
+## Phase 5b — optional extras (DEFERRED, [#47](https://github.com/sevasek/agent-crm/issues/47))
 
 **Do not implement this.** Needs a decision; it is not launch work.
-`docs/SCOPE.md` already lists dark mode as out of scope for launch.
 
 - **Tom Select / Choices.js** for the partner/service `<select>` fields, but
   only if a customer actually has enough partners or services that a plain
@@ -397,13 +442,8 @@ on #46. Do not vendor SortableJS from this file.
   htmx can't express server-side (e.g. a multi-step form section that
   toggles without a round-trip). Nothing identified in the current templates
   needs this yet — don't add it "just in case."
-- **Real dark mode** — redo `--bg-alt` and the `.pill-*` colors as proper
-  light/dark pairs (Pico's own tokens already flip automatically; the app's
-  hand-picked ones don't), then remove the `data-theme="light"` lock added
-  in Phase 1 step 4.
 
-Do not vendor Tom Select or Alpine, and do not unlock dark mode, from this
-file.
+Do not vendor Tom Select or Alpine from this file.
 
 ---
 

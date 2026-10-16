@@ -12,8 +12,8 @@ from app.services.auth import (
     get_rate_limit_key,
     user_key_rate_limit_identity,
 )
-from app.services.client_ip import get_client_ip
-from app.services.leads import ingest_lead
+from app.services.client_ip import get_client_ip, ip_allowlist_permits
+from app.services.leads import DEPRECATION_TYPE_OMITTED, ingest_lead
 from app.services import pipeline_stages
 
 router = APIRouter(prefix="/api/v1", tags=["api"])
@@ -60,6 +60,19 @@ def _check_api_key(x_api_key: str) -> bool:
 
 def _check_stages_api_key(x_api_key: str) -> bool:
     return _stages_api_identity(x_api_key) is not None
+
+
+# Separate lists. Unset = no IP restriction (other clients, local dev).
+# A non-empty list that parses to nothing fails closed. /mcp is not listed:
+# hosted connectors have no stable address.
+LEADS_IP_ALLOWLIST_ENV = "LEADS_IP_ALLOWLIST"
+STAGES_IP_ALLOWLIST_ENV = "STAGES_IP_ALLOWLIST"
+
+
+def _allowlist_blocked(request: Request, env_name: str):
+    if ip_allowlist_permits(get_client_ip(request), env_name):
+        return None
+    return _json_error("ip_not_allowlisted", 403, close=True)
 
 
 def _api_rate_limited(request: Request, x_api_key: str, action: str, identity_fn):
@@ -130,6 +143,9 @@ async def _read_body_capped(request: Request):
 
 @router.post("/leads")
 async def create_leads(request: Request, x_api_key: str = Header(default="")):
+    blocked = _allowlist_blocked(request, LEADS_IP_ALLOWLIST_ENV)
+    if blocked:
+        return blocked
     # Only the X-API-Key header authenticates. Query-string values (api_key,
     # apikey, x-api-key, …) are ignored and never compared. Failed auth is
     # what fills the unauthenticated IP bucket; a valid key uses its own.
@@ -165,12 +181,20 @@ async def create_leads(request: Request, x_api_key: str = Header(default="")):
         return _json_error("too_many_leads", 422)
 
     results = []
+    type_omitted = False
     for lead in leads:
         if not isinstance(lead, dict):
-            results.append({"email": "", "status": "invalid"})
+            results.append({"email": "", "status": "invalid", "type_defaulted": True})
+            type_omitted = True
             continue
-        results.append(ingest_lead(lead))
-    return {"results": results}
+        result = ingest_lead(lead)
+        results.append(result)
+        if result.get("type_defaulted"):
+            type_omitted = True
+    headers = {}
+    if type_omitted:
+        headers["Deprecation"] = DEPRECATION_TYPE_OMITTED
+    return JSONResponse({"results": results}, headers=headers)
 
 
 # ==================== Pipeline stages ====================
@@ -189,6 +213,8 @@ def _serialize_stage(stage: dict) -> dict:
     out = dict(stage)
     for field in _STAGE_BOOL_FIELDS:
         out[field] = bool(out.get(field))
+    if out.get("is_lost"):
+        out["deprecated_fields"] = ["is_lost"]
     return out
 
 
@@ -235,6 +261,9 @@ async def _authenticated_json_body(request: Request, x_api_key: str, action: str
     """Common preamble for the mutating stage endpoints: auth + rate limit,
     size cap, content-type, then a parsed JSON object. Returns (body, None) on
     success, or (None, error_response) to return immediately."""
+    blocked = _allowlist_blocked(request, STAGES_IP_ALLOWLIST_ENV)
+    if blocked:
+        return None, blocked
     gated = _api_rate_limited(request, x_api_key, action, _stages_api_identity)
     if gated:
         return None, gated
@@ -265,7 +294,10 @@ async def _authenticated_json_body(request: Request, x_api_key: str, action: str
 
 
 def _authenticate_get(request: Request, x_api_key: str, action: str = "stages_api"):
-    """Auth + rate limit for read-only (no body) GET endpoints."""
+    """Allowlist, then auth + rate limit for read-only (no body) GET endpoints."""
+    blocked = _allowlist_blocked(request, STAGES_IP_ALLOWLIST_ENV)
+    if blocked:
+        return blocked
     return _api_rate_limited(request, x_api_key, action, _stages_api_identity)
 
 

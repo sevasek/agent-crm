@@ -16,8 +16,13 @@ from app.services.partners import (
 from app.services.catalog import create_service, get_service, update_service, list_services
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
-    create_deal, get_deal, list_deals, list_parent_candidates, set_deal_stage,
-    update_deal_fields, record_call_outcome, validate_parent_link, CALL_OUTCOMES,
+    create_deal, get_deal, list_deals, list_parent_candidates, mark_lost,
+    restore_deal, set_deal_stage, update_deal_fields, record_call_outcome,
+    validate_parent_link, CALL_OUTCOMES,
+)
+from app.services.lead_records import create_lead, get_lead, list_leads, update_lead, convert_lead
+from app.services.lost_reasons import (
+    create_lost_reason, get_lost_reason, list_lost_reasons, update_lost_reason,
 )
 from app.services import pipeline_stages
 from app.services.call_queue import (
@@ -28,6 +33,7 @@ from app.services.activities import log_activity, list_activities_for_partner, l
 from app.services.phone import to_tel_href, has_callable_phone
 from app.services import offers as offers_service
 from app.services import icp as icp_service
+from app.services import stage_automations
 from app.services import api_keys as api_keys_service
 
 router = APIRouter(prefix="", tags=["admin"])
@@ -508,28 +514,42 @@ def _tag_query(raw: str):
     return slug, ""
 
 
-def _deals_for_board(stage: str, due: bool, tag: str):
+def _truthy_query(raw: str, *aliases):
+    return (raw or "").strip().lower() in {"1", "true", "yes", *aliases}
+
+
+def _deals_for_board(stage: str, due: bool, tag: str, *, lost_only: bool = False):
     tag_filter = [tag] if tag else None
+    include_lost = lost_only
     if due:
-        return list_due_deals(stage=stage or None, tags=tag_filter)
-    return annotate_deals(list_deals(stage=stage or None, tags=tag_filter))
+        deals = list_due_deals(stage=stage or None, tags=tag_filter, include_lost=include_lost)
+    else:
+        deals = annotate_deals(list_deals(
+            stage=stage or None, tags=tag_filter, include_lost=include_lost,
+        ))
+    if lost_only:
+        deals = [d for d in deals if not d.get("active", 1)]
+    return deals
 
 
 @router.get("/deals", response_class=HTMLResponse)
 async def deals_list(
     request: Request, stage: str = "", due: str = "", tag: str = "",
+    lost: str = "",
     user=Depends(require_login),
 ):
-    due_filter = due.strip().lower() in {"1", "true", "yes", "due"}
+    due_filter = _truthy_query(due, "due")
+    lost_filter = _truthy_query(lost, "lost")
     current_tag, tag_error = _tag_query(tag)
     if tag_error:
         deals = []
     else:
-        deals = _deals_for_board(stage, due_filter, current_tag)
+        deals = _deals_for_board(stage, due_filter, current_tag, lost_only=lost_filter)
     return templates.TemplateResponse(request, "admin/deals.html", {
         "request": request, "user": user,
         "deals": deals, "stages": pipeline_stages.list_stages(),
         "current_stage": stage, "current_due": due_filter,
+        "current_lost": lost_filter,
         "current_tag": current_tag, "tag_error": tag_error,
         "tags_in_use": list_tags(),
     })
@@ -593,7 +613,7 @@ def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal
         "deal": None, "partner": None, "service": None,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
-        "error": error,
+        "error": error, "lost_reasons": list_lost_reasons(active_only=True),
     }
     ctx.update(_deal_parent_context(partner_id=partner_id))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
@@ -601,12 +621,15 @@ def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal
 
 def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
                     form_parent_deal_id=None, error=None, status_code=200):
+    if deal and deal.get("lost_reason_id") and "lost_reason" not in deal:
+        deal = dict(deal)
+        deal["lost_reason"] = get_lost_reason(deal["lost_reason_id"])
     ctx = {
         "request": request, "user": user, "deal": deal,
         "partner": partner, "service": service,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
-        "error": error,
+        "error": error, "lost_reasons": list_lost_reasons(active_only=True),
     }
     ctx.update(_deal_parent_context(deal))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
@@ -625,22 +648,29 @@ def _annotate_child_counts(columns):
     return columns
 
 
-def _pipeline_board_data(current_tag="", tag_error=""):
+def _pipeline_board_data(current_tag="", tag_error="", include_lost=False):
     stages = pipeline_stages.list_stages()
     tag_filter = [current_tag] if current_tag else None
     columns = [
         {
             "stage": s,
-            "deals": [] if tag_error else annotate_deals(list_deals(stage=s["key"], tags=tag_filter)),
+            "deals": [] if tag_error else annotate_deals(list_deals(
+                stage=s["key"], tags=tag_filter, include_lost=include_lost,
+                order="board",
+            )),
         }
         for s in stages
     ]
+    if include_lost:
+        for col in columns:
+            col["deals"] = [d for d in col["deals"] if not d.get("active", 1)]
     _annotate_child_counts(columns)
     return stages, columns
 
 
-def _pipeline_columns_fragment(request, user, keys, current_tag="", tag_error=""):
-    stages, columns = _pipeline_board_data(current_tag, tag_error)
+def _pipeline_columns_fragment(request, user, keys, current_tag="", tag_error="",
+                               include_lost=False):
+    stages, columns = _pipeline_board_data(current_tag, tag_error, include_lost=include_lost)
     by_key = {c["stage"]["key"]: c for c in columns}
     csrf_token = generate_csrf_token(get_session_cookie(request))
     parts = []
@@ -655,7 +685,8 @@ def _pipeline_columns_fragment(request, user, keys, current_tag="", tag_error=""
         parts.append(_render_partial(
             "admin/_pipeline_column.html",
             request=request, user=user, col=col, stages=stages,
-            csrf_token=csrf_token, current_tag=current_tag, oob=True,
+            csrf_token=csrf_token, current_tag=current_tag,
+            current_lost=include_lost, oob=True,
         ))
     return "".join(parts)
 
@@ -718,6 +749,8 @@ async def edit_deal_page(request: Request, deal_id: int, user=Depends(require_lo
     deal = get_deal(deal_id)
     if not deal:
         return RedirectResponse("/deals", status_code=303)
+    if deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
     partner = get_partner(deal["partner_id"])
     service = get_service(deal["service_id"])
     if not partner or not service:
@@ -739,6 +772,8 @@ async def edit_deal_submit(
     deal = get_deal(deal_id)
     if not deal:
         return RedirectResponse("/deals", status_code=303)
+    if deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
     partner = get_partner(deal["partner_id"])
     service = get_service(deal["service_id"])
     if not partner or not service:
@@ -784,6 +819,62 @@ async def edit_deal_submit(
     return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
 
 
+_LOST_FORM_ERRORS = {
+    "not_found": "That record was not found.",
+    "already_lost": "That record is already lost.",
+    "invalid_lost_reason": "Pick a lost reason.",
+    "not_lost": "That record is not lost.",
+    "merged": "A merged record cannot be restored.",
+}
+
+
+@router.post("/deals/{deal_id}/lost")
+async def mark_deal_lost_submit(
+    request: Request, deal_id: int,
+    lost_reason: str = Form(""), note: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    deal = get_deal(deal_id)
+    if not deal:
+        return RedirectResponse("/deals", status_code=303)
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
+    _updated, error = mark_lost(deal_id, lost_reason=lost_reason, note=note)
+    if error:
+        partner = get_partner(deal["partner_id"]) if deal.get("partner_id") else None
+        service = get_service(deal["service_id"]) if deal.get("service_id") else None
+        return _edit_deal_form(
+            request, user, deal, partner, service,
+            error=_LOST_FORM_ERRORS.get(error, error), status_code=400,
+        )
+    if deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
+    return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
+
+
+@router.post("/deals/{deal_id}/restore")
+async def restore_deal_submit(
+    request: Request, deal_id: int,
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    deal = get_deal(deal_id)
+    if not deal:
+        return RedirectResponse("/deals", status_code=303)
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
+    _updated, error = restore_deal(deal_id)
+    if error:
+        partner = get_partner(deal["partner_id"]) if deal.get("partner_id") else None
+        service = get_service(deal["service_id"]) if deal.get("service_id") else None
+        return _edit_deal_form(
+            request, user, deal, partner, service,
+            error=_LOST_FORM_ERRORS.get(error, error), status_code=400,
+        )
+    if deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
+    return RedirectResponse(f"/deals/{deal_id}/edit", status_code=303)
+
+
 @router.post("/deals/{deal_id}/next-action")
 async def save_deal_next_action(
     request: Request, deal_id: int,
@@ -808,20 +899,38 @@ async def change_deal_stage(
     request: Request, deal_id: int,
     stage: str = Form(...), next: str = Form("partner"),
     tag: str = Form(""),
+    lost: str = Form(""),
+    position: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
     old_stage = deal["stage"] if deal else None
-    if deal and validate_csrf_token(csrf_token, get_session_cookie(request)):
-        set_deal_stage(deal_id, stage)
+    parsed_position = _safe_int(position) if str(position).strip() != "" else None
+    # Mirror the MCP guard: only active opportunities change stage over HTTP.
+    # Leads must be converted first; lost records must be restored first.
+    if (
+        deal
+        and deal.get("type") == "opportunity"
+        and deal.get("active", 1)
+        and validate_csrf_token(csrf_token, get_session_cookie(request))
+    ):
+        set_deal_stage(deal_id, stage, position=parsed_position)
+    include_lost = _truthy_query(lost, "lost")
     if _is_htmx(request) and next == "pipeline":
         current_tag, tag_error = _tag_query(tag)
         html = _pipeline_columns_fragment(
             request, user, [old_stage, stage], current_tag, tag_error,
+            include_lost=include_lost,
         )
         return HTMLResponse(html)
     if next == "pipeline":
-        return RedirectResponse("/pipeline", status_code=303)
+        suffix = []
+        if include_lost:
+            suffix.append("lost=1")
+        if tag.strip():
+            suffix.append(f"tag={tag.strip()}")
+        query = ("?" + "&".join(suffix)) if suffix else ""
+        return RedirectResponse(f"/pipeline{query}", status_code=303)
     if deal:
         return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
     return RedirectResponse("/deals", status_code=303)
@@ -829,14 +938,20 @@ async def change_deal_stage(
 
 # ==================== Pipeline (Kanban board) ====================
 @router.get("/pipeline", response_class=HTMLResponse)
-async def pipeline_board(request: Request, tag: str = "", user=Depends(require_login)):
+async def pipeline_board(
+    request: Request, tag: str = "", lost: str = "", user=Depends(require_login),
+):
     current_tag, tag_error = _tag_query(tag)
-    stages, columns = _pipeline_board_data(current_tag, tag_error)
+    include_lost = _truthy_query(lost, "lost")
+    stages, columns = _pipeline_board_data(
+        current_tag, tag_error, include_lost=include_lost,
+    )
     return templates.TemplateResponse(request, "admin/pipeline.html", {
         "request": request, "user": user,
         "columns": columns, "stages": stages,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "current_tag": current_tag, "tag_error": tag_error,
+        "current_lost": include_lost,
         "tags_in_use": list_tags(),
     })
 
@@ -850,6 +965,7 @@ _STAGE_ERROR_MESSAGES = {
     "last_stage": "Can't delete the only remaining stage.",
     "not_found": "Stage not found.",
     "won_lost_conflict": "A stage can't be both Won and Lost.",
+    "invalid_stage_role": "The Lost stage role is deprecated. Mark a deal record lost instead of adding a Lost stage.",
 }
 
 
@@ -1233,3 +1349,505 @@ async def logout_everywhere_submit(
     response = RedirectResponse("/settings", status_code=303)
     set_session_cookie(response, user["id"], new_version)
     return response
+
+
+_AUTOMATION_ERROR_MESSAGES = {
+    "name_required": "Name is required.",
+    "name_taken": "An automation with that name already exists.",
+    "invalid_stage": "Pick a stage that exists.",
+    "service_not_found": "That service does not exist.",
+    "offer_not_found": "That offer does not exist.",
+    "scope_conflict": "The service id and slug do not match.",
+    "actions_required": "Add a task title, at least one child service, or both.",
+    "duplicate_action": "Only one task and one set of child deals are allowed.",
+    "invalid_action": "That action is not supported.",
+    "title_required": "A task needs a title.",
+    "invalid_owner": "Task owner must be letters, digits, and hyphens.",
+    "invalid_due": "Due in days must be a whole number from 0 to 3650, or left blank.",
+    "not_found": "That automation no longer exists.",
+}
+
+
+def _automation_error_message(error):
+    if isinstance(error, str) and error.startswith("unknown_service:"):
+        slug = error.split(":", 1)[1] or "that service"
+        return f"No service named {slug}."
+    return _AUTOMATION_ERROR_MESSAGES.get(error, "Could not save that automation.")
+
+
+def _automation_page(request, user, error=None, status_code=200):
+    return templates.TemplateResponse(request, "admin/automations.html", {
+        "request": request,
+        "user": user,
+        "automations": stage_automations.list_automations(),
+        "stages": pipeline_stages.list_stages(),
+        "services": list_services(),
+        "offers": offers_service.list_offers(),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "error": error,
+    }, status_code=status_code)
+
+
+def _actions_from_form(form):
+    actions = []
+    title = form.get("task_title") or ""
+    if str(title).strip():
+        due = str(form.get("task_due_in_days") or "").strip()
+        actions.append({
+            "type": "delegated_task",
+            "owner": form.get("task_owner") or "",
+            "title": title,
+            "brief": form.get("task_brief") or "",
+            "due_in_days": due or None,
+        })
+    child_ids = []
+    for raw in form.getlist("child_service_ids"):
+        text = str(raw).strip()
+        if text:
+            child_ids.append(text)
+    if child_ids:
+        actions.append({"type": "spawn_child_deals", "service_ids": child_ids})
+    return actions
+
+
+def _scope_id(form, field):
+    text = str(form.get(field) or "").strip()
+    return None if text == "" else text
+
+
+@router.get("/automations", response_class=HTMLResponse)
+async def automations_settings(request: Request, user=Depends(require_login)):
+    return _automation_page(request, user)
+
+
+@router.post("/automations/new")
+async def create_automation_submit(request: Request, user=Depends(require_login)):
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    automation, error = stage_automations.create_automation(
+        form.get("name") or "",
+        form.get("stage_key") or "",
+        service_id=_scope_id(form, "service_id"),
+        offer_id=_scope_id(form, "offer_id"),
+        enabled=form.get("enabled") is not None,
+        actions=_actions_from_form(form),
+    )
+    if error or not automation:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+@router.post("/automations/{automation_id}/edit")
+async def edit_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
+    if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
+        return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    automation, error = stage_automations.update_automation(
+        automation_id,
+        name=form.get("name") or "",
+        stage_key=form.get("stage_key") or "",
+        service_id=_scope_id(form, "service_id"),
+        offer_id=_scope_id(form, "offer_id"),
+        enabled=form.get("enabled") is not None,
+        actions=_actions_from_form(form),
+    )
+    if error or not automation:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+@router.post("/automations/{automation_id}/enabled")
+async def toggle_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
+    if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
+        return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    enabled = str(form.get("enabled") or "").strip() in {"1", "true", "on", "yes"}
+    _automation, error = stage_automations.update_automation(automation_id, enabled=enabled)
+    if error:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+@router.post("/automations/{automation_id}/delete")
+async def delete_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
+    if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
+        return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/automations", status_code=303)
+    _deleted, error = stage_automations.delete_automation(automation_id)
+    if error:
+        return _automation_page(
+            request, user, error=_automation_error_message(error), status_code=400,
+        )
+    return RedirectResponse("/automations", status_code=303)
+
+
+# ==================== Leads ====================
+_EMPTY_LEAD_FORM = {
+    "company_name": "", "contact_name": "", "name": "", "email": "",
+    "phone": "", "website": "", "title": "", "linkedin_url": "",
+    "industry": "", "team_size": "", "preferred_channel": "",
+    "service_slug": "", "source": "", "pain_points": "", "goals": "",
+    "next_action": "", "next_action_date": "", "owner_key": "",
+}
+
+_LEAD_CREATE_ERRORS = {
+    "invalid": "A lead needs a company, contact, email, phone, website, or LinkedIn URL.",
+    "invalid_service": "That service does not exist.",
+    "partner_not_found": "That partner does not exist.",
+}
+
+_LEAD_UPDATE_ERRORS = {
+    "not_found": "That lead was not found.",
+    "not_a_lead": "That record is not a lead.",
+    "lead_lost": "Restore this lead before editing it.",
+    "invalid": "A lead needs a company, contact, email, phone, website, or LinkedIn URL.",
+    "invalid_service": "That service does not exist.",
+    "partner_not_found": "That partner does not exist.",
+}
+
+_CONVERT_ERRORS = {
+    "not_a_lead": "This is not a lead.",
+    "lead_lost": "Restore this lead before converting it.",
+    "missing_service": "Pick a service.",
+    "partner_not_found": "That partner does not exist.",
+    "partner_ambiguous": "More than one partner matches — pick one and use Link.",
+    "duplicate_open_opportunity": "An open opportunity already exists for this partner and service.",
+}
+
+_LOST_REASON_ERRORS = {
+    "name_required": "Name is required.",
+    "duplicate_name": "A lost reason with that name already exists.",
+    "not_found": "That lost reason was not found.",
+}
+
+
+def _lead_fields_from_form(
+    company_name="", contact_name="", name="", email="", phone="", website="",
+    title="", linkedin_url="", industry="", team_size="", preferred_channel="",
+    service_slug="", source="", pain_points="", goals="", next_action="",
+    next_action_date="", owner_key="",
+):
+    return {
+        "company_name": company_name, "contact_name": contact_name, "name": name,
+        "email": email, "phone": phone, "website": website, "title": title,
+        "linkedin_url": linkedin_url, "industry": industry,
+        "team_size": team_size, "preferred_channel": preferred_channel,
+        "service_slug": service_slug, "source": source,
+        "pain_points": pain_points, "goals": goals,
+        "next_action": next_action,
+        "next_action_date": (next_action_date or "").strip()[:10],
+        "owner_key": owner_key,
+    }
+
+
+def _lead_service_slug(lead):
+    if not lead or not lead.get("service_id"):
+        return ""
+    service = get_service(lead["service_id"])
+    return (service or {}).get("slug") or ""
+
+
+def _lead_form_page(request, user, lead=None, form=None, form_tags=None, error=None,
+                    convert_candidates=None, status_code=200):
+    return templates.TemplateResponse(request, "admin/lead_form.html", {
+        "request": request, "user": user, "lead": lead,
+        "form": form or dict(_EMPTY_LEAD_FORM),
+        "form_tags": form_tags,
+        "error": error,
+        "convert_candidates": convert_candidates or [],
+        "services": list_services(active_only=True),
+        "stages": pipeline_stages.list_stages(),
+        "partners": list_partners(),
+        "lost_reasons": list_lost_reasons(active_only=True),
+        "lead_service_slug": _lead_service_slug(lead),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+    }, status_code=status_code)
+
+
+@router.get("/leads", response_class=HTMLResponse)
+async def leads_list(
+    request: Request, q: str = "", owner: str = "", source_prefix: str = "",
+    tag: str = "", due: str = "", lost: str = "", sort: str = "updated",
+    user=Depends(require_login),
+):
+    current_tag, tag_error = _tag_query(tag)
+    leads = [] if tag_error else list_leads(
+        query=q, owner=owner, source_prefix=source_prefix,
+        tags=[current_tag] if current_tag else None,
+        due_only=_truthy_query(due, "due"),
+        include_lost=_truthy_query(lost, "lost"),
+        sort=sort or "updated",
+    )
+    return templates.TemplateResponse(request, "admin/leads.html", {
+        "request": request, "user": user, "leads": leads,
+        "q": q, "owner": owner, "source_prefix": source_prefix,
+        "current_tag": current_tag, "tag_error": tag_error,
+        "current_due": _truthy_query(due, "due"),
+        "current_lost": _truthy_query(lost, "lost"),
+        "sort": sort or "updated",
+    })
+
+
+@router.get("/leads/new", response_class=HTMLResponse)
+async def new_lead_page(request: Request, user=Depends(require_login)):
+    return _lead_form_page(request, user)
+
+
+@router.post("/leads/new")
+async def new_lead_submit(
+    request: Request,
+    company_name: str = Form(""), contact_name: str = Form(""), name: str = Form(""),
+    email: str = Form(""), phone: str = Form(""), website: str = Form(""),
+    title: str = Form(""), linkedin_url: str = Form(""), industry: str = Form(""),
+    team_size: str = Form(""), preferred_channel: str = Form(""),
+    service_slug: str = Form(""), source: str = Form(""),
+    pain_points: str = Form(""), goals: str = Form(""),
+    next_action: str = Form(""), next_action_date: str = Form(""),
+    owner_key: str = Form(""), tags: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/leads/new", status_code=303)
+    fields = _lead_fields_from_form(
+        company_name=company_name, contact_name=contact_name, name=name,
+        email=email, phone=phone, website=website, title=title,
+        linkedin_url=linkedin_url, industry=industry, team_size=team_size,
+        preferred_channel=preferred_channel, service_slug=service_slug,
+        source=source, pain_points=pain_points, goals=goals,
+        next_action=next_action, next_action_date=next_action_date,
+        owner_key=owner_key,
+    )
+    parsed_tags, tag_error = parse_tag_list(tags)
+    if tag_error:
+        return _lead_form_page(
+            request, user, form=fields, form_tags=tags, error=tag_error, status_code=400,
+        )
+    lead, error = create_lead(**fields, tags=parsed_tags or None)
+    if error:
+        return _lead_form_page(
+            request, user, form=fields, form_tags=tags,
+            error=_LEAD_CREATE_ERRORS.get(error, error), status_code=400,
+        )
+    return RedirectResponse(f"/leads/{lead['id']}", status_code=303)
+
+
+@router.get("/leads/{lead_id}", response_class=HTMLResponse)
+async def lead_detail(request: Request, lead_id: int, user=Depends(require_login)):
+    lead = get_lead(lead_id)
+    if not lead:
+        return RedirectResponse("/leads", status_code=303)
+    return _lead_form_page(request, user, lead=lead)
+
+
+@router.post("/leads/{lead_id}/edit")
+async def edit_lead_submit(
+    request: Request, lead_id: int,
+    company_name: str = Form(""), contact_name: str = Form(""), name: str = Form(""),
+    email: str = Form(""), phone: str = Form(""), website: str = Form(""),
+    title: str = Form(""), linkedin_url: str = Form(""), industry: str = Form(""),
+    team_size: str = Form(""), preferred_channel: str = Form(""),
+    service_slug: str = Form(""), source: str = Form(""),
+    pain_points: str = Form(""), goals: str = Form(""),
+    next_action: str = Form(""), next_action_date: str = Form(""),
+    owner_key: str = Form(""), tags: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+    lead = get_lead(lead_id)
+    if not lead:
+        return RedirectResponse("/leads", status_code=303)
+    fields = _lead_fields_from_form(
+        company_name=company_name, contact_name=contact_name, name=name,
+        email=email, phone=phone, website=website, title=title,
+        linkedin_url=linkedin_url, industry=industry, team_size=team_size,
+        preferred_channel=preferred_channel, service_slug=service_slug,
+        source=source, pain_points=pain_points, goals=goals,
+        next_action=next_action, next_action_date=next_action_date,
+        owner_key=owner_key,
+    )
+    parsed_tags, tag_error = parse_tag_list(tags)
+    if tag_error:
+        return _lead_form_page(
+            request, user, lead=lead, form=fields, form_tags=tags,
+            error=tag_error, status_code=400,
+        )
+    _updated, error = update_lead(lead_id, fill_empty_only=False, tags=parsed_tags or [], **fields)
+    if error:
+        return _lead_form_page(
+            request, user, lead=get_lead(lead_id) or lead, form=fields, form_tags=tags,
+            error=_LEAD_UPDATE_ERRORS.get(error, error), status_code=400,
+        )
+    return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+
+
+@router.post("/leads/{lead_id}/convert")
+async def convert_lead_submit(
+    request: Request, lead_id: int,
+    service_slug: str = Form(""), stage: str = Form(""),
+    partner_action: str = Form("auto"), partner_id: str = Form(""),
+    value_estimate: str = Form(""), next_action: str = Form(""),
+    next_action_date: str = Form(""), note: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+    lead = get_lead(lead_id)
+    if not lead:
+        return RedirectResponse("/leads", status_code=303)
+    value = None
+    if (value_estimate or "").strip():
+        try:
+            value = float(value_estimate)
+        except ValueError:
+            value = None
+    result, error = convert_lead(
+        lead_id,
+        partner_action=partner_action or "auto",
+        partner_id=_safe_int(partner_id),
+        service_slug=service_slug,
+        stage=stage or None,
+        value_estimate=value,
+        next_action=next_action or None,
+        next_action_date=(next_action_date or "").strip()[:10] or None,
+        note=note,
+    )
+    if error == "partner_ambiguous":
+        candidates = (result or {}).get("candidates") or []
+        return _lead_form_page(
+            request, user, lead=lead,
+            error=_CONVERT_ERRORS["partner_ambiguous"],
+            convert_candidates=candidates, status_code=400,
+        )
+    if error:
+        extra = ""
+        if error == "duplicate_open_opportunity" and isinstance(result, dict) and result.get("deal_id"):
+            extra = f" (#{result['deal_id']})."
+        return _lead_form_page(
+            request, user, lead=lead,
+            error=_CONVERT_ERRORS.get(error, error) + extra,
+            status_code=400,
+        )
+    opportunity = result["opportunity"]
+    return RedirectResponse(f"/deals/{opportunity['id']}/edit", status_code=303)
+
+
+@router.post("/leads/{lead_id}/lost")
+async def mark_lead_lost_submit(
+    request: Request, lead_id: int,
+    lost_reason: str = Form(""), note: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+    lead = get_lead(lead_id)
+    if not lead:
+        return RedirectResponse("/leads", status_code=303)
+    _updated, error = mark_lost(lead_id, lost_reason=lost_reason, note=note)
+    if error:
+        return _lead_form_page(
+            request, user, lead=lead,
+            error=_LOST_FORM_ERRORS.get(error, error), status_code=400,
+        )
+    return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+
+
+@router.post("/leads/{lead_id}/restore")
+async def restore_lead_submit(
+    request: Request, lead_id: int,
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+    lead = get_lead(lead_id, include_extras=False)
+    if not lead:
+        return RedirectResponse("/leads", status_code=303)
+    _updated, error = restore_deal(lead_id)
+    if error:
+        return _lead_form_page(
+            request, user, lead=get_lead(lead_id) or lead,
+            error=_LOST_FORM_ERRORS.get(error, error), status_code=400,
+        )
+    return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+
+
+@router.post("/leads/{lead_id}/activities")
+async def add_lead_activity(
+    request: Request, lead_id: int,
+    type: str = Form("research"), body: str = Form(""),
+    source_url: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    lead = get_lead(lead_id, include_extras=False)
+    if lead and validate_csrf_token(csrf_token, get_session_cookie(request)) and body.strip():
+        log_activity(lead.get("partner_id"), type, body, deal_id=lead_id, source_url=source_url)
+    return RedirectResponse(f"/leads/{lead_id}", status_code=303)
+
+
+# ==================== Lost reasons ====================
+def _lost_reasons_page(request, user, error=None, status_code=200):
+    return templates.TemplateResponse(request, "admin/lost_reasons.html", {
+        "request": request, "user": user,
+        "reasons": list_lost_reasons(),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "error": error,
+    }, status_code=status_code)
+
+
+@router.get("/lost-reasons", response_class=HTMLResponse)
+async def lost_reasons_list(request: Request, user=Depends(require_login)):
+    return _lost_reasons_page(request, user)
+
+
+@router.post("/lost-reasons/new")
+async def new_lost_reason_submit(
+    request: Request,
+    name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/lost-reasons", status_code=303)
+    if not (name or "").strip():
+        return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
+    _created, error = create_lost_reason(
+        name, triggers_nurture=bool(triggers_nurture), active=bool(active),
+    )
+    if error:
+        return _lost_reasons_page(
+            request, user, error=_LOST_REASON_ERRORS.get(error, error), status_code=400,
+        )
+    return RedirectResponse("/lost-reasons", status_code=303)
+
+
+@router.post("/lost-reasons/{reason_id}/edit")
+async def edit_lost_reason_submit(
+    request: Request, reason_id: int,
+    name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/lost-reasons", status_code=303)
+    if not (name or "").strip():
+        return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
+    _updated, error = update_lost_reason(
+        reason_id, name=name, triggers_nurture=bool(triggers_nurture), active=bool(active),
+    )
+    if error:
+        return _lost_reasons_page(
+            request, user, error=_LOST_REASON_ERRORS.get(error, error), status_code=400,
+        )
+    return RedirectResponse("/lost-reasons", status_code=303)
+

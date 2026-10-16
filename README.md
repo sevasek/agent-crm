@@ -101,7 +101,9 @@ domain) is [`docs/CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md). The app binds
 to `127.0.0.1:${CRM_PORT:-8000}` (default 8000). Put a
 TLS-terminating reverse proxy in front and forward everything, including
 `/mcp` and `/oauth/*`. Working Caddy and nginx configs, header forwarding, and
-`TRUSTED_PROXIES` notes are in [`docs/DEPLOY.md`](docs/DEPLOY.md). In `.env`:
+`TRUSTED_PROXIES` notes are in [`docs/DEPLOY.md`](docs/DEPLOY.md). A host that
+already runs Traefik adds [`docker-compose.traefik.yml`](docker-compose.traefik.yml)
+on top of the prod file. In `.env`:
 
 - `SECRET_KEY`: a real one, not the placeholder.
 - `SECURE_COOKIES=true` and `BASE_URL=https://your.domain`.
@@ -248,16 +250,23 @@ export BACKUP_DIR=instances/acme/backups
 
 ## Ingest leads
 
-`POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only), or from the CLI:
+`POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only), or from the CLI.
+Each item may set `"type": "lead"` (default) or `"type": "opportunity"`.
+Default ingest creates a **lead** and does not create a partner. Jobs that
+still need a partner and an opportunity must send `"type": "opportunity"`
+or pass `--type opportunity`.
 
 ```bash
 python scripts/inject_leads.py --dry-run tests/fixtures/leads/example.json
 python scripts/inject_leads.py tests/fixtures/leads/example.json
+python scripts/inject_leads.py --type opportunity tests/fixtures/leads/example.json
 ```
 
-`service_slug` must already exist in your catalogue. Field meanings and matching
-rules are in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). To load contacts from
-markdown files, see `scripts/import_clients.py`.
+`service_slug` must already exist in your catalogue when the item needs a
+service. Field meanings and matching rules are in
+[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). To load confirmed clients from
+markdown files, see `scripts/import_clients.py` (still opportunity by
+default; `--type lead` is opt-in).
 
 ## Docs
 
@@ -268,7 +277,7 @@ markdown files, see `scripts/import_clients.py`.
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
 [`OFFBOARDING.md`](docs/OFFBOARDING.md) removing a cancelled customer's instance ·
 [`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
-[`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) phases 1–3 shipped, 4–5 deferred
+[`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) phases 1–4 shipped, 5 deferred
 
 `docs/*.md` also builds into a static manual site, styled with the app's own
 `app/static/style.css` and Pico.css so it looks like the app. This is a

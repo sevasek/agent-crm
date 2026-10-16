@@ -3,10 +3,11 @@
 {% block content %}
 <h1>Deals</h1>
 <div style="margin-bottom:1rem;">
-    <a href="/deals{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_stage and not current_due else 'btn-secondary' }}">All</a>
+    <a href="/deals{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_stage and not current_due and not current_lost else 'btn-secondary' }}">All</a>
     <a href="/deals?due=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_due else 'btn-secondary' }}">Due</a>
+    <a href="/deals?lost=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_lost else 'btn-secondary' }}">Lost</a>
     {% for s in stages %}
-    <a href="/deals?stage={{ s.key }}{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_stage == s.key else 'btn-secondary' }}">{{ s.label }}</a>
+    <a href="/deals?stage={{ s.key }}{% if current_tag %}&tag={{ current_tag }}{% endif %}{% if current_lost %}&lost=1{% endif %}" class="{{ 'btn' if current_stage == s.key else 'btn-secondary' }}">{{ s.label }}</a>
     {% endfor %}
     <a class="btn" href="/deals/new">+ New deal</a>
     <a class="btn-secondary btn" href="/pipeline{% if current_tag %}?tag={{ current_tag }}{% endif %}">Pipeline view</a>
@@ -23,11 +24,12 @@
 {% endif %}
 {% if tag_error %}<p class="error">{{ tag_error }}</p>{% endif %}
 <table>
-    <tr><th>Partner</th><th>Service</th><th>Stage</th><th>Tags</th><th>Value</th><th>Next action</th><th></th></tr>
+    <tr><th>Partner</th><th>Service</th><th>Type</th><th>Stage</th><th>Tags</th><th>Value</th><th>Next action</th><th></th></tr>
     {% for d in deals %}
     <tr>
-        <td><a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
+        <td>{% if d.partner_id %}<a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>{{ d.service_name }}{% if d.parent_deal_id %}<div class="muted">follow-on of #{{ d.parent_deal_id }}</div>{% endif %}</td>
+        <td>{% set record = d %}{% include "admin/_record_badges.html" %}</td>
         <td><span class="pill">{{ d.stage }}</span></td>
         <td>
             {% for tag in d.tags %}
@@ -43,7 +45,7 @@
         <td><a href="/deals/{{ d.id }}/edit">Edit</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">{% if tag_error %}No deals match that tag.{% elif current_tag %}No deals with that tag.{% elif current_due %}No deals due or overdue.{% else %}No deals yet.{% endif %}</td></tr>
+    <tr><td colspan="8" class="muted">{% if tag_error %}No deals match that tag.{% elif current_tag %}No deals with that tag.{% elif current_lost %}No lost opportunities.{% elif current_due %}No deals due or overdue.{% else %}No deals yet.{% endif %}</td></tr>
     {% endfor %}
 </table>
 {% endblock %}

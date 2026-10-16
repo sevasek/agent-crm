@@ -5,7 +5,13 @@
 <h1>Pipeline</h1>
 <p class="muted">
     Columns follow the stage order set on the <a href="/stages">Stages</a> page.
-    Move a deal by picking a new stage on its card.
+    Drag a card to move an opportunity, or pick a new stage on the card.
+    The dropdown still works without JavaScript. Leads never appear here.
+    Lost records appear only when the lost filter is on.
+</p>
+<p>
+    <a href="/pipeline{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_lost else 'btn-secondary' }}">Open</a>
+    <a href="/pipeline?lost=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_lost else 'btn-secondary' }}">Lost</a>
 </p>
 {% if tags_in_use or current_tag %}
 <div class="tag-filters">

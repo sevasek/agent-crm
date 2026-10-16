@@ -16,6 +16,7 @@ services:
       - ${CRM_ENV_FILE:-.env}
     volumes: !override
       - ${CRM_DATA_DIR:-./data}:/app/data
+      - ${CRM_BACKUP_DIR:-./backups}:/app/backups
     ports: !override
       - "127.0.0.1:${CRM_PORT:-8000}:8000"
 
@@ -24,3 +25,4 @@ services:
       - ${CRM_ENV_FILE:-.env}
     volumes: !override
       - ${CRM_DATA_DIR:-./data}:/app/data
+      - ${CRM_BACKUP_DIR:-./backups}:/app/backups

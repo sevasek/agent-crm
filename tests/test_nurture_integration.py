@@ -107,3 +107,85 @@ def test_invalid_nurture_list_slug_does_not_call_webhook(monkeypatch):
     assert status == FAILED
     assert "invalid nurture_list_slug" in message
     assert called == []
+
+
+def test_mark_lost_not_now_posts_webhook_for_lead_without_partner(db, monkeypatch):
+    from app.services.activities import list_activities_for_deal
+    from app.services.catalog import create_service
+    from app.services.deals import mark_lost
+    from app.services.lead_records import create_lead
+
+    _configure(monkeypatch)
+    create_service("Consulting", "consulting", nurture_list_slug="automation-interest")
+    lead, error = create_lead(
+        company_name="Harbour Physio",
+        contact_name="Pat Manager",
+        email="pat@harbour.example",
+        service_slug="consulting",
+    )
+    assert error is None
+    captured = {}
+
+    def fake_post(url, json=None, headers=None, timeout=None, **kwargs):
+        captured.update(url=url, json=json, headers=headers)
+        return FakeResponse()
+
+    monkeypatch.setattr("app.services.nurture.httpx.post", fake_post)
+
+    updated, lost_error = mark_lost(lead["id"], lost_reason="Not now")
+    assert lost_error is None
+    assert updated["nurture"]["status"] == SENT
+    assert captured["json"] == {
+        "email": "pat@harbour.example",
+        "name": "Pat Manager",
+        "list_slug": "automation-interest",
+        "partner_id": None,
+        "deal_id": lead["id"],
+        "type": "lead",
+        "lost_reason": "Not now",
+    }
+    bodies = [a["body"] for a in list_activities_for_deal(lead["id"])]
+    assert any("Nurture enrollment succeeded" in (b or "") for b in bodies)
+
+
+def test_mark_lost_lead_without_service_logs_failure(db, monkeypatch):
+    from app.services.activities import list_activities_for_deal
+    from app.services.deals import mark_lost
+    from app.services.lead_records import create_lead
+
+    _configure(monkeypatch)
+    called = []
+    monkeypatch.setattr("app.services.nurture.httpx.post", lambda *a, **k: called.append(1))
+    lead, error = create_lead(
+        company_name="No Service Co",
+        email="lead@noservice.example",
+    )
+    assert error is None
+    updated, lost_error = mark_lost(lead["id"], lost_reason="Not now")
+    assert lost_error is None
+    assert updated["nurture"]["status"] == "failed"
+    assert "no service" in updated["nurture"]["message"].lower()
+    assert called == []
+    bodies = [a["body"] for a in list_activities_for_deal(lead["id"])]
+    assert any("no service" in (b or "").lower() for b in bodies)
+
+
+def test_mark_lost_without_triggers_nurture_sends_nothing(db, monkeypatch):
+    from app.services.catalog import create_service
+    from app.services.deals import mark_lost
+    from app.services.lead_records import create_lead
+
+    _configure(monkeypatch)
+    create_service("Consulting", "consulting", nurture_list_slug="automation-interest")
+    called = []
+    monkeypatch.setattr("app.services.nurture.httpx.post", lambda *a, **k: called.append(1))
+    lead, error = create_lead(
+        company_name="Not Fit Co",
+        email="lead@notfit.example",
+        service_slug="consulting",
+    )
+    assert error is None
+    updated, lost_error = mark_lost(lead["id"], lost_reason="Not a fit")
+    assert lost_error is None
+    assert "nurture" not in updated
+    assert called == []

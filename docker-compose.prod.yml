@@ -13,9 +13,13 @@ services:
     # wins over `env_file:`. Reset it so your real .env is what the app sees.
     environment: !reset []
     # Dev bind-mounts ./app for live editing. In production the image is the
-    # source of truth; keep only the data volume.
+    # source of truth; keep the data volume and the backup volume.
     volumes: !override
       - ./data:/app/data
+      # Pre-migrate snapshots. The image root is read-only, so this mount is
+      # what makes the automatic upgrade backup writable. Entrypoint chowns
+      # it to APP_UID:APP_GID when it exists.
+      - ./backups:/app/backups
     ports: !override
       - "127.0.0.1:${CRM_PORT:-8000}:8000"
     restart: unless-stopped
@@ -55,6 +59,7 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+      - ./backups:/app/backups
     command: python -u scripts/staleness_cron.py
     # Inherits the image's HEALTHCHECK, but this container serves no HTTP.
     healthcheck:

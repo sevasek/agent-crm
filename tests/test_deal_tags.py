@@ -170,6 +170,7 @@ def test_mcp_set_replace_merge_filter_and_list_tags(client, db, monkeypatch):
 def test_ingest_merges_tags_and_omit_leaves_them(db):
     create_service("Consulting", "consulting")
     lead = {
+        "type": "opportunity",
         "name": "Jane Doe",
         "email": "jane@acme.example",
         "service_slug": "consulting",
@@ -180,6 +181,7 @@ def test_ingest_merges_tags_and_omit_leaves_them(db):
     assert get_deal(created["deal_id"])["tags"] == [CAMPAIGN, "church"]
 
     again = ingest_lead({
+        "type": "opportunity",
         "name": "Jane Doe",
         "email": "jane@acme.example",
         "service_slug": "consulting",
@@ -189,6 +191,7 @@ def test_ingest_merges_tags_and_omit_leaves_them(db):
     assert get_deal(created["deal_id"])["tags"] == [CAMPAIGN, "church", "illawarra"]
 
     omitted = ingest_lead({
+        "type": "opportunity",
         "name": "Jane Doe",
         "email": "jane@acme.example",
         "service_slug": "consulting",
@@ -202,6 +205,7 @@ def test_ingest_api_accepts_tags(client, db, monkeypatch):
     monkeypatch.setenv("CRM_API_KEY", "test-crm-api-key")
     create_service("Consulting", "consulting")
     resp = client.post("/api/v1/leads", json={"leads": [{
+        "type": "opportunity",
         "name": "Jane Doe",
         "email": "jane@acme.example",
         "service_slug": "consulting",

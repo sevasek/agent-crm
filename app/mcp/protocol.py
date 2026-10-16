@@ -8,11 +8,11 @@ so the HTTP layer can 202.
 import logging
 
 from app.mcp import (
-    INSTRUCTIONS,
     PROTOCOL_VERSION,
     SERVER_NAME,
     SERVER_VERSION,
     SUPPORTED_PROTOCOL_VERSIONS,
+    server_instructions,
 )
 from app.mcp.resources import get_prompt, list_prompt_defs, list_resource_defs, read_resource
 from app.mcp.tools import call_tool, list_tool_defs
@@ -59,7 +59,7 @@ def _initialize(params):
             "prompts": {"listChanged": False},
         },
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-        "instructions": INSTRUCTIONS,
+        "instructions": server_instructions(),
     }
 
 

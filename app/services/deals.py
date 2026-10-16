@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from app.database import get_db
@@ -12,6 +13,8 @@ from app.services.nurture import SENT as NURTURE_SENT, SKIPPED as NURTURE_SKIPPE
 from app.services.won_webhook import SENT as WON_SENT, SKIPPED as WON_SKIPPED, notify_deal_won
 from app.services import pipeline_stages
 from app.services.offers import default_offer_id, get_offer
+
+logger = logging.getLogger(__name__)
 
 # Pipeline stages themselves (new -> contacted -> qualified -> ... -> won/lost)
 # are configurable, not hardcoded — see app.services.pipeline_stages. What
@@ -77,7 +80,8 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
                  next_action: str = "", next_action_date: str = "", pain_points: str = "", goals: str = "",
                  created_note: str = "Deal created", stage: str = None, offer_id: int = None,
                  owner_key: str = "", external_ref: str = "", parent_deal_id=None,
-                 attach_default_offer: bool = True, tags=None):
+                 attach_default_offer: bool = True, tags=None,
+                 probability=None, priority=None, expected_close=""):
     if not stage or not pipeline_stages.get_stage(stage):
         stage = pipeline_stages.default_stage_key()
     if offer_id and get_offer(offer_id):
@@ -87,14 +91,32 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
     else:
         offer_id = None
     cleaned_parent, _parent_error = validate_parent_link(None, parent_deal_id, partner_id)
+    try:
+        priority_value = int(priority) if priority not in (None, "") else 0
+    except (TypeError, ValueError):
+        priority_value = 0
+    if priority_value < 0 or priority_value > 3:
+        priority_value = 0
+    try:
+        probability_value = int(probability) if probability not in (None, "") else None
+    except (TypeError, ValueError):
+        probability_value = None
+    if probability_value is not None and (probability_value < 0 or probability_value > 100):
+        probability_value = None
     with get_db() as db:
+        max_row = db.execute(
+            "SELECT MAX(board_position) AS m FROM deals WHERE stage = ?",
+            (stage,),
+        ).fetchone()
+        next_pos = (max_row["m"] if max_row["m"] is not None else -1) + 1
         db.execute("""
             INSERT INTO deals (
                 partner_id, service_id, stage, source, value_estimate,
                 pain_points, goals, next_action, next_action_date, offer_id,
-                owner_key, external_ref, parent_deal_id
+                owner_key, external_ref, parent_deal_id,
+                probability, priority, expected_close, board_position
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             partner_id, service_id, stage,
             sanitize_text(source, max_len=120) or None,
@@ -107,6 +129,10 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
             clean_owner_key(owner_key),
             sanitize_text(external_ref, max_len=200) or None,
             cleaned_parent,
+            probability_value,
+            priority_value,
+            sanitize_text(expected_close, max_len=32) or None,
+            next_pos,
         ))
         db.commit()
         deal_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -128,22 +154,22 @@ def get_deal(deal_id: int):
 
 
 def get_open_deal_for_partner_service(partner_id: int, service_id: int):
-    """Most recent non-closed deal this partner already has for this service, if any —
+    """Most recent open deal this partner already has for this service, if any —
     used by the lead-ingestion API to avoid piling up duplicate deals when an ETL job
-    re-submits the same lead on a later run."""
-    closed = pipeline_stages.closed_stage_keys()
+    re-submits the same lead on a later run.
+
+    Open is active = 1 and the stage is not is_won (ADR 0001 §2 / §5.8).
+    """
+    won = pipeline_stages.won_stage_keys()
     with get_db() as db:
-        if closed:
-            placeholders = ",".join("?" * len(closed))
-            query = f"""SELECT * FROM deals
-                WHERE partner_id = ? AND service_id = ? AND stage NOT IN ({placeholders})
-                ORDER BY created_at DESC LIMIT 1"""
-            params = (partner_id, service_id, *closed)
-        else:
-            query = """SELECT * FROM deals
-                WHERE partner_id = ? AND service_id = ?
-                ORDER BY created_at DESC LIMIT 1"""
-            params = (partner_id, service_id)
+        query = """SELECT * FROM deals
+            WHERE partner_id = ? AND service_id = ? AND active = 1"""
+        params = [partner_id, service_id]
+        if won:
+            placeholders = ",".join("?" * len(won))
+            query += f" AND stage NOT IN ({placeholders})"
+            params.extend(won)
+        query += " ORDER BY created_at DESC LIMIT 1"
         row = db.execute(query, params).fetchone()
         if not row:
             return None
@@ -154,19 +180,27 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
 
 def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
                service_id: int = None, service_slug: str = None, deal_ids=None,
-               parent_deal_id: int = None, tags=None):
+               parent_deal_id: int = None, tags=None, type: str = "opportunity",
+               include_lost: bool = False, order: str = None):
     wanted_tags, impossible = coerce_tag_filter(tags)
     if impossible:
         return []
+    record_type = type if type in ("opportunity", "lead", "all") else "opportunity"
+    # LEFT JOIN so a lead with a null partner/service is not dropped (§5.8).
     query = """
         SELECT deals.*, partners.name AS partner_name, services.name AS service_name,
                services.slug AS service_slug
         FROM deals
-        JOIN partners ON partners.id = deals.partner_id
-        JOIN services ON services.id = deals.service_id
+        LEFT JOIN partners ON partners.id = deals.partner_id
+        LEFT JOIN services ON services.id = deals.service_id
         WHERE 1=1
     """
     params = []
+    if record_type != "all":
+        query += " AND deals.type = ?"
+        params.append(record_type)
+    if not include_lost:
+        query += " AND deals.active = 1"
     for tag in wanted_tags:
         query += (
             " AND EXISTS (SELECT 1 FROM deal_tags"
@@ -201,7 +235,10 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
             params.extend(ids)
         else:
             return []
-    query += " ORDER BY deals.updated_at DESC"
+    if order == "board":
+        query += " ORDER BY deals.board_position ASC, deals.id ASC"
+    else:
+        query += " ORDER BY deals.updated_at DESC"
     with get_db() as db:
         rows = db.execute(query, params).fetchall()
         deals = [dict(r) for r in rows]
@@ -266,6 +303,7 @@ def update_deal_fields(deal_id: int, **fields):
     allowed = {
         "source", "value_estimate", "pain_points", "goals", "next_action", "next_action_date",
         "offer_id", "owner_key", "external_ref", "parent_deal_id",
+        "probability", "priority", "expected_close",
     }
     updates = {k: v for k, v in fields.items() if k in allowed}
     if "source" in updates:
@@ -290,6 +328,24 @@ def update_deal_fields(deal_id: int, **fields):
         if error:
             return False
         updates["parent_deal_id"] = cleaned
+    if "probability" in updates:
+        try:
+            value = int(updates["probability"]) if updates["probability"] not in (None, "") else None
+        except (TypeError, ValueError):
+            value = None
+        if value is not None and (value < 0 or value > 100):
+            value = None
+        updates["probability"] = value
+    if "priority" in updates:
+        try:
+            value = int(updates["priority"]) if updates["priority"] not in (None, "") else 0
+        except (TypeError, ValueError):
+            value = 0
+        if value < 0 or value > 3:
+            value = 0
+        updates["priority"] = value
+    if "expected_close" in updates:
+        updates["expected_close"] = sanitize_text(updates["expected_close"] or "", max_len=32) or None
     if not updates:
         return False
     updates["updated_at"] = datetime.utcnow().isoformat()
@@ -301,11 +357,155 @@ def update_deal_fields(deal_id: int, **fields):
         return cursor.rowcount > 0
 
 
-def set_deal_stage(deal_id: int, new_stage: str) -> bool:
+def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
+    """Archive a lead or opportunity. Returns (deal, None) or (None, error)."""
+    from app.services.lost_reasons import resolve_lost_reason
+
+    deal = get_deal(deal_id)
+    if not deal:
+        return None, "not_found"
+    if not deal.get("active", 1):
+        return None, "already_lost"
+    reason = resolve_lost_reason(lost_reason_id, lost_reason)
+    if not reason:
+        return None, "invalid_lost_reason"
+    now = datetime.utcnow().isoformat()
+    note_text = sanitize_text(note or "", max_len=2000, allow_newlines=True) or None
+    with get_db() as db:
+        db.execute(
+            """UPDATE deals
+               SET active = 0, lost_reason_id = ?, lost_note = ?,
+                   closed_at = ?, updated_at = ?
+               WHERE id = ?""",
+            (reason["id"], note_text, now, now, deal_id),
+        )
+        db.commit()
+    log_activity(
+        deal.get("partner_id"),
+        "system",
+        f"Marked lost: {reason['name']}" + (f" — {note_text}" if note_text else ""),
+        deal_id=deal_id,
+    )
+    nurture_result = None
+    if reason.get("triggers_nurture"):
+        from app.services.catalog import get_service
+        from app.services.nurture import SENT as NURTURE_SENT, SKIPPED as NURTURE_SKIPPED
+        from app.services.nurture import enroll_partner_in_nurture
+        partner = get_partner(deal["partner_id"]) if deal.get("partner_id") else None
+        service = get_service(deal["service_id"]) if deal.get("service_id") else None
+        if not service:
+            message = "Nurture enrollment failed: no service on this record"
+            log_activity(deal.get("partner_id"), "system", message, deal_id=deal_id)
+            nurture_result = {"status": "failed", "message": message}
+        else:
+            status, message = enroll_partner_in_nurture(
+                partner, service, deal_id=deal_id, deal=deal, lost_reason=reason["name"],
+            )
+            if status != NURTURE_SKIPPED:
+                log_activity(
+                    deal.get("partner_id"),
+                    "system",
+                    f"Nurture enrollment {'succeeded' if status == NURTURE_SENT else 'failed'}: {message}",
+                    deal_id=deal_id,
+                )
+            nurture_result = {"status": status, "message": message}
+    updated = get_deal(deal_id)
+    if nurture_result:
+        updated["nurture"] = nurture_result
+    return updated, None
+
+
+def restore_deal(deal_id: int):
+    """Re-open a lost record. Merged records cannot be restored."""
+    deal = get_deal(deal_id)
+    if not deal:
+        return None, "not_found"
+    if deal.get("active", 1):
+        return None, "not_lost"
+    if deal.get("merged_into_id"):
+        return None, "merged"
+    stage = deal.get("stage")
+    if deal.get("type") == "opportunity":
+        meta = pipeline_stages.get_stage(stage)
+        if meta and meta["is_lost"]:
+            stage = pipeline_stages.default_stage_key()
+    now = datetime.utcnow().isoformat()
+    with get_db() as db:
+        db.execute(
+            """UPDATE deals
+               SET active = 1, lost_reason_id = NULL, lost_note = NULL,
+                   closed_at = NULL, stage = ?, updated_at = ?
+               WHERE id = ?""",
+            (stage, now, deal_id),
+        )
+        db.commit()
+    log_activity(deal.get("partner_id"), "system", "Restored from lost", deal_id=deal_id)
+    return get_deal(deal_id), None
+
+
+def _coerce_board_position(position):
+    """Optional 0-based index from a form field or API. None means 'append'."""
+    if position is None or isinstance(position, bool):
+        return None
+    if isinstance(position, str) and not position.strip():
+        return None
+    try:
+        return int(position)
+    except (TypeError, ValueError):
+        return None
+
+
+def _apply_board_order(db, deal_id: int, stage: str, position=None, active=1) -> None:
+    """Rewrite board_position for the cards visible on the board in `stage`.
+
+    The board renders one visibility class per view — open opportunities by
+    default, lost ones behind `?lost=1`, never leads — so only that class is
+    renumbered. Hidden rows sharing the stage must not shift the order the
+    user actually sees, otherwise a drop lands a slot off.
+    """
+    rows = db.execute(
+        "SELECT id FROM deals WHERE stage = ? AND id != ? "
+        "AND type = 'opportunity' AND active = ? "
+        "ORDER BY board_position ASC, id ASC",
+        (stage, deal_id, active),
+    ).fetchall()
+    ids = [row[0] for row in rows]
+    if position is None:
+        ids.append(deal_id)
+    else:
+        pos = max(0, min(int(position), len(ids)))
+        ids.insert(pos, deal_id)
+    for index, sibling_id in enumerate(ids):
+        db.execute(
+            "UPDATE deals SET board_position = ? WHERE id = ?",
+            (index, sibling_id),
+        )
+
+
+def _compact_board_order(db, stage: str, active=1) -> None:
+    rows = db.execute(
+        "SELECT id FROM deals WHERE stage = ? "
+        "AND type = 'opportunity' AND active = ? "
+        "ORDER BY board_position ASC, id ASC",
+        (stage, active),
+    ).fetchall()
+    for index, row in enumerate(rows):
+        db.execute(
+            "UPDATE deals SET board_position = ? WHERE id = ?",
+            (index, row[0]),
+        )
+
+
+def set_deal_stage(deal_id: int, new_stage: str, position=None) -> bool:
     """Move a deal to a new stage. Fires nurture enrollment when the target
     stage has `triggers_nurture` set (not on every save), fires the deal-won
     webhook when entering `is_won` from a non-won stage, sets `closed_at`
-    when it has `is_won` or `is_lost` set, and logs the transition."""
+    when it has `is_won` or `is_lost` set, and logs the transition.
+
+    `position` is an optional 0-based index in the destination column. A
+    same-stage call with a position only reorders the board (no activity,
+    no automations). A stage change without a position appends the card.
+    """
     stage_meta = pipeline_stages.get_stage(new_stage)
     if not stage_meta:
         return False
@@ -314,19 +514,40 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
     if not deal:
         return False
     old_stage = deal["stage"]
-    if old_stage == new_stage:
+    parsed_position = _coerce_board_position(position)
+    stage_changed = old_stage != new_stage
+    if not stage_changed and parsed_position is None:
         return True
 
     now = datetime.utcnow().isoformat()
-    closed_at = now if (stage_meta["is_won"] or stage_meta["is_lost"]) else None
-    with get_db() as db:
-        db.execute(
-            "UPDATE deals SET stage = ?, updated_at = ?, closed_at = ? WHERE id = ?",
-            (new_stage, now, closed_at, deal_id),
-        )
-        db.commit()
+    if stage_changed:
+        closed_at = now if (stage_meta["is_won"] or stage_meta["is_lost"]) else None
+        with get_db() as db:
+            db.execute(
+                "UPDATE deals SET stage = ?, updated_at = ?, closed_at = ? WHERE id = ?",
+                (new_stage, now, closed_at, deal_id),
+            )
+            _apply_board_order(
+                db, deal_id, new_stage, parsed_position, active=deal.get("active", 1),
+            )
+            _compact_board_order(db, old_stage, active=deal.get("active", 1))
+            db.commit()
+    else:
+        with get_db() as db:
+            _apply_board_order(
+                db, deal_id, new_stage, parsed_position, active=deal.get("active", 1),
+            )
+            db.commit()
+        return True
 
     log_activity(deal["partner_id"], "system", stage_changed_body(old_stage, new_stage), deal_id=deal_id)
+
+    if stage_meta["is_lost"]:
+        marked, lost_error = mark_lost(deal_id, lost_reason="Lost stage (migrated)")
+        if lost_error and lost_error not in ("already_lost",):
+            logger.warning("is_lost shim failed for deal %s: %s", deal_id, lost_error)
+        if marked:
+            deal = marked
 
     if stage_meta["triggers_nurture"]:
         partner = get_partner(deal["partner_id"])
@@ -356,6 +577,14 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
                 f"Deal-won webhook {'succeeded' if status == WON_SENT else 'failed'}: {message}",
                 deal_id=deal_id,
             )
+
+    # After the stage is committed, same as nurture and the won webhook.
+    # No automations are seeded, so this is a no-op until an operator adds one.
+    try:
+        from app.services.stage_automations import apply_stage_automations
+        apply_stage_automations(deal, old_stage, new_stage)
+    except Exception:
+        logger.exception("Stage automations failed for deal %s", deal_id)
 
     return True
 
@@ -390,6 +619,12 @@ def record_call_outcome(deal_id: int, outcome: str, note: str = "") -> bool:
     if note:
         body += f" — {note}"
     log_activity(deal["partner_id"], "call", body, deal_id=deal_id)
+
+    if outcome == "not_interested":
+        marked, lost_error = mark_lost(deal_id, lost_reason="Not a fit", note=note)
+        if lost_error and lost_error not in ("already_lost",):
+            logger.warning("not_interested mark_lost failed for deal %s: %s", deal_id, lost_error)
+        return True
 
     if target_stage and target_stage != deal["stage"]:
         set_deal_stage(deal_id, target_stage)

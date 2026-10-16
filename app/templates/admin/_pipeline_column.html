@@ -1,8 +1,10 @@
-<div id="pipeline-col-{{ col.stage.key }}" class="pipeline-column"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+<div id="pipeline-col-{{ col.stage.key }}" class="pipeline-column" data-stage="{{ col.stage.key }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
     <h2>{{ col.stage.label }} <span class="muted">({{ col.deals|length }})</span></h2>
+    <div class="pipeline-card-list">
     {% for d in col.deals %}
-    <div class="pipeline-card">
-        <a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>
+    <div class="pipeline-card{% if not d.active %} pipeline-card-lost{% endif %}" data-deal-id="{{ d.id }}">
+        {% if d.partner_id %}<a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">{{ d.company_name or d.name or ("Record #" ~ d.id) }}</span>{% endif %}
+        {% set record = d %}{% include "admin/_record_badges.html" %}
         <div class="muted">{{ d.service_name }}</div>
         {% if d.tags %}
         <div class="tag-filters">
@@ -17,10 +19,12 @@
         {% if d.value_estimate %}<div class="muted">${{ "%.0f"|format(d.value_estimate) }}</div>{% endif %}
         {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
         {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
+        {% if d.active %}
         <form method="post" action="/deals/{{ d.id }}/stage" class="stage-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="next" value="pipeline">
             {% if current_tag %}<input type="hidden" name="tag" value="{{ current_tag }}">{% endif %}
+            {% if current_lost %}<input type="hidden" name="lost" value="1">{% endif %}
             <select name="stage"
                     hx-post="/deals/{{ d.id }}/stage"
                     hx-include="closest form"
@@ -32,8 +36,9 @@
                 {% endfor %}
             </select>
         </form>
+        {% endif %}
     </div>
-    {% else %}
-    <p class="muted">No deals.</p>
     {% endfor %}
+    </div>
+    {% if not col.deals %}<p class="muted pipeline-empty">No deals.</p>{% endif %}
 </div>

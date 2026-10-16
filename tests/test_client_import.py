@@ -3,9 +3,9 @@ from pathlib import Path
 from app.services.catalog import create_service, get_service_by_slug
 from app.services.partners import (
     create_partner, get_company_by_name, get_partner, get_partner_by_email,
-    get_children, get_person_by_name,
+    get_children, get_person_by_name, list_partners,
 )
-from app.services.deals import list_deals
+from app.services.deals import get_deal, list_deals
 from app.services.activities import list_activities_for_partner
 from app.services.client_import import parse_client_markdown, parse_client_file, import_client, import_paths
 
@@ -272,6 +272,33 @@ company_name: Alias Co
 """)
     assert record["name"] == "Canonical Name"
     assert record["company"] == "Canonical Co"
+
+
+def test_import_type_lead_does_not_create_partners(db):
+    create_service("Consulting", "consulting")
+    before = len(list_partners())
+    result = import_client(parse_client_file(ACME), record_type="lead")
+    assert result["status"] == "ok"
+    assert result["deal"] == "created"
+    assert result["type"] == "lead"
+    assert result["company_id"] is None
+    assert len(list_partners()) == before
+    lead = get_deal(result["deal_id"])
+    assert lead["type"] == "lead"
+    assert lead["company_name"] == "Acme Childcare"
+    assert lead["contact_name"] == "Jane Doe"
+    again = import_client(parse_client_file(ACME), record_type="lead")
+    assert again["deal"] == "duplicate_open_lead"
+    assert again["deal_id"] == result["deal_id"]
+    assert len(list_partners()) == before
+
+
+def test_import_default_still_creates_partners(db):
+    create_service("Consulting", "consulting")
+    result = import_client(parse_client_file(ACME))
+    assert result["company"] == "created"
+    assert result["person"] == "created"
+    assert get_deal(result["deal_id"])["type"] == "opportunity"
 
 
 def test_import_paths_continues_after_unreadable_file(db, tmp_path):

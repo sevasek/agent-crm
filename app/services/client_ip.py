@@ -220,6 +220,54 @@ def _xff_client_ip(xff: str) -> str | None:
     return None
 
 
+def _parse_ip_allowlist(raw: str) -> tuple[set[str], list]:
+    """IPs and CIDRs only. Hostnames are ignored so a typo cannot match a peer name."""
+    literals: set[str] = set()
+    networks: list[ipaddress._BaseNetwork] = []
+    for part in (raw or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "/" in part:
+            try:
+                networks.append(ipaddress.ip_network(part, strict=False))
+            except ValueError:
+                logger.warning("IP allowlist entry is not a valid CIDR: %s", part)
+            continue
+        ip = _canonical_ip(part)
+        if ip:
+            literals.add(ip)
+            continue
+        logger.warning("IP allowlist entry is not an IP or CIDR: %s", part)
+    return literals, networks
+
+
+def ip_allowlist_permits(client_ip: str, env_name: str) -> bool:
+    """True when `env_name` is unset/empty, or `client_ip` is on that list.
+
+    A non-empty value that parses to nothing (a typo) fails closed.
+    """
+    raw = (os.getenv(env_name) or "").strip()
+    if not raw:
+        return True
+    literals, networks = _parse_ip_allowlist(raw)
+    if not literals and not networks:
+        return False
+    token = _token(client_ip)
+    if token in literals:
+        return True
+    ip = _canonical_ip(client_ip)
+    if ip is None:
+        return False
+    if ip in literals:
+        return True
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return any(addr in network for network in networks)
+
+
 def get_client_ip(request: Request) -> str:
     """Immediate peer, or Traefik's forwarded client if that peer is trusted.
 

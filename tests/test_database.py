@@ -17,6 +17,9 @@ from app.database import (
     migrate_004,
     migrate_005,
     migrate_006,
+    migrate_007,
+    migrate_008,
+    migrate_009,
     row_to_dict,
 )
 
@@ -89,14 +92,17 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 6
-    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6}
+    assert SCHEMA_VERSION == 9
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
     assert MIGRATIONS[4] is migrate_004
     assert MIGRATIONS[5] is migrate_005
     assert MIGRATIONS[6] is migrate_006
+    assert MIGRATIONS[7] is migrate_007
+    assert MIGRATIONS[8] is migrate_008
+    assert MIGRATIONS[9] is migrate_009
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -269,6 +275,75 @@ def test_init_db_migrates_v4_adds_install_id(tmp_path, monkeypatch):
         assert len(row["install_id"]) == 64
     pre = list((tmp_path / "backups").glob("pre-migrate-v4-to-*.db"))
     assert pre, "expected an online backup before migrating a live v4 DB"
+
+
+def test_init_db_migrates_v6_adds_empty_stage_automations(tmp_path, monkeypatch):
+    """A database already at v6 gains the tables and no seeded rows."""
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        migrate_001(db)
+        migrate_002(db)
+        migrate_003(db)
+        migrate_004(db)
+        migrate_005(db)
+        migrate_006(db)
+        db.execute("DROP TABLE IF EXISTS stage_automation_actions")
+        db.execute("DROP TABLE IF EXISTS stage_automations")
+        db.execute("PRAGMA user_version = 6")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        assert conn.execute("SELECT COUNT(*) FROM stage_automations").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM stage_automation_actions").fetchone()[0] == 0
+    pre = list((tmp_path / "backups").glob("pre-migrate-v6-to-*.db"))
+    assert pre, "expected an online backup before migrating a live v6 DB"
+
+
+def test_init_db_migrates_v8_adds_board_position(tmp_path, monkeypatch):
+    """A database already at v8 (lead-model rebuild) gains board_position at v9."""
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        migrate_001(db)
+        migrate_002(db)
+        migrate_003(db)
+        migrate_004(db)
+        migrate_005(db)
+        migrate_006(db)
+        migrate_007(db)
+        migrate_008(db)
+        db.execute(
+            "INSERT INTO partners (name) VALUES (?)",
+            ("Legacy Co",),
+        )
+        db.execute(
+            "INSERT INTO services (name, slug) VALUES (?, ?)",
+            ("Consulting", "consulting"),
+        )
+        db.execute(
+            """INSERT INTO deals (partner_id, service_id, stage, updated_at)
+               VALUES (1, 1, 'new', '2026-10-01'), (1, 1, 'new', '2026-10-10')"""
+        )
+        db.execute("PRAGMA user_version = 8")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(deals)")}
+        assert "board_position" in cols
+        rows = conn.execute(
+            "SELECT id, board_position FROM deals ORDER BY board_position, id"
+        ).fetchall()
+        assert [row["id"] for row in rows] == [2, 1]
+        assert [row["board_position"] for row in rows] == [0, 1]
+    pre = list((tmp_path / "backups").glob("pre-migrate-v8-to-*.db"))
+    assert pre, "expected an online backup before migrating a live v8 DB"
 
 
 def test_init_db_skips_backup_on_fresh_empty_db(tmp_path, monkeypatch):

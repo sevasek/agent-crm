@@ -148,9 +148,36 @@ def delete_criterion(criterion_id):
 
 def build_matchable_row(partner: dict, deal: dict) -> dict:
     """Flatten the partner + deal fields ICP criteria can reference into one
-    dict, keyed by MATCHABLE_FIELDS."""
+    dict, keyed by MATCHABLE_FIELDS.
+
+    A lead scores from its own columns only (ADR §5.7 / Q12). A linked
+    partner never fills empty lead fields (D10).
+    """
     partner = partner or {}
     deal = deal or {}
+    if deal.get("type") == "lead":
+        is_company = bool(
+            (deal.get("company_name") or "").strip()
+            and not (deal.get("contact_name") or "").strip()
+        )
+        social = (
+            deal.get("linkedin_url") or deal.get("x_url") or deal.get("instagram_url")
+            or deal.get("facebook_url") or deal.get("youtube_url")
+        )
+        return {
+            "industry": deal.get("industry"),
+            "team_size": deal.get("team_size"),
+            "is_company": is_company,
+            "preferred_channel": deal.get("preferred_channel"),
+            "email": deal.get("email"),
+            "phone": deal.get("phone"),
+            "website": deal.get("website"),
+            "social_url": social,
+            "source": deal.get("source"),
+            "value_estimate": deal.get("value_estimate"),
+            "pain_points": deal.get("pain_points"),
+            "goals": deal.get("goals"),
+        }
     return {
         "industry": partner.get("industry"),
         "team_size": partner.get("team_size"),

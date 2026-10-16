@@ -108,15 +108,15 @@ assert_unique_secret_key(
 write_env_file(os.environ["INSTANCE_ENV_FILE"], text)
 '
 chmod 600 "$ENV_FILE"
-mkdir -p "$DATA_DIR"
-chmod 700 "$INSTANCE_DIR" "$DATA_DIR" 2>/dev/null || true
+mkdir -p "$DATA_DIR" "$INSTANCE_DIR/backups"
+chmod 700 "$INSTANCE_DIR" "$DATA_DIR" "$INSTANCE_DIR/backups" 2>/dev/null || true
 # Own the bind-mount as APP_UID *before* the container starts. Production
 # compose drops CAP_DAC_OVERRIDE, so the entrypoint cannot chown a 0700
 # directory it does not already own (issue 70). The same ids are written
 # into the instance .env so the process drops to the owner of the files.
 app_uid="${APP_UID:-1000}"
 app_gid="${APP_GID:-1000}"
-if ! chown "${app_uid}:${app_gid}" "$DATA_DIR"; then
+if ! chown "${app_uid}:${app_gid}" "$DATA_DIR" "$INSTANCE_DIR/backups"; then
   echo "ERROR: could not chown $DATA_DIR to ${app_uid}:${app_gid}." >&2
   echo "Run this script as root, or export APP_UID and APP_GID to your own ids" >&2
   echo "(they are written into the instance .env and must match this directory)." >&2

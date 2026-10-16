@@ -47,5 +47,14 @@ INSTRUCTIONS = (
     "Change or deactivate a service with update_service. "
     "Debug task webhook delivery with get_delegated_task "
     "(notified_at, last_attempt_at, last_error). "
-    "If a tool returns ok=false, fix the arguments or search again — do not guess."
+    "If a tool returns ok=false, fix the arguments or search again — do not guess. "
+    "Stage automations are operator configuration, empty until someone adds "
+    "them: list_stage_automations, create_stage_automation, "
+    "update_stage_automation, delete_stage_automation. Enabled ones run when "
+    "a deal enters their stage."
 )
+
+
+def server_instructions() -> str:
+    """Initialize instructions. Stage automations are data, not a built-in workflow."""
+    return INSTRUCTIONS

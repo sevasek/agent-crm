@@ -7,12 +7,16 @@ def _headers(key="test-crm-api-key"):
     return {"X-API-Key": key}
 
 
+def _opp(lead):
+    return {**lead, "type": "opportunity"}
+
+
 def test_new_lead_creates_partner_and_deal(client, monkeypatch):
     monkeypatch.setenv("CRM_API_KEY", "test-crm-api-key")
     create_service("Consulting", "consulting")
 
     resp = client.post("/api/v1/leads", json={
-        "leads": [{"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting"}]
+        "leads": [_opp({"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting"})]
     }, headers=_headers())
 
     assert resp.status_code == 200
@@ -33,10 +37,10 @@ def test_company_name_creates_parent_company(client, monkeypatch):
     create_service("Consulting", "consulting")
 
     client.post("/api/v1/leads", json={
-        "leads": [{
+        "leads": [_opp({
             "name": "Jane Doe", "email": "jane@acme.example",
             "company_name": "Acme Childcare", "service_slug": "consulting",
-        }]
+        })]
     }, headers=_headers())
 
     partner = get_partner_by_email("jane@acme.example")
@@ -46,7 +50,7 @@ def test_company_name_creates_parent_company(client, monkeypatch):
 def test_resubmitting_same_lead_is_skipped_as_duplicate(client, monkeypatch):
     monkeypatch.setenv("CRM_API_KEY", "test-crm-api-key")
     create_service("Consulting", "consulting")
-    lead = {"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting"}
+    lead = _opp({"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting"})
 
     r1 = client.post("/api/v1/leads", json={"leads": [lead]}, headers=_headers())
     r2 = client.post("/api/v1/leads", json={"leads": [lead]}, headers=_headers())
@@ -64,10 +68,10 @@ def test_same_email_different_service_creates_second_deal(client, monkeypatch):
     create_service("Website Rebuild", "website-rebuild")
 
     client.post("/api/v1/leads", json={"leads": [
-        {"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting"}
+        _opp({"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting"})
     ]}, headers=_headers())
     r2 = client.post("/api/v1/leads", json={"leads": [
-        {"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "website-rebuild"}
+        _opp({"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "website-rebuild"})
     ]}, headers=_headers())
 
     assert r2.json()["results"][0]["status"] == "existing_partner_new_deal"
@@ -80,7 +84,7 @@ def test_missing_name_is_invalid(client, monkeypatch):
     create_service("Consulting", "consulting")
 
     resp = client.post("/api/v1/leads", json={
-        "leads": [{"email": "nobody@example.com", "service_slug": "consulting"}]
+        "leads": [_opp({"email": "nobody@example.com", "service_slug": "consulting"})]
     }, headers=_headers())
 
     assert resp.json()["results"][0]["status"] == "invalid"
@@ -90,7 +94,7 @@ def test_unknown_service_slug_is_invalid_service(client, monkeypatch):
     monkeypatch.setenv("CRM_API_KEY", "test-crm-api-key")
 
     resp = client.post("/api/v1/leads", json={
-        "leads": [{"name": "Jane Doe", "service_slug": "does-not-exist"}]
+        "leads": [_opp({"name": "Jane Doe", "service_slug": "does-not-exist"})]
     }, headers=_headers())
 
     assert resp.json()["results"][0]["status"] == "invalid_service"

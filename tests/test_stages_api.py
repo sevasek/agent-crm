@@ -38,6 +38,22 @@ def test_get_single_stage(client, db, monkeypatch):
     resp = client.get("/api/v1/stages/won", headers=_headers())
     assert resp.status_code == 200
     assert resp.json()["stage"]["is_won"] is True
+    assert "deprecated_fields" not in resp.json()["stage"]
+
+
+def test_get_lost_stage_marks_is_lost_deprecated(client, db, monkeypatch):
+    _set_key(monkeypatch)
+    resp = client.get("/api/v1/stages/lost", headers=_headers())
+    assert resp.status_code == 200
+    stage = resp.json()["stage"]
+    assert stage["is_lost"] is True
+    assert stage["deprecated_fields"] == ["is_lost"]
+
+    listed = client.get("/api/v1/stages", headers=_headers()).json()["stages"]
+    lost = next(s for s in listed if s["key"] == "lost")
+    assert lost["deprecated_fields"] == ["is_lost"]
+    new = next(s for s in listed if s["key"] == "new")
+    assert "deprecated_fields" not in new
 
 
 def test_get_missing_stage_404(client, db, monkeypatch):
@@ -78,6 +94,15 @@ def test_create_stage_missing_fields_422(client, db, monkeypatch):
     resp = client.post("/api/v1/stages", json={"key": "demo"}, headers=_headers())
     assert resp.status_code == 422
     assert resp.json()["error"] == "key_and_label_required"
+
+
+def test_create_stage_is_lost_422(client, db, monkeypatch):
+    _set_key(monkeypatch)
+    resp = client.post("/api/v1/stages", json={
+        "key": "dead", "label": "Dead", "is_lost": True,
+    }, headers=_headers())
+    assert resp.status_code == 422
+    assert resp.json()["error"] == "invalid_stage_role"
 
 
 def test_create_stage_won_and_lost_conflict_422(client, db, monkeypatch):
@@ -146,6 +171,13 @@ def test_update_stage_label_and_roles(client, db, monkeypatch):
     assert stage["label"] == "Demo booked"
     assert stage["is_qualified_pool"] is True
     assert stage["key"] == "proposal"
+
+
+def test_update_stage_is_lost_zero_to_one_422(client, db, monkeypatch):
+    _set_key(monkeypatch)
+    resp = client.patch("/api/v1/stages/proposal", json={"is_lost": True}, headers=_headers())
+    assert resp.status_code == 422
+    assert resp.json()["error"] == "invalid_stage_role"
 
 
 def test_update_stage_creating_won_lost_conflict_422(client, db, monkeypatch):

@@ -20,8 +20,9 @@ SKIPPED = "skipped"
 FAILED = "failed"
 
 
-def enroll_partner_in_nurture(partner: dict, service: dict, deal_id: int = None) -> tuple[str, str]:
-    """POST the partner to NURTURE_WEBHOOK_URL.
+def enroll_partner_in_nurture(partner: dict, service: dict, deal_id: int = None,
+                              deal: dict = None, lost_reason: str = None) -> tuple[str, str]:
+    """POST the partner (or lead contact) to NURTURE_WEBHOOK_URL.
 
     Returns ``(SENT, message)`` on 2xx, ``(SKIPPED, message)`` when the URL
     is unset (callers must not write a timeline activity), or
@@ -33,6 +34,16 @@ def enroll_partner_in_nurture(partner: dict, service: dict, deal_id: int = None)
     """
     url = (os.getenv("NURTURE_WEBHOOK_URL") or "").strip()
     list_slug = (service or {}).get("nurture_list_slug")
+    deal = deal or {}
+    if not partner:
+        partner = {
+            "id": None,
+            "name": (
+                deal.get("contact_name") or deal.get("name")
+                or deal.get("company_name") or ""
+            ),
+            "email": deal.get("email"),
+        }
     email = (partner or {}).get("email")
 
     if not list_slug:
@@ -57,6 +68,9 @@ def enroll_partner_in_nurture(partner: dict, service: dict, deal_id: int = None)
         "partner_id": partner.get("id"),
         "deal_id": deal_id,
     }
+    if deal.get("type") or lost_reason:
+        body["type"] = deal.get("type")
+        body["lost_reason"] = lost_reason
     try:
         response = httpx.post(url, json=body, headers=headers, timeout=10.0, follow_redirects=False)
         response.raise_for_status()

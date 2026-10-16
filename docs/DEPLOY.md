@@ -206,8 +206,8 @@ uid and mode `0700` will not start under the prod capability set. Set the
 two variables to that uid and gid.
 
 The prod file bind-mounts `./backups` at `/app/backups` (the entrypoint
-chowns it when the directory exists) so a schema upgrade can write its
-pre-migrate snapshot on the read-only root filesystem. The app container
+chowns it when the directory exists) so `scripts/backup.sh` can write on
+the read-only root filesystem. The app container
 is capped at 256 MB (`mem_limit: 256m`).
 
 ## Offboarding a customer

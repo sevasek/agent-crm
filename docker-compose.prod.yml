@@ -16,8 +16,8 @@ services:
     # source of truth; keep the data volume and the backup volume.
     volumes: !override
       - ./data:/app/data
-      # Pre-migrate snapshots. The image root is read-only, so this mount is
-      # what makes the automatic upgrade backup writable. Entrypoint chowns
+      # scripts/backup.sh writes here. The image root is read-only, so this
+      # mount is what makes that directory writable. Entrypoint chowns
       # it to APP_UID:APP_GID when it exists.
       - ./backups:/app/backups
     ports: !override

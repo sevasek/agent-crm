@@ -397,9 +397,7 @@ implement" note in this file.
    Same-stage drops only rewrite `board_position` (no activity, no
    automations). A dropdown change without `position` appends.
 
-4. Schema v9 (`migrate_009`) adds `deals.board_position INTEGER` after
-   the lead-model rebuild (`migrate_008`). Additive only — does not
-   rebuild `deals`.
+4. `deals.board_position` stores card order within a stage.
 
 **Acceptance for Phase 4 (met with #46):** drag moves a card and both
 columns refresh via OOB swap; reorder within a column persists;

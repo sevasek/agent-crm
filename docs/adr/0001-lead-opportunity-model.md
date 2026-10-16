@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | **Accepted** (2026-10-11). Q1–Q13 follow the recommended answers in section 10: Q1 default ingest type = lead; Q2 no leads in the call queue; Q3 no minimum fit score for conversion; Q4 no separate lead status; Q5 renewed interest after a loss is a new lead or opportunity (restore is for mistakes); Q6 no REST API for lost reasons; Q7 no structured qualification-evidence record; Q8 `create_lead` never refuses on duplicates; Q9 ingest auto-merges on strong keys only; Q10 refuse setting `is_lost` 0→1; Q11 backfill `closed_at` from `updated_at`; Q12 leads score from their own columns only; Q13 `get_lead` returns `last_researched_at` and `research_note_count`. |
+| Status | **Accepted** (2026-10-11). Q1–Q13 follow the recommended answers in section 10: Q1 default ingest type = lead; Q2 no leads in the call queue; Q3 no minimum fit score for conversion; Q4 no separate lead status; Q5 renewed interest after a loss is a new lead or opportunity (restore is for mistakes); Q6 no REST API for lost reasons; Q7 no structured qualification-evidence record; Q8 `create_lead` never refuses on duplicates; Q9 ingest auto-merges on strong keys only; Q10 refuse setting `is_lost` 0→1; Q12 leads score from their own columns only; Q13 `get_lead` returns `last_researched_at` and `research_note_count`. |
 | Date | 2026-10-05 |
-| Schema impact | Schema version 7 to 8 (`migrate_008`; `migrate_007` was used by stage automations). Three tables are rebuilt. This breaks the "additive-only" rule. Section 6 gives the exception. |
+| Schema impact | Schema version 7 to 8 (`migrate_008`; `migrate_007` was used by stage automations). Three tables are rebuilt as a reviewed exception to the "additive-only" rule. |
 | API impact | Breaking changes to `POST /api/v1/leads` and MCP `ingest_leads`. New MCP tools. Section 7 and section 8 give the list. |
 | Review use case | An agent does independent lead-generation research. The agent decides when a lead is worth pursuit as an opportunity. Section 3 gives the walkthrough. |
 
@@ -257,13 +257,13 @@ marks the other lead as merged (lost, with `merged_into_id`).
 | D3 | A lead keeps its own contact columns on `deals`. `deals.partner_id` becomes nullable. | Keep the partner requirement for leads. Rejected: unverified data would continue to go into `partners`. This is the main problem in 1.1. |
 | D4 | `deals.service_id` becomes nullable. A lead can have no service. Conversion requires a service. | Keep the requirement. Rejected: a research agent often does not know the service when it creates the lead. |
 | D5 | `activities.partner_id` and `delegated_tasks.partner_id` become nullable. A row must have a `partner_id` or a `deal_id`, or both. The service layer checks this rule. | Keep the requirement. Rejected: research notes and tasks on a lead without a partner would be impossible. |
-| D6 | "Lost" is `active = 0` plus `lost_reason_id`, for leads and opportunities. The `is_lost` stage role is deprecated (section 6.6). | Keep a lost stage. Rejected: leads do not use stages, so a lead could not be lost. |
+| D6 | "Lost" is `active = 0` plus `lost_reason_id`, for leads and opportunities. The `is_lost` stage role is deprecated (section 6). | Keep a lost stage. Rejected: leads do not use stages, so a lead could not be lost. |
 | D7 | Lost reasons are operator configuration in a new table `lost_reasons`. A lost reason can have `triggers_nurture = 1`. | Free-text reason only. Rejected: reasons could not be counted or configured. |
 | D8 | Merge does not delete. The source record becomes lost with `merged_into_id`. | Delete the source (Odoo behaviour). Rejected: the MCP interface must not delete records (`docs/MCP.md`). |
 | D9 | The CRM calculates conversion readiness and the fit score. The CRM does not enforce a fit threshold. Conversion has hard requirements only for identity and service (section 5.4). | A configurable minimum fit score for conversion. Rejected for now: `docs/SCOPE.md` puts judgement in the agent. See Q3. |
 | D10 | For an opportunity, the partner is the source of truth for contact data. The contact columns on the deal record stay as a historical snapshot of the lead. | Synchronize both directions (Odoo behaviour). Rejected: two sources of truth for one value. |
 | D11 | Existing MCP tools and REST endpoints keep their names. Tools that read deal records default to `type = 'opportunity'`. | Rename to `*_opportunity`. Rejected: this breaks every connected agent with no benefit. |
-| D12 | All existing deals become opportunities in the migration. No existing deal becomes a lead automatically. An optional script can change early-stage opportunities to leads (section 6.5). | Automatic change of `new` and `contacted` deals to leads. Rejected: stage meaning is operator configuration. The migration must not guess it. |
+| D12 | All existing deals become opportunities in the migration. No existing deal becomes a lead automatically. An optional script can change early-stage opportunities to leads. | Automatic change of `new` and `contacted` deals to leads. Rejected: stage meaning is operator configuration. The migration must not guess it. |
 | D13 | A deal record can be created as an opportunity directly (`create_deal`, or ingest with `type = "opportunity"`). This skips the lead step. | Require every record to start as a lead. Rejected: referrals and inbound requests are often qualified on arrival. Odoo also permits this. |
 | D14 | Leads do not use pipeline stages. A lead keeps `stage` (the column is `NOT NULL`), but the value has no meaning while `type = 'lead'`. Stage tools reject leads. | A separate lead status column (New, Working, ...). Rejected: Odoo does not use one. `active`, `next_action_date` and research notes give the same information. See Q4. |
 
@@ -325,7 +325,7 @@ Service-layer invariants (the database does not enforce these):
 Seed data (one time, then operator data, like `pipeline_stages`):
 "Not a fit", "No budget", "Not now" (`triggers_nurture = 1`),
 "No response", "Lost to competitor", "Duplicate" (used by merge),
-"Lost stage (migrated)" (used by section 6.3).
+"Lost stage (migrated)" (used by section 6).
 
 ### 5.3 `activities` and `delegated_tasks` (rebuilt)
 
@@ -459,159 +459,15 @@ change these places before a lead or a lost record can exist:
 New: `deals(type, active)`, `deals(email)`, `deals(phone)`,
 `deals(website)`, `deals(lost_reason_id)`, `deals(merged_into_id)`.
 Recreated after the rebuild: all existing indexes on `deals`,
-`activities` and `delegated_tasks` (section 6.2, step 7 lists them).
+`activities` and `delegated_tasks`.
 
-## 6. Database migration plan
-
-### 6.1 Rule exception
-
-`app/database.py` says: "Additive-only. Do not DROP or RENAME columns in
-this series." SQLite cannot remove `NOT NULL` from a column with
-`ALTER TABLE`. Thus D3, D4 and D5 need a table rebuild.
-
-This ADR asks the reviewer to approve one exception:
-
-- The exception applies to `migrate_008` only.
-- The rebuild must not drop a column, rename a column or change the
-  meaning of a column. It only removes `NOT NULL` and adds columns.
-- `_SCHEMA_V1` must not change. A new database runs `migrate_001` to
-  `migrate_008` in sequence, as now.
-- The comment in `app/database.py` must be updated to say: "Additive-only,
-  except a reviewed table rebuild that only relaxes constraints. See
-  `docs/adr/0001-lead-opportunity-model.md`."
-
-### 6.2 `migrate_008` procedure
-
-`init_db()` already does these things. The migration must use them and
-must not change them:
-
-- It takes the file lock and `BEGIN IMMEDIATE`.
-- It makes an online backup before the migration:
-  `pre-migrate-v7-to-v8-<timestamp>.db`.
-- It sets `PRAGMA user_version` after a successful migration.
-
-`get_db()` does not set `PRAGMA foreign_keys = ON`. Thus foreign keys are
-not enforced, and `DROP TABLE` does not cascade. Step 0 checks this.
-
-Do these steps for each table: `deals`, then `activities`, then
-`delegated_tasks`.
-
-0. Read `PRAGMA foreign_keys`. If the value is 1, stop the migration with
-   an error. (A future change that turns on foreign keys must update this
-   procedure.) Run `PRAGMA foreign_key_check(<table>)` for `deals`,
-   `activities`, `delegated_tasks` and `deal_tags`, and keep the result
-   (see step 11). Do this step one time, before the first table.
-1. Read the current `sqlite_sequence.seq` value for the table. Keep it.
-2. Create `<table>_new` with the target DDL (section 5).
-3. Copy the rows: `INSERT INTO <table>_new (<column list>) SELECT
-   <column list> FROM <table>`. Use an explicit column list. Do not use
-   `SELECT *`. Older databases have columns in a different order, because
-   `_apply_additive_columns` added them with `ALTER TABLE`.
-4. Compare the row counts. If they are different, raise an error. The
-   transaction rolls back.
-5. `DROP TABLE <table>`.
-6. `ALTER TABLE <table>_new RENAME TO <table>`.
-   - Do not rename the old table first. Since SQLite 3.26, a rename of
-     `deals` to `deals_old` also changes the foreign keys in
-     `activities`, `deal_tags` and `delegated_tasks` to point to
-     `deals_old`.
-7. Create all indexes for the table again (the existing names, plus
-   section 5.9). The existing names are: `idx_deals_partner`,
-   `idx_deals_stage`, `idx_deals_owner`, `idx_deals_parent`,
-   `idx_activities_partner`, `idx_activities_deal`,
-   `idx_delegated_tasks_deal`, `idx_delegated_tasks_owner_status`.
-8. Set `sqlite_sequence.seq` for the table to the value from step 1.
-   This prevents the reuse of an `id` from a deleted row. `DROP TABLE`
-   removes the row for the old table. Step 3 creates a row only if it
-   copied one or more rows. Thus use an upsert: update the row if it
-   exists, else insert it. Skip this step if step 1 found no row.
-
-After the three tables:
-
-9. Create `lost_reasons` and insert the seed rows (section 5.2).
-10. Backfill (section 6.3).
-11. Run `PRAGMA foreign_key_check(<table>)` for `deals`, `activities`,
-    `delegated_tasks` and `deal_tags`. If it returns a row that step 0 did
-    not return, raise an error. Compare rows on `(table, rowid, parent)`
-    only. Do not compare `fkid`: the rebuild adds foreign keys, so the
-    `fkid` of an existing foreign key can change. The `rowid` does not
-    change, because each rebuilt table keeps `id` as its `INTEGER PRIMARY
-    KEY`. Foreign keys were never enforced, so a
-    live database can already have broken references (for example a
-    manual edit, or a v0 file). Those rows must not stop the start-up of
-    the app. Log them as a warning.
-12. Run `PRAGMA integrity_check`. If the result is not `ok`, raise an
-    error.
-
-### 6.3 Data backfill
-
-| Data | Action |
-|---|---|
-| All rows in `deals` | `type = 'opportunity'`, `active = 1`, `priority = 0`. Contact columns stay null (D10). |
-| Rows in `deals` whose `stage` is a stage with `is_lost = 1` | `active = 0`, `lost_reason_id` = "Lost stage (migrated)". `stage` does not change. If `closed_at` is null, set it from `updated_at`. |
-| `activities`, `delegated_tasks` | No change to data. `source_url` is null. |
-
-Result: every existing record keeps its id, partner, service, stage, tags,
-activities and tasks.
-
-### 6.4 Behaviour change after the migration
-
-| Area | Before | After |
-|---|---|---|
-| Deals list, pipeline, `list_deals` | Show deals in the `lost` stage. | Hide lost records by default. `include_lost=true` shows them (section 8.2). The admin board uses `list_deals()`, so the Lost column is empty unless the operator uses the lost filter (P6). |
-| Ingest (`POST /api/v1/leads`, `ingest_leads`, `inject_leads.py`) | Creates a partner and a deal. | Creates a lead only (section 7.1). |
-| Client import (`import_clients.py`) | Creates a partner and a deal. | Unchanged default: still a partner and an opportunity. `--type lead` is opt-in. |
-| Everything else | | No change for existing records, because they are all opportunities. |
-
-### 6.5 Optional script: early opportunities to leads
-
-`scripts/opportunities_to_leads.py` (new, optional, operator runs it).
-
-- Arguments: `--stage <key>` (one or more), `--dry-run` (default on),
-  `--apply`.
-- It selects open opportunities in the given stages that have no won
-  child and no `parent_deal_id`.
-- For each record it: copies the partner contact fields into the lead
-  columns, sets `type = 'lead'`, and keeps `partner_id` (a lead can have
-  a partner).
-- It writes one `system` activity on each changed record.
-- It prints the ids and a count.
-- The migration does not run this script (D12).
-
-### 6.6 `is_lost` stage role deprecation
+## 6. `is_lost` stage role deprecation
 
 | Release | Behaviour |
 |---|---|
 | Schema 8 release | Existing `is_lost` stages still work. A move into an `is_lost` stage also applies `mark_lost` with reason "Lost stage (migrated)". `create_stage` refuses `is_lost = 1`. `update_stage` refuses a change of `is_lost` from 0 to 1. It accepts `is_lost = 1` on a stage that already has it, because the admin stage form (`edit_stage_submit`) sends every role flag on each save; else a label edit on the seeded `lost` stage would fail. REST and the admin form inherit the rule. `list_catalog` and `GET /api/v1/stages` mark `is_lost` as deprecated. |
 | A later release (separate ADR or issue) | The column stays (additive rule). The seed `lost` stage can remain as a compatibility shim until an operator deletes it. |
 
-### 6.7 Rollback
-
-1. Stop the app and the `staleness-cron` service.
-2. Restore the automatic backup:
-   `python -m app.backup --restore <pre-migrate-v7-to-v8-*.db> --restore-dest <live db>`.
-3. Deploy the previous image (schema 7).
-
-The previous code refuses a schema 8 database (`SchemaVersionError`). Thus
-a restore is the only rollback. Records created after the migration are
-lost on rollback. The release notes must say this.
-
-### 6.8 Migration tests
-
-| Test | Expected result |
-|---|---|
-| Migrate a schema 7 fixture with deals, activities, tasks, tags and a lost-stage deal. | Row counts and ids are the same. All FKs resolve. Tags still point to the correct deals. |
-| Migrate a version-0 fixture whose `deals` columns are in the old order. | Column values go to the correct columns. |
-| Delete the highest deal id before the migration, then insert a new deal after it. | The new id is higher than the deleted id. |
-| A lost-stage deal. | `active = 0`, reason "Lost stage (migrated)". |
-| A lost-stage deal whose `closed_at` is null. | `closed_at` equals that row's `updated_at`. |
-| A schema 7 fixture with a deal whose `offer_id` points to a missing offer. | The migration completes. The log has a warning. |
-| A schema 7 fixture where all deals were deleted (`sqlite_sequence` has a value, the table is empty). | A new deal after the migration gets an id higher than the old `seq`. |
-| Restore a migrated lost-stage deal. | `active = 1`, `stage` is the default stage. |
-| Edit the label of the seeded `lost` stage in the admin form (the form sends `is_lost = 1`). | The save succeeds. Setting `is_lost = 1` on a stage that does not have it is refused. |
-| Force an error after step 5. | The transaction rolls back. The schema stays at 7. The tables are as before. |
-| Run `init_db()` two times. | The second run does nothing. |
-| A new empty database. | It reaches schema 8. The schema is equal to a migrated database (compare `sqlite_master`). |
 
 ## 7. REST API changes
 
@@ -694,10 +550,6 @@ confirmed clients. It keeps the current behaviour: it creates or matches
 a partner and creates an opportunity. A `--type lead` flag is opt-in for
 research-style markdown. It does not inherit the ingest default.
 
-Migration note for operators: an ETL job that needs the old behaviour
-must send `"type": "opportunity"`. The CHANGELOG must say this under
-"Changed" with the word **Breaking**.
-
 ### 7.2 Stages API
 
 `GET /api/v1/stages` and `GET /api/v1/stages/{key}`: each stage gets
@@ -705,10 +557,10 @@ must send `"type": "opportunity"`. The CHANGELOG must say this under
 
 `POST /api/v1/stages` refuses `is_lost = 1`, and `PATCH
 /api/v1/stages/{key}` refuses a change of `is_lost` from 0 to 1, with
-`invalid_stage_role` (section 6.6). Existing `is_lost` stages stay
+`invalid_stage_role` (section 6). Existing `is_lost` stages stay
 as they are until an operator clears the flag or deletes an empty stage.
 A move of a deal into an existing `is_lost` stage still applies
-`mark_lost` (section 6.6).
+`mark_lost` (section 6).
 
 ### 7.3 Lost reasons API
 
@@ -728,7 +580,7 @@ with MCP (section 8.1). Q6 asks if REST needs them.
 | `find_duplicates` | `lead_id`, or a set of contact fields. | Matches with `kind`, `id`, `matched_on`. | `not_found` |
 | `convert_lead` | `lead_id`, `partner_action` (`auto`, `link`, `create`), `partner_id`, `service_slug`, `stage`, `value_estimate`, `expected_close`, `probability`, `offer_id`, `next_action`, `next_action_date`, `owner`, `note`. | The opportunity, the partner, `partner_created` (bool), the `system` activity id. | See 5.4 |
 | `mark_lost` | `deal_id` (lead or opportunity), `lost_reason_id` or `lost_reason` (name), `note`. | The record. `nurture` result when the reason has `triggers_nurture`. | `not_found`, `already_lost`, `invalid_lost_reason` |
-| `restore_deal` | `deal_id` | The record with `active = 1`. Clears `lost_reason_id`, `lost_note`, `closed_at`. If the record is an opportunity in an `is_lost` stage (section 6.3), it also moves the stage to the stage with `is_default = 1`. Else the record would be open and in a lost stage at the same time. Writes a `system` activity. | `not_found`, `not_lost`, `merged` (a merged record cannot be restored) |
+| `restore_deal` | `deal_id` | The record with `active = 1`. Clears `lost_reason_id`, `lost_note`, `closed_at`. If the record is an opportunity in an `is_lost` stage (section 6), it also moves the stage to the stage with `is_default = 1`. Else the record would be open and in a lost stage at the same time. Writes a `system` activity. | `not_found`, `not_lost`, `merged` (a merged record cannot be restored) |
 | `merge_leads` | `target_id`, `source_ids` (max 10). Target and sources are leads, or the target is an opportunity and the sources are leads. | The target, and the ids that were merged. | `not_found`, `invalid_merge` (an opportunity as a source, a lost record, the same id) |
 | `list_lost_reasons` / `create_lost_reason` / `update_lost_reason` | `name`, `triggers_nurture`, `active` | The reason(s). | `duplicate_name` |
 
@@ -771,7 +623,7 @@ on the target with the source ids.
 | `get_deal` | Works for leads and opportunities. Returns the new fields. For a lead it also returns the lead contact columns. |
 | `create_deal` | Creates an opportunity (D13). Unchanged requirements. Accepts `probability`, `priority`, `expected_close`. |
 | `update_deal` | Accepts the new fields. Rejects `type`. (Use `convert_lead`.) |
-| `set_deal_stage`, `record_call_outcome` | Reject a lead with `not_an_opportunity`. Reject a lost record with `deal_lost`. A move into an `is_lost` stage also applies `mark_lost` (6.6). The `not_interested` outcome uses `mark_lost` with reason "Not a fit" instead of the `is_lost` stage. |
+| `set_deal_stage`, `record_call_outcome` | Reject a lead with `not_an_opportunity`. Reject a lost record with `deal_lost`. A move into an `is_lost` stage also applies `mark_lost` (section 6). The `not_interested` outcome uses `mark_lost` with reason "Not a fit" instead of the `is_lost` stage. |
 | `bulk_update_deals` | Selects opportunities only. Gets `mark_lost` (with `lost_reason`) as a bulk action. |
 | `get_call_queue` | Opportunities only, `active = 1`. No other change. See Q2 for leads. |
 | `list_due_followups` | Includes leads and opportunities. Each row has `type`. New argument `type`. |
@@ -815,16 +667,16 @@ A phase must not start before the previous phase is merged.
 | Phase | Scope | Main files | Tests |
 |---|---|---|---|
 | P0 | This ADR. | `docs/adr/0001-lead-opportunity-model.md` | None |
-| P1 | `migrate_008`, schema 8, `lost_reasons` seed, read paths return the new fields. Read paths accept a null partner and service, and use the new "open" test (5.8). `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false` (admin board inherits). Stages write path refuses a new `is_lost = 1` (6.6). No other behaviour change. | `app/database.py`, `app/services/deals.py`, `app/services/call_queue.py`, `app/services/staleness.py`, `app/services/pipeline_stages.py`, `app/routers/api.py` (stages write) | 6.8, plus the existing suite |
+| P1 | `migrate_008`, schema 8, `lost_reasons` seed, read paths return the new fields. Read paths accept a null partner and service, and use the new "open" test (5.8). `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false` (admin board inherits). Stages write path refuses a new `is_lost = 1` (section 6). No other behaviour change. | `app/database.py`, `app/services/deals.py`, `app/services/call_queue.py`, `app/services/staleness.py`, `app/services/pipeline_stages.py`, `app/routers/api.py` (stages write) | the existing suite |
 | P2 | Lead service layer: create, update (fill-empty), get, list, duplicate detection (strong vs weak keys, 5.6), mark lost, restore, merge, convert. Partner match code moves to `partners.py`. Activities and tasks accept a null partner. | `app/services/leads.py` (split ingest into `lead_ingest.py` if it gets large), `partners.py`, `activities.py`, `delegated_tasks.py` | Unit tests for 5.4, 5.5, 5.6 and the invariants I1 to I5 |
 | P3 | Ingest change (7.1), CLI flags. Client import stays opportunity by default; `--type lead` is opt-in. | `leads.py`, `routers/api.py`, `scripts/inject_leads.py`, `client_import.py` | Update `test_leads_*`, `test_inject_leads.py`, `test_client_import.py` |
 | P4 | MCP tools (8.1, 8.2, 8.4). | `app/mcp/tools.py` | `test_mcp_tools.py`, a new end-to-end test of section 3 |
 | P5 | Fit score input (5.7), call queue filter, follow-ups, nurture from lost reasons (8.3). | `icp.py`, `call_queue.py`, `scripts/staleness_gate.py`, `nurture.py` | `test_icp.py`, `test_call_queue.py`, `test_nurture_integration.py`, `test_staleness.py` |
 | P6 | Admin UI: Leads list, lead form, convert dialog (with partner candidates), lost dialog, lost reasons page, type badge, lost filter. | `app/routers/admin.py`, `app/templates/admin/*` | `test_a11y.py`, `test_htmx.py`, new view tests |
-| P7 | Documentation: `DATA_MODEL.md` (glossary, schema, ingest), `MCP.md`, `SCOPE.md`, `README.md` "Ingest leads", CHANGELOG. Optional script 6.5. | `docs/*`, `README.md`, `CHANGELOG.md`, `scripts/` | `npm run docs:test` |
+| P7 | Documentation: `DATA_MODEL.md` (glossary, schema, ingest), `MCP.md`, `SCOPE.md`, `README.md` "Ingest leads", CHANGELOG. Optional script `scripts/opportunities_to_leads.py`. | `docs/*`, `README.md`, `CHANGELOG.md`, `scripts/` | `npm run docs:test` |
 
 Release: P1 to P7 ship in one minor release. The release notes must list
-the breaking changes (6.4, 7.1, 8.2) and the rollback limit (6.7).
+the breaking changes (7.1, 8.2).
 
 The end-to-end test in P4 must run the walkthrough in section 3 through
 MCP `call_tool`. It must check, after each step, that `partners` has the
@@ -843,8 +695,7 @@ expected row count.
 | Q7 | Must the CRM keep a structured "qualification evidence" record (criteria and the activities that support each one)? | Not now. The `system` activity at conversion records the fit score and the matched criteria. Research notes keep the evidence. |
 | Q8 | Must `create_lead` refuse to create when a strong duplicate (email or website) exists? | No. It returns `possible_duplicates`. The agent decides. Ingest auto-merges on strong keys only: email, or phone + name, or website + name (5.6, 7.1). |
 | Q9 | Must ingest auto-merge on website domain or phone digits alone? | No. Those are weak keys for `find_duplicates` only. Shared hosts and shared reception numbers would merge unrelated leads. |
-| Q10 | When an operator sets `is_lost = 1` on a stage that holds active deals, mark those deals lost, or refuse the write? | Refuse a change from 0 to 1 from schema 8 (6.6). The move shim still marks a deal lost when it enters an existing `is_lost` stage. |
-| Q11 | Must the backfill set `closed_at` on migrated lost deals that have it null? | Yes. Use `updated_at` (6.3). |
+| Q10 | When an operator sets `is_lost = 1` on a stage that holds active deals, mark those deals lost, or refuse the write? | Refuse a change from 0 to 1 from schema 8 (section 6). The move shim still marks a deal lost when it enters an existing `is_lost` stage. |
 | Q12 | For a lead that already has a `partner_id`, does the fit score mix lead and partner fields? | No. A lead scores from its own columns only (5.7). |
 | Q13 | Does `get_lead` need a last-researched timestamp? | Yes. Return `last_researched_at` and `research_note_count`. `list_leads` accepts `sort = last_research` (8.1). |
 

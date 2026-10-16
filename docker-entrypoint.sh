@@ -27,7 +27,7 @@ if [ "$(id -u)" = "0" ]; then
   uid="${APP_UID:-1000}"
   gid="${APP_GID:-1000}"
   prepare_data_volume_as_root "$DATA_DIR" "$uid" "$gid"
-  # Pre-migrate backups go to /app/backups (or BACKUP_DIR). Prod compose
+  # Backups go to /app/backups (or BACKUP_DIR). Prod compose
   # bind-mounts that path; a read-only root cannot create it. Only chown a
   # directory that already exists so a container started without the mount
   # (the CI `id` probe, local dev) still drops privileges. A 0700 directory

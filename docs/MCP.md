@@ -155,8 +155,7 @@ set of child services; saving replaces the action list.
 `DELEGATED_TASK_OWNERS` is set (comma-separated slugs).
 
 Sevasek's previous Health Check behaviour is the optional script
-`scripts/seed_sevasek_automations.py` (two named automations). See
-[`cutover-from-sevasek-crm.md`](cutover-from-sevasek-crm.md).
+`scripts/seed_sevasek_automations.py` (two named automations).
 
 ## Delegated tasks and webhooks
 

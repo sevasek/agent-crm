@@ -210,9 +210,6 @@ chowns it when the directory exists) so a schema upgrade can write its
 pre-migrate snapshot on the read-only root filesystem. The app container
 is capped at 256 MB (`mem_limit: 256m`).
 
-Replacing an existing sevasek CRM host is
-[`cutover-from-sevasek-crm.md`](cutover-from-sevasek-crm.md), not this file.
-
 ## Offboarding a customer
 
 There is no export or delete route in the app — only pipeline stages, offers,

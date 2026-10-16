@@ -54,7 +54,6 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   The entrypoint chowns that directory when it exists.
 - `.github/workflows/deploy.yml`, skipped unless repository variables
   `DEPLOY_ENABLED=true` and `DEPLOY_REPOSITORY` equals this repository.
--   [`docs/cutover-from-sevasek-crm.md`](docs/cutover-from-sevasek-crm.md).
 
 ### Changed
 

@@ -3,11 +3,35 @@
     --muted: #666;
     --bg-alt: #f7f7f7;
     --accent: #2c5aa0;
+    --fg: #222;
+    --bg: #fff;
+    --surface: #fff;
+    --link: #2c5aa0;
+    --error: #b00020;
+    --pill-due-bg: #fff3cd;
+    --pill-due-fg: #856404;
+    --pill-overdue-bg: #fdecea;
+    --pill-overdue-fg: #b00020;
+    --pill-lead-bg: #e8f0fe;
+    --pill-lead-fg: #1a4d8f;
+    --pill-opportunity-bg: #e6f4ea;
+    --pill-opportunity-fg: #1e6b34;
+    --pill-lost-bg: #fdecea;
+    --pill-lost-fg: #b00020;
+    --pill-tag-on-bg: #e7eef8;
+    --chip-hover: #f0f4fa;
+    --success-bg: #f0f7f0;
+    --success-border: #cde5cd;
+    --outcome-won: #1e7e34;
 }
 
-/* Pico.css primary tokens → existing brand blue. data-theme="light" is locked
-   in base.html so Pico's auto dark mode cannot override these. */
-:root,
+/* Pico.css primary tokens → existing brand blue. The light selector must
+   match Pico's own `:root:not([data-theme=dark])` specificity or Pico's
+   default teal (#0172ad) wins once <html> has no data-theme.
+   Dark pairs use Pico 2.1.1's selectors: prefers-color-scheme when <html>
+   has no data-theme, plus [data-theme="dark"]. --accent stays #2c5aa0 for
+   filled buttons; --link lightens in dark so brand text meets contrast. */
+:root:not([data-theme="dark"]),
 [data-theme="light"] {
     --pico-primary: var(--accent);
     --pico-primary-background: var(--accent);
@@ -21,13 +45,85 @@
     --pico-primary-inverse: #fff;
 }
 
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+        --border: #2a3140;
+        --muted: #7b8495;
+        --bg-alt: #1a1e28;
+        --fg: #c2c7d0;
+        --bg: rgb(19, 22.5, 30.5);
+        --surface: #1c212b;
+        --link: #7aa3e0;
+        --error: #f28b82;
+        --pill-due-bg: #3d3414;
+        --pill-due-fg: #f0c14b;
+        --pill-overdue-bg: #3d1a1c;
+        --pill-overdue-fg: #f5a5a0;
+        --pill-lead-bg: #1a2740;
+        --pill-lead-fg: #8ab4f8;
+        --pill-opportunity-bg: #1a2e1f;
+        --pill-opportunity-fg: #7dce9a;
+        --pill-lost-bg: #3d1a1c;
+        --pill-lost-fg: #f5a5a0;
+        --pill-tag-on-bg: #1e2d4a;
+        --chip-hover: #1a2740;
+        --success-bg: #1a2e1f;
+        --success-border: #2d5a35;
+        --pico-primary: var(--link);
+        --pico-primary-background: var(--accent);
+        --pico-primary-border: var(--accent);
+        --pico-primary-hover: #9bb8ea;
+        --pico-primary-hover-background: #234a85;
+        --pico-primary-hover-border: #234a85;
+        --pico-primary-hover-underline: #9bb8ea;
+        --pico-primary-underline: var(--link);
+        --pico-primary-focus: rgba(122, 163, 224, 0.375);
+        --pico-primary-inverse: #fff;
+    }
+}
+
+[data-theme="dark"] {
+    --border: #2a3140;
+    --muted: #7b8495;
+    --bg-alt: #1a1e28;
+    --fg: #c2c7d0;
+    --bg: rgb(19, 22.5, 30.5);
+    --surface: #1c212b;
+    --link: #7aa3e0;
+    --error: #f28b82;
+    --pill-due-bg: #3d3414;
+    --pill-due-fg: #f0c14b;
+    --pill-overdue-bg: #3d1a1c;
+    --pill-overdue-fg: #f5a5a0;
+    --pill-lead-bg: #1a2740;
+    --pill-lead-fg: #8ab4f8;
+    --pill-opportunity-bg: #1a2e1f;
+    --pill-opportunity-fg: #7dce9a;
+    --pill-lost-bg: #3d1a1c;
+    --pill-lost-fg: #f5a5a0;
+    --pill-tag-on-bg: #1e2d4a;
+    --chip-hover: #1a2740;
+    --success-bg: #1a2e1f;
+    --success-border: #2d5a35;
+    --pico-primary: var(--link);
+    --pico-primary-background: var(--accent);
+    --pico-primary-border: var(--accent);
+    --pico-primary-hover: #9bb8ea;
+    --pico-primary-hover-background: #234a85;
+    --pico-primary-hover-border: #234a85;
+    --pico-primary-hover-underline: #9bb8ea;
+    --pico-primary-underline: var(--link);
+    --pico-primary-focus: rgba(122, 163, 224, 0.375);
+    --pico-primary-inverse: #fff;
+}
+
 * { box-sizing: border-box; }
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     margin: 0;
-    color: #222;
-    background: #fff;
+    color: var(--fg);
+    background: var(--bg);
 }
 
 .skip-link {
@@ -62,18 +158,18 @@ summary:focus-visible {
 .topnav {
     display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-start;
     gap: 0.75rem 1.5rem; padding: 0.75rem 1.5rem;
-    border-bottom: 1px solid var(--border); background: #fff;
+    border-bottom: 1px solid var(--border); background: var(--surface);
 }
-.topnav a { text-decoration: none; color: #222; }
-.topnav a:hover { color: var(--accent); }
+.topnav a { text-decoration: none; color: var(--fg); }
+.topnav a:hover { color: var(--link); }
 .topnav .brand { font-weight: 700; }
 .topnav .right { margin-left: auto; color: var(--muted); }
 .topnav-logout { margin: 0; display: inline; }
 .topnav-logout button {
     background: none; border: none; padding: 0; margin: 0; cursor: pointer;
-    font: inherit; text-decoration: none; color: #222;
+    font: inherit; text-decoration: none; color: var(--fg);
 }
-.topnav-logout button:hover { color: var(--accent); }
+.topnav-logout button:hover { color: var(--link); }
 .topnav a[aria-current="page"] {
     font-weight: 600;
     text-decoration: underline;
@@ -116,10 +212,10 @@ button[type=submit] { width: auto; }
     border-color: var(--pico-primary-hover-border, #234a85);
     color: #fff; text-decoration: none;
 }
-.btn-secondary { background: #fff; color: var(--accent); border-color: var(--accent); }
-.btn-secondary:hover { background: #f0f4fa; color: var(--accent); text-decoration: none; }
+.btn-secondary { background: var(--surface); color: var(--link); border-color: var(--accent); }
+.btn-secondary:hover { background: var(--chip-hover); color: var(--link); text-decoration: none; }
 
-.error { color: #b00020; margin-bottom: 1rem; }
+.error { color: var(--error); margin-bottom: 1rem; }
 .muted { color: var(--muted); }
 .pill {
     display: inline-block; padding: 0.2rem 0.65rem; border-radius: 999px;
@@ -131,9 +227,9 @@ button[type=submit] { width: auto; }
     font-size: 0.75rem;
     margin: 0.1rem 0.2rem 0.1rem 0;
     text-decoration: none;
-    color: #222;
+    color: var(--fg);
 }
-a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
+a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(--link); }
 .tag-filters { margin: 0.25rem 0 0.75rem; }
 .activity { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
 .activity .meta { color: var(--muted); font-size: 0.8rem; }
@@ -143,11 +239,11 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .next-action-form input[type=date] { width: auto; }
 .next-action-form button { width: auto; padding: 0.35rem 0.75rem; }
 .deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
-.pill-due { background: #fff3cd; color: #856404; }
-.pill-overdue { background: #fdecea; color: #b00020; }
-.pill-lead { background: #e8f0fe; color: #1a4d8f; }
-.pill-opportunity { background: #e6f4ea; color: #1e6b34; }
-.pill-lost { background: #fdecea; color: #b00020; text-transform: lowercase; }
+.pill-due { background: var(--pill-due-bg); color: var(--pill-due-fg); }
+.pill-overdue { background: var(--pill-overdue-bg); color: var(--pill-overdue-fg); }
+.pill-lead { background: var(--pill-lead-bg); color: var(--pill-lead-fg); }
+.pill-opportunity { background: var(--pill-opportunity-bg); color: var(--pill-opportunity-fg); }
+.pill-lost { background: var(--pill-lost-bg); color: var(--pill-lost-fg); text-transform: lowercase; }
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pipeline-board {
@@ -170,7 +266,7 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .pipeline-column h2 { margin-top: 0; font-size: 0.95rem; }
 .pipeline-card-list { min-height: 4.5rem; flex: 1 1 auto; }
 .pipeline-column:has(.pipeline-card) .pipeline-empty { display: none; }
-.pipeline-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; cursor: grab; }
+.pipeline-card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem; margin-bottom: 0.6rem; cursor: grab; }
 .pipeline-card.sortable-ghost { opacity: 0.4; }
 .pipeline-card.sortable-chosen,
 .pipeline-card.sortable-drag { cursor: grabbing; }
@@ -182,13 +278,13 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .call-outcome-form input[type=text] { width: auto; flex: 1 1 8rem; min-width: 6rem; }
 .call-outcome-form button { width: auto; }
 .btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; border: var(--pico-border-width, 1px) solid var(--border); }
-.btn-outcome-no_answer { background: #fff; color: var(--muted); border-color: var(--border); }
-.btn-outcome-not_interested { background: #fff; color: #b00020; border-color: #b00020; }
-.btn-outcome-won { background: #1e7e34; color: #fff; border-color: #1e7e34; }
+.btn-outcome-no_answer { background: var(--surface); color: var(--muted); border-color: var(--border); }
+.btn-outcome-not_interested { background: var(--surface); color: var(--error); border-color: var(--error); }
+.btn-outcome-won { background: var(--outcome-won); color: #fff; border-color: var(--outcome-won); }
 
 /* Tap-to-call: a real <a href="tel:..."> (the link shape mobile browsers
    handle reliably), styled plain so it doesn't look like a random link. */
-.btn-tel { color: var(--accent); text-decoration: underline; }
+.btn-tel { color: var(--link); text-decoration: underline; }
 
 /* Focused mobile call view: one column, big tap targets, nothing else on
    the page competing for attention while a rep is mid-call. */
@@ -215,7 +311,7 @@ a.pill-tag:hover, .pill-tag-on { background: #e7eef8; color: var(--accent); }
 .call-view-new-offer .form-row { margin-bottom: 0.5rem; }
 
 code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.9em; }
-.api-key-new { background: #f0f7f0; border: 1px solid #cde5cd; border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
+.api-key-new { background: var(--success-bg); border: 1px solid var(--success-border); border-radius: 6px; padding: 0.75rem 1rem; margin-bottom: 1rem; }
 .api-key-value { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.4rem; }
 .api-key-value code { flex: 1; word-break: break-all; padding: 0.4rem 0.6rem; }
 
@@ -224,3 +320,67 @@ code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; fo
 .wide-form-table td input[type=number] { min-width: 4rem; }
 .call-view-outcome-form { flex-direction: column; align-items: stretch; }
 .call-view-outcome-form button, .call-view-outcome-form input[type=text] { width: 100%; }
+
+/* Tom Select is only initialised on #partner_id. Match Pico form controls. */
+.ts-wrapper {
+    width: 100%;
+    min-height: 0;
+}
+.ts-wrapper .ts-control,
+.ts-wrapper.single .ts-control {
+    background: var(--pico-form-element-background-color, #fff);
+    background-image: none;
+    border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
+    border-radius: var(--pico-border-radius, 0.25rem);
+    box-shadow: none;
+    color: inherit;
+    font-size: 1rem;
+    line-height: var(--pico-line-height, 1.5);
+    min-height: calc(1rem * var(--pico-line-height, 1.5) + var(--pico-form-element-spacing-vertical, 0.75rem) * 2);
+    padding: var(--pico-form-element-spacing-vertical, 0.75rem) var(--pico-form-element-spacing-horizontal, 1rem);
+}
+.ts-wrapper.focus .ts-control {
+    border-color: var(--pico-primary-border, var(--accent));
+    box-shadow: 0 0 0 var(--pico-outline-width, 0.125rem) var(--pico-primary-focus, rgba(44, 90, 160, 0.25));
+}
+.ts-wrapper .ts-control,
+.ts-wrapper .ts-control input,
+.ts-dropdown {
+    color: inherit;
+    font-family: inherit;
+    font-size: 1rem;
+    line-height: var(--pico-line-height, 1.5);
+}
+.ts-dropdown {
+    background: var(--pico-form-element-background-color, #fff);
+    border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
+    border-radius: var(--pico-border-radius, 0.25rem);
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+    z-index: 20;
+}
+.ts-dropdown-content { max-height: 16rem; }
+.ts-dropdown .dropdown-input-wrap {
+    border-bottom: 1px solid var(--pico-form-element-border-color, var(--border));
+    padding: 0.4rem 0.5rem;
+}
+.ts-dropdown .dropdown-input {
+    background: var(--pico-form-element-background-color, #fff);
+    color: var(--pico-form-element-color, inherit);
+    border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
+    border-radius: var(--pico-border-radius, 0.25rem);
+    box-shadow: none;
+    font: inherit;
+    padding: 0.4rem 0.6rem;
+    width: 100%;
+}
+.ts-dropdown .option,
+.ts-dropdown .no-results {
+    padding: 0.5rem 0.75rem;
+}
+.ts-dropdown .active {
+    background: var(--pico-primary-background, var(--accent));
+    color: var(--pico-primary-inverse, #fff);
+}
+.ts-dropdown .option .highlight {
+    background: rgba(44, 90, 160, 0.18);
+}

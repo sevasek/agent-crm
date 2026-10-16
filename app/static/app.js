@@ -41,6 +41,20 @@
     filterParents();
 })();
 
+(function () {
+    var partner = document.getElementById("partner_id");
+    if (!partner || typeof TomSelect === "undefined") return;
+    if (partner.tomselect) return;
+    new TomSelect(partner, {
+        plugins: ["dropdown_input"],
+        allowEmptyOption: true,
+        create: false,
+        maxOptions: null,
+        selectOnTab: true,
+        placeholder: "Search partners\u2026"
+    });
+})();
+
 // CSP blocks inline onchange="this.form.submit()". Pipeline selects also
 // carry hx-trigger="change"; let htmx handle those so we don't POST twice.
 document.addEventListener("change", function (event) {

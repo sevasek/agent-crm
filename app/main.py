@@ -121,9 +121,9 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
 
 _STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Same-origin scripts and styles only. Vendored Pico + htmx live at
-# /static/vendor/; call-tap.js / app.js replace inline <script> so this
-# does not need script-src 'unsafe-inline'. style-src still allows
+# Same-origin scripts and styles only. Vendored Pico, htmx, and Tom Select
+# live at /static/vendor/; call-tap.js / app.js replace inline <script> so
+# this does not need script-src 'unsafe-inline'. style-src still allows
 # 'unsafe-inline' for the handful of style="" attributes in templates.
 CONTENT_SECURITY_POLICY = (
     "default-src 'self'; "

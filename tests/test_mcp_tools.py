@@ -45,6 +45,7 @@ def test_ingest_leads_is_idempotent_and_returns_ids(client, db, monkeypatch):
     _enable(monkeypatch)
     create_service("Consulting", "consulting")
     lead = {
+        "type": "opportunity",
         "name": "Jane Doe",
         "email": "jane@acme.example",
         "service_slug": "consulting",

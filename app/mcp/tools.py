@@ -496,8 +496,7 @@ def ingest_leads_tool(arguments):
         if not isinstance(raw, dict):
             results.append({"email": "", "status": "invalid"})
             continue
-        lead = sanitize_lead_payload(raw)
-        results.append(ingest_lead(lead))
+        results.append(ingest_lead(raw))
     return _ok(results=results)
 
 
@@ -1516,6 +1515,14 @@ TOOLS = [
                                 "type": "string",
                                 "description": "Freeform project/engagement ref (e.g. acme-childcare-2026). Does not clobber pain_points/goals. Timeline notes: log_activity type=note.",
                             },
+                            "type": {
+                                "type": "string",
+                                "enum": ["lead", "opportunity"],
+                                "description": "lead (default) creates a lead only. opportunity keeps the partner+deal path.",
+                            },
+                            "probability": {"type": "integer", "minimum": 0, "maximum": 100},
+                            "priority": {"type": "integer", "minimum": 0, "maximum": 3},
+                            "expected_close": {"type": "string"},
                             "tags": {
                                 **_TAGS_PROP,
                                 "description": (

@@ -1,6 +1,12 @@
 from app.services.catalog import create_service
 from app.services.deals import list_deals, get_deal
-from app.services.leads import ingest_lead, sanitize_lead_payload
+from app.services.leads import ingest_lead as _ingest_lead, sanitize_lead_payload
+
+
+def ingest_lead(lead):
+    if isinstance(lead, dict) and "type" not in lead:
+        lead = {**lead, "type": "opportunity"}
+    return _ingest_lead(lead)
 from app.services.partners import get_partner_by_email
 
 
@@ -150,9 +156,15 @@ def test_title_passed_to_create_partner(db):
 
 def test_non_dict_lead_is_invalid_not_raised(db):
     create_service("Consulting", "consulting")
-    assert ingest_lead("not-an-object") == {"email": "", "status": "invalid"}
-    assert ingest_lead(["name", "Jane"]) == {"email": "", "status": "invalid"}
-    assert ingest_lead(None) == {"email": "", "status": "invalid"}
+    assert ingest_lead("not-an-object") == {
+        "email": "", "status": "invalid", "type_defaulted": True,
+    }
+    assert ingest_lead(["name", "Jane"]) == {
+        "email": "", "status": "invalid", "type_defaulted": True,
+    }
+    assert ingest_lead(None) == {
+        "email": "", "status": "invalid", "type_defaulted": True,
+    }
 
 
 def test_bad_item_does_not_sink_batch(client, monkeypatch):
@@ -161,8 +173,8 @@ def test_bad_item_does_not_sink_batch(client, monkeypatch):
 
     resp = client.post("/api/v1/leads", json={
         "leads": [
-            {"name": {"first": "Nope"}, "email": "bad@example.com", "service_slug": "consulting"},
-            {"name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting",
+            {"type": "opportunity", "name": {"first": "Nope"}, "email": "bad@example.com", "service_slug": "consulting"},
+            {"type": "opportunity", "name": "Jane Doe", "email": "jane@acme.example", "service_slug": "consulting",
              "value_estimate": {"x": 1}},
         ]
     }, headers=_headers())
@@ -205,11 +217,11 @@ def test_non_finite_team_size_does_not_sink_batch(client, monkeypatch):
     create_service("Consulting", "consulting")
     payload = (
         b'{"leads":['
-        b'{"name":"Inf Size","email":"inf@example.com","service_slug":"consulting","team_size":Infinity},'
-        b'{"name":"NaN Size","email":"nan@example.com","service_slug":"consulting","team_size":NaN},'
-        b'{"name":"Huge Size","email":"huge@example.com","service_slug":"consulting",'
+        b'{"type":"opportunity","name":"Inf Size","email":"inf@example.com","service_slug":"consulting","team_size":Infinity},'
+        b'{"type":"opportunity","name":"NaN Size","email":"nan@example.com","service_slug":"consulting","team_size":NaN},'
+        b'{"type":"opportunity","name":"Huge Size","email":"huge@example.com","service_slug":"consulting",'
         b'"team_size":99999999999999999999999999999999},'
-        b'{"name":"Jane Doe","email":"jane@acme.example","service_slug":"consulting"}'
+        b'{"type":"opportunity","name":"Jane Doe","email":"jane@acme.example","service_slug":"consulting"}'
         b"]}"
     )
     resp = client.post(

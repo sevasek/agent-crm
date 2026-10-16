@@ -306,14 +306,20 @@ def list_companies():
 
 def get_partner_by_email(email: str):
     """Exact match, for dedup — unlike list_partners' substring search."""
+    hits = list_partners_by_email(email)
+    return hits[0] if hits else None
+
+
+def list_partners_by_email(email: str) -> list:
+    """Every partner with this exact email (case-insensitive)."""
     email = (email or "").strip().lower()
     if not email:
-        return None
+        return []
     with get_db() as db:
-        row = db.execute(
-            "SELECT * FROM partners WHERE lower(email) = ? LIMIT 1", (email,)
-        ).fetchone()
-        return dict(row) if row else None
+        rows = db.execute(
+            "SELECT * FROM partners WHERE lower(email) = ? ORDER BY id ASC", (email,)
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_company_by_name(name: str):

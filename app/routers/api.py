@@ -13,7 +13,7 @@ from app.services.auth import (
     user_key_rate_limit_identity,
 )
 from app.services.client_ip import get_client_ip, ip_allowlist_permits
-from app.services.leads import ingest_lead
+from app.services.leads import DEPRECATION_TYPE_OMITTED, ingest_lead
 from app.services import pipeline_stages
 
 router = APIRouter(prefix="/api/v1", tags=["api"])
@@ -181,12 +181,20 @@ async def create_leads(request: Request, x_api_key: str = Header(default="")):
         return _json_error("too_many_leads", 422)
 
     results = []
+    type_omitted = False
     for lead in leads:
         if not isinstance(lead, dict):
-            results.append({"email": "", "status": "invalid"})
+            results.append({"email": "", "status": "invalid", "type_defaulted": True})
+            type_omitted = True
             continue
-        results.append(ingest_lead(lead))
-    return {"results": results}
+        result = ingest_lead(lead)
+        results.append(result)
+        if result.get("type_defaulted"):
+            type_omitted = True
+    headers = {}
+    if type_omitted:
+        headers["Deprecation"] = DEPRECATION_TYPE_OMITTED
+    return JSONResponse({"results": results}, headers=headers)
 
 
 # ==================== Pipeline stages ====================

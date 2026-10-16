@@ -19,3 +19,8 @@ proxy. Reports about the intended-absent features (roles and permissions, email)
 are not vulnerabilities. Reports about authentication, session handling,
 API-key checks, the MCP endpoint and its OAuth flow, rate limiting, and data
 exposure are very welcome.
+
+## Privacy
+
+What the CRM collects, why it is collected, and how to request access or
+deletion: [`docs/PRIVACY.md`](docs/PRIVACY.md).

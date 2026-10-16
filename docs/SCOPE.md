@@ -30,12 +30,11 @@ insert services, stages, or prices.
 ## In scope
 
 - **Contacts**: one `partners` table for companies and people.
-- **Interaction tracking**: an `activities` timeline per contact and deal.
-- **Lead and pipeline management**: `deals` and the stage pipeline. This is the core.
-  Tags on a deal (a campaign slug or any other label) are part of that, and
-  the deals list filters by them.
-- **Follow-ups**: next action and date on every deal, due and overdue flags, a
-  daily check that logs each due follow-up.
+- **Interaction tracking**: an `activities` timeline per partner and deal record, including research notes on a lead that has no partner yet.
+- **Leads and opportunities**: one `deals` table with `type`. A lead is an unqualified signal and keeps its own contact data. An opportunity is the qualified pursuit of one service for one partner and is the only type in the pipeline. Conversion, lost reasons, and merge are in scope. Judgement (fit threshold, when to convert) stays in the agent.
+- **Lead and pipeline management**: the opportunity stage pipeline. Tags on a deal record (a campaign slug or any other label) are part of that.
+- **Follow-ups**: next action and date on a deal record, due and overdue flags, a
+  daily check that logs each due follow-up on open opportunities. Lost records are skipped.
 - **Post-sale**: a follow-on is another deal (`parent_deal_id`) plus delegated
   tasks. Not a second CRM, a fulfilment pipeline, or invoice / delivery status.
 - **Calling**: a ranked call queue (fixed formula) and a phone-first call view.

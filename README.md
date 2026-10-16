@@ -250,16 +250,23 @@ export BACKUP_DIR=instances/acme/backups
 
 ## Ingest leads
 
-`POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only), or from the CLI:
+`POST /api/v1/leads` with `X-API-Key: $CRM_API_KEY` (header only), or from the CLI.
+Each item may set `"type": "lead"` (default) or `"type": "opportunity"`.
+Default ingest creates a **lead** and does not create a partner. Jobs that
+still need a partner and an opportunity must send `"type": "opportunity"`
+or pass `--type opportunity`.
 
 ```bash
 python scripts/inject_leads.py --dry-run tests/fixtures/leads/example.json
 python scripts/inject_leads.py tests/fixtures/leads/example.json
+python scripts/inject_leads.py --type opportunity tests/fixtures/leads/example.json
 ```
 
-`service_slug` must already exist in your catalogue. Field meanings and matching
-rules are in [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). To load contacts from
-markdown files, see `scripts/import_clients.py`.
+`service_slug` must already exist in your catalogue when the item needs a
+service. Field meanings and matching rules are in
+[`docs/DATA_MODEL.md`](docs/DATA_MODEL.md). To load confirmed clients from
+markdown files, see `scripts/import_clients.py` (still opportunity by
+default; `--type lead` is opt-in).
 
 ## Docs
 

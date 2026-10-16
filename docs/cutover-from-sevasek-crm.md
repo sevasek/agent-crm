@@ -2,6 +2,12 @@
 
 Replace the CRM at `crm.sevasek.com` (repo `sevasek/crm`, Paul's VPS) with
 this app, in place, on Wednesday 14 October 2026. This file is the runbook.
+
+The lead / opportunity model (schema 8, ADR 0001) is a **later** upgrade,
+not part of this Wednesday cutover. Do not deploy an intermediate
+lead-model phase onto the live host. After that later release, ingest
+defaults to leads and lost records are hidden; see `CHANGELOG.md` and
+[`DATA_MODEL.md`](DATA_MODEL.md).
 Do not point two app processes at one sqlite file. Do not merge or deploy
 from a review PR until the shadow test below has been done on a **copy** of
 `crm.db`.

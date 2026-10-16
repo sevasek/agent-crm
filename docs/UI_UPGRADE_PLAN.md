@@ -8,23 +8,22 @@ downloaded once and committed into `app/static/vendor/`. Nothing is loaded
 from a CDN at runtime — see `README.md` / `docs/DEPLOY.md`, this app must work
 fully offline and self-hosted. No `package.json`, no Node, no build step.
 
-**Status (verified on `main`, 2026-09-29):** Phases 1–3 have shipped.
-Do not re-vendor Pico or htmx, do not redo the polish pass, and do not
-re-implement the pipeline / call-outcome swaps. The phase notes below are
-history so a future agent can see *how* it was done — they are not a
-backlog. Phases 4 and 5 stay deferred and still need a decision; do not
-implement them from this file.
+**Status (verified on `main`, 2026-09-29 for Phases 1–3; dark mode 2026-10-11):**
+Phases 1–3 have shipped, and real dark mode shipped as [#87](https://github.com/sevasek/agent-crm/issues/87)
+(split out of #47). Do not re-vendor Pico or htmx, do not redo the polish
+pass, and do not re-implement the pipeline / call-outcome swaps. The phase
+notes below are history so a future agent can see *how* it was done — they
+are not a backlog. Phase 4 and the rest of Phase 5 (Tom Select / Alpine)
+stay deferred; do not implement them from this file.
 
 | Phase | What | Status | Tracking |
 |---|---|---|---|
-| 1 | Vendored Pico.css 2.1.1, `data-theme="light"` | **Shipped** | [#43](https://github.com/sevasek/agent-crm/issues/43), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
+| 1 | Vendored Pico.css 2.1.1, `data-theme="light"` | **Shipped** (lock later removed in #87) | [#43](https://github.com/sevasek/agent-crm/issues/43), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 2 | Polish custom CSS on top of Pico | **Shipped** | [#44](https://github.com/sevasek/agent-crm/issues/44), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 3 | Vendored htmx 2.0.11, pipeline oob swaps, call-outcome swaps | **Shipped** | [#45](https://github.com/sevasek/agent-crm/issues/45), [PR #62](https://github.com/sevasek/agent-crm/pull/62) |
 | 4 | SortableJS drag-and-drop kanban | **Deferred** — do not implement | [#46](https://github.com/sevasek/agent-crm/issues/46) |
-| 5 | Tom Select / Alpine.js / real dark mode | **Deferred** — do not implement | [#47](https://github.com/sevasek/agent-crm/issues/47) |
-
-Dark mode stays locked to light for launch; `docs/SCOPE.md` already says
-that, and unlocking it is #47.
+| 5a | Real dark mode (unlock Pico + pair custom colors) | **Shipped** | [#87](https://github.com/sevasek/agent-crm/issues/87) |
+| 5b | Tom Select / Alpine.js | **Deferred** — do not implement | [#47](https://github.com/sevasek/agent-crm/issues/47) |
 
 Pinned versions live in `app/static/vendor/VENDOR.md` (Pico 2.1.1, htmx
 2.0.11 as of the shipping PRs).
@@ -376,10 +375,30 @@ on #46. Do not vendor SortableJS from this file.
 
 ---
 
-## Phase 5 — optional extras (DEFERRED, [#47](https://github.com/sevasek/agent-crm/issues/47))
+## Phase 5a — real dark mode (SHIPPED, [#87](https://github.com/sevasek/agent-crm/issues/87))
+
+**Do not re-run these steps.** History of the lock, then the unlock.
+
+Phase 1 forced `<html data-theme="light">` so Pico's auto dark mode could
+not clash with light-only custom colors. #87 (decision 2026-10-06, split
+out of #47) removed that lock and paired the app tokens:
+
+- Light values on `:root` / `[data-theme="light"]` are the shipped colors
+  (`--bg-alt: #f7f7f7`, `--accent: #2c5aa0`, the original `.pill-*` yellows
+  and reds, white nav/cards).
+- Dark values use Pico's own selectors: `@media (prefers-color-scheme: dark)`
+  on `:root:not([data-theme])`, plus `[data-theme="dark"]`. Surfaces follow
+  Pico's dark page (`#13171f`) and form/code greys; due/overdue pills keep
+  the same meaning with darker backgrounds and lighter text.
+- Brand fill stays `#2c5aa0`. Dark-mode *text* links use a lighter brand
+  blue (`--link: #7aa3e0`) so they stay readable on Pico's dark page.
+
+No theme toggle, no new vendor library. `docs/SCOPE.md` lists dark mode as
+in scope.
+
+## Phase 5b — optional extras (DEFERRED, [#47](https://github.com/sevasek/agent-crm/issues/47))
 
 **Do not implement this.** Needs a decision; it is not launch work.
-`docs/SCOPE.md` already lists dark mode as out of scope for launch.
 
 - **Tom Select / Choices.js** for the partner/service `<select>` fields, but
   only if a customer actually has enough partners or services that a plain
@@ -390,13 +409,8 @@ on #46. Do not vendor SortableJS from this file.
   htmx can't express server-side (e.g. a multi-step form section that
   toggles without a round-trip). Nothing identified in the current templates
   needs this yet — don't add it "just in case."
-- **Real dark mode** — redo `--bg-alt` and the `.pill-*` colors as proper
-  light/dark pairs (Pico's own tokens already flip automatically; the app's
-  hand-picked ones don't), then remove the `data-theme="light"` lock added
-  in Phase 1 step 4.
 
-Do not vendor Tom Select or Alpine, and do not unlock dark mode, from this
-file.
+Do not vendor Tom Select or Alpine from this file.
 
 ---
 

@@ -38,6 +38,9 @@ insert services, stages, or prices.
 - **Post-sale**: a follow-on is another deal (`parent_deal_id`) plus delegated
   tasks. Not a second CRM, a fulfilment pipeline, or invoice / delivery status.
 - **Calling**: a ranked call queue (fixed formula) and a phone-first call view.
+- **Dark mode**: follows the browser `prefers-color-scheme`. Pico's tokens
+  flip automatically; custom colors (`--bg-alt`, `.pill-*`, nav, cards) are
+  paired the same way. There is no in-app theme toggle.
 - **Agent interface**: `POST /mcp`, with a separate key per capability.
 - **Optional outbound webhooks**: nurture enrollment on a stage change,
   delegated-task notifications, and deal-won invoice hand-off. Unset means no-op.
@@ -47,10 +50,6 @@ insert services, stages, or prices.
 - **Email inside the CRM.** Log interactions manually or via your agent.
 - **Native mobile app.** The web app is responsive and the call view is built
   for a phone browser.
-- **Dark mode.** Locked to light regardless of OS/browser preference for the
-  launch (see `docs/UI_UPGRADE_PLAN.md` Phase 1). The app's hand-picked pill
-  and badge colors assume a light background; redoing them as proper
-  light/dark pairs is deferred, tracked in #47.
 - **Roles and permissions.** Single operator; session auth and CSRF are the
   right amount for one user. Revisit if a second person needs a login.
 - **Reports and analytics.** The board and the filterable deals list are enough

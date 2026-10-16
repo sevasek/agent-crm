@@ -12,8 +12,18 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Changed
+
+- Admin UI follows `prefers-color-scheme` again. The Phase 1
+  `data-theme="light"` lock is gone; custom colors (`--bg-alt`, pills, nav,
+  cards, errors, call-outcome chips) have light/dark pairs using the same
+  selectors Pico 2.1.1 uses. Filled brand buttons stay `#2c5aa0`. Closes #87.
+
 ### Added
 
+- Searchable partner picker on the new-deal form (vendored Tom Select 2.6.2
+  under `/static/vendor/`). The native `<select name="partner_id">` stays in
+  the form. Other selects are unchanged.
 - Lead / opportunity model (schema 8, `migrate_008`, ADR 0001). One `deals`
   table with `type`, nullable `partner_id` / `service_id`, `lost_reasons`,
   `mark_lost` / `restore_deal` / `convert_lead` / `merge_leads`, MCP lead

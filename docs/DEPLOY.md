@@ -69,9 +69,9 @@ Secure, change Path, or add Domain. Local http keeps the name `session`
 so a browser and the TestClient can still store it.
 
 The app sends a Content-Security-Policy that allows same-origin scripts
-and styles only (vendored Pico and htmx under `/static/vendor/`). Do not
-add a CDN `<script>` or `<link>`, and do not strip the CSP header at the
-proxy.
+and styles only (vendored Pico, htmx, and Tom Select under `/static/vendor/`).
+Do not add a CDN `<script>` or `<link>`, and do not strip the CSP header at
+the proxy.
 
 ## `TRUSTED_PROXIES`
 

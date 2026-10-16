@@ -85,6 +85,20 @@ def test_update_lead_fill_empty_and_errors(db):
     assert error == "lead_lost"
 
 
+def test_update_lead_invalid_tags_write_no_fields(db):
+    lead, _error = create_lead(company_name="Harbour Physio", phone="0400111222")
+    updated, error = update_lead(lead["id"], next_action="Call back", tags=[123])
+    assert error == "invalid"
+    assert updated is None
+    fresh = get_deal(lead["id"])
+    assert fresh["next_action"] is None
+    from app.services.deal_tags import tags_for_deal
+    assert not tags_for_deal(lead["id"])
+    updated, error = update_lead(lead["id"], next_action="Call back", add_tags="followup")
+    assert error is None
+    assert updated["next_action"] == "Call back"
+
+
 def test_mark_lost_and_restore_and_i2(db):
     lead, _error = create_lead(company_name="Harbour Physio")
     _, error = mark_lost(lead["id"], lost_reason="not-a-real-reason")
@@ -244,6 +258,24 @@ def test_convert_create_company_and_person(db):
     assert company["is_company"] == 1
 
 
+def test_convert_create_onto_preexisting_company_not_partner_created(db):
+    create_service("Online booking", "online-booking")
+    existing = create_partner(
+        "Harbour Physio", is_company=True, website="https://harbourphysio.example",
+    )
+    lead, _error = create_lead(
+        company_name="Harbour Physio", website="https://harbourphysio.example",
+    )
+    before = _partners_count()
+    result, error = convert_lead(
+        lead["id"], service_slug="online-booking", partner_action="create",
+    )
+    assert error is None
+    assert result["partner_created"] is False
+    assert result["partner"]["id"] == existing
+    assert _partners_count() == before
+
+
 def test_find_duplicates_strong_weak_and_denylist(db):
     create_lead(company_name="Alpha", email="shared@alpha.example", phone="0400111222",
                 website="https://alpha.example", linkedin_url="https://linkedin.com/in/alpha?foo=1")
@@ -304,6 +336,35 @@ def test_merge_leads_and_cannot_restore(db):
     )
     _, error = merge_leads(target["id"], [opp_id])
     assert error == "invalid_merge"
+
+
+def test_merge_leads_dedupes_duplicate_source_ids(db):
+    target, _error = create_lead(company_name="Harbour Physio", email="a@h.example")
+    source, _error = create_lead(
+        company_name="Harbour Physio", phone="0400111222", email="b@h.example",
+    )
+    result, error = merge_leads(target["id"], [source["id"], source["id"]])
+    assert error is None
+    assert result["merged_ids"] == [source["id"]]
+    merged = get_deal(source["id"])
+    assert merged["active"] == 0
+    assert merged["merged_into_id"] == target["id"]
+
+
+def test_merge_leads_missing_duplicate_reason_fails_before_writes(db):
+    target, _error = create_lead(company_name="Harbour Physio", email="a@h.example")
+    source, _error = create_lead(
+        company_name="Harbour Physio", phone="0400111222", email="b@h.example",
+    )
+    from app.services.lost_reasons import get_lost_reason_by_name
+    update_lost_reason(get_lost_reason_by_name("Duplicate")["id"], name="Duplicate renamed")
+    result, error = merge_leads(target["id"], [source["id"]])
+    assert error == "invalid_lost_reason"
+    assert result is None
+    untouched_source = get_deal(source["id"])
+    assert untouched_source["active"] == 1
+    assert untouched_source["merged_into_id"] is None
+    assert get_deal(target["id"])["phone"] is None
 
 
 def test_list_leads_and_get_lead(db):

@@ -66,6 +66,48 @@ def test_lost_stage_with_active_is_still_open():
     ) == DUE
 
 
+def test_lost_records_never_flagged_stale(db):
+    from app.services.deals import mark_lost
+    from app.services.lead_records import create_lead
+
+    _pid, deal_id = _setup("2026-08-20", name="Lost Opportunity")
+    mark_lost(deal_id, lost_reason="Not a fit")
+    lead, _ = create_lead(
+        company_name="Lost Lead Co",
+        next_action="Follow up",
+        next_action_date="2026-08-20",
+    )
+    mark_lost(lead["id"], lost_reason="Not a fit")
+
+    due_ids = [d["id"] for d in list_due_deals(today=TODAY)]
+    assert deal_id not in due_ids
+    assert lead["id"] not in due_ids
+    result = run_staleness_gate(today=TODAY)
+    assert deal_id not in result["logged_ids"]
+    assert lead["id"] not in result["logged_ids"]
+
+
+def test_leads_stay_out_of_default_staleness_gate(db):
+    """Leads are not in the staleness gate (list_due_deals type=opportunity).
+
+    ADR 0001 does not define lead staleness; P5 keeps them out rather than
+    inventing a rule. Open opportunities still gate as before.
+    """
+    from app.services.lead_records import create_lead
+
+    _pid, deal_id = _setup("2026-08-20", name="Open Opportunity")
+    lead, _ = create_lead(
+        company_name="Open Lead Co",
+        next_action="Research",
+        next_action_date="2026-08-20",
+    )
+    due_ids = [d["id"] for d in list_due_deals(today=TODAY)]
+    assert deal_id in due_ids
+    assert lead["id"] not in due_ids
+    result = run_staleness_gate(today=TODAY)
+    assert result["logged_ids"] == [deal_id]
+
+
 def test_annotate_days_overdue():
     overdue = annotate_deal({"stage": "new", "next_action_date": "2026-08-20"}, today=TODAY, won_stage_keys=_WON)
     assert overdue["due_status"] == OVERDUE

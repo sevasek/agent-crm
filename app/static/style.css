@@ -246,7 +246,7 @@ code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; fo
     line-height: var(--pico-line-height, 1.5);
 }
 .ts-dropdown {
-    background: #fff;
+    background: var(--pico-form-element-background-color, #fff);
     border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
     border-radius: var(--pico-border-radius, 0.25rem);
     box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
@@ -258,7 +258,8 @@ code { background: var(--bg-alt); padding: 0.1rem 0.4rem; border-radius: 3px; fo
     padding: 0.4rem 0.5rem;
 }
 .ts-dropdown .dropdown-input {
-    background: #fff;
+    background: var(--pico-form-element-background-color, #fff);
+    color: var(--pico-form-element-color, inherit);
     border: var(--pico-border-width, 1px) solid var(--pico-form-element-border-color, var(--border));
     border-radius: var(--pico-border-radius, 0.25rem);
     box-shadow: none;

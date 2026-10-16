@@ -61,6 +61,24 @@ def test_edit_deal_form_has_no_partner_select(logged_in_client, db):
     assert 'name="service_id"' not in html
 
 
+def test_tom_dropdown_follows_pico_light_and_dark_colors():
+    """The dropdown must not hardcode white: in dark mode the light-gray
+    inherited text would sit on it at ~2:1 contrast, and the search input's
+    UA field text goes invisible."""
+    css = (Path(__file__).resolve().parents[1] / "app" / "static" / "style.css").read_text()
+    tom_block = css[css.index("/* Tom Select is only initialised"):]
+    assert "background: #fff;" not in tom_block
+    # Anchor on the background declaration: ".ts-dropdown {" alone also matches
+    # the font/color group rule above it, which has no background at all.
+    for selector in (".ts-dropdown {\n    background:", ".ts-dropdown .dropdown-input {"):
+        start = tom_block.index(selector)
+        rule = tom_block[start:tom_block.index("}", start)]
+        assert "pico-form-element-background-color" in rule, selector
+    start = tom_block.index(".ts-dropdown .dropdown-input {")
+    rule = tom_block[start:tom_block.index("}", start)]
+    assert "color:" in rule
+
+
 def test_app_js_inits_tom_select_only_on_partner_id(client):
     js = client.get("/static/app.js")
     assert js.status_code == 200

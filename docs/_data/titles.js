@@ -8,4 +8,5 @@ module.exports = {
   CLIENT_DEPLOY: "New client instance",
   DEPLOY: "Deploy",
   RELEASE: "Cutting a release",
+  PRIVACY: "Privacy policy",
 };

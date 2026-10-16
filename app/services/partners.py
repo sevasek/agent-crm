@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 from app.database import get_db
@@ -262,7 +262,7 @@ def update_partner(partner_id: int, **fields):
         updates.update(apply_social_fields(existing, social_incoming))
     if not updates:
         return False
-    updates["updated_at"] = datetime.utcnow().isoformat()
+    updates["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [partner_id]
     with get_db() as db:

@@ -228,7 +228,7 @@
 <form method="post" action="/leads/{{ lead.id }}/activities">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
-        <select name="type" style="width:auto;">
+        <select name="type" style="width:auto;" aria-label="Note type">
             <option value="research">Research</option>
             <option value="note">Note</option>
         </select>
@@ -238,7 +238,7 @@
         <input type="text" id="source_url" name="source_url" placeholder="https://…">
     </div>
     <div class="form-row">
-        <textarea name="body" placeholder="What did you find?"></textarea>
+        <textarea name="body" placeholder="What did you find?" aria-label="Note body"></textarea>
     </div>
     <button type="submit">Add note</button>
 </form>

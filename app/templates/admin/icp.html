@@ -19,24 +19,24 @@
     {% for c in criteria %}
     <form id="icp-edit-{{ c.id }}" method="post" action="/icp/{{ c.id }}/edit"></form>
     <tr>
-        <td><input type="text" name="label" value="{{ c.label or '' }}" form="icp-edit-{{ c.id }}" placeholder="e.g. Enterprise-sized"></td>
+        <td><input type="text" name="label" value="{{ c.label or '' }}" form="icp-edit-{{ c.id }}" aria-label="Label" placeholder="e.g. Enterprise-sized"></td>
         <td>
-            <select name="field" form="icp-edit-{{ c.id }}">
+            <select name="field" form="icp-edit-{{ c.id }}" aria-label="Field">
                 {% for key, name in fields.items() %}
                 <option value="{{ key }}" {% if c.field == key %}selected{% endif %}>{{ name }}</option>
                 {% endfor %}
             </select>
         </td>
         <td>
-            <select name="operator" form="icp-edit-{{ c.id }}">
+            <select name="operator" form="icp-edit-{{ c.id }}" aria-label="Operator">
                 {% for key, name in operators.items() %}
                 <option value="{{ key }}" {% if c.operator == key %}selected{% endif %}>{{ key }} — {{ name }}</option>
                 {% endfor %}
             </select>
         </td>
-        <td><input type="text" name="value" value="{{ c.value or '' }}" form="icp-edit-{{ c.id }}" placeholder="ignored for is_not_null"></td>
-        <td><input type="number" name="weight" value="{{ c.weight }}" form="icp-edit-{{ c.id }}" style="width:5rem;"></td>
-        <td><input type="checkbox" name="active" form="icp-edit-{{ c.id }}" {% if c.active %}checked{% endif %}></td>
+        <td><input type="text" name="value" value="{{ c.value or '' }}" form="icp-edit-{{ c.id }}" aria-label="Value" placeholder="ignored for is_not_null"></td>
+        <td><input type="number" name="weight" value="{{ c.weight }}" form="icp-edit-{{ c.id }}" style="width:5rem;" aria-label="Weight"></td>
+        <td><input type="checkbox" name="active" form="icp-edit-{{ c.id }}" aria-label="Active" {% if c.active %}checked{% endif %}></td>
         <td>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="icp-edit-{{ c.id }}">
             <button type="submit" form="icp-edit-{{ c.id }}">Save</button>

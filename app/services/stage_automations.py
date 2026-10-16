@@ -53,8 +53,8 @@ def automation_source(automation_id: int) -> str:
 
 
 def _now():
-    from datetime import datetime
-    return datetime.utcnow().isoformat()
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def render_template(text, values: dict) -> str:

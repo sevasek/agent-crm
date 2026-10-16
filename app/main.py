@@ -194,6 +194,12 @@ def create_app() -> FastAPI:
         request.state.csrf_token = generate_csrf_token(
             request.cookies.get(session_cookie_name())
         )
+        # base.html reads these per request, alongside csrf_token above, so the
+        # setup banner needs no per-route template context.
+        request.state.secret_key_is_default = (
+            os.getenv("SECRET_KEY", "dev-secret-change-in-prod") == "dev-secret-change-in-prod"
+        )
+        request.state.cookies_insecure = not should_use_secure_cookies()
         if _cross_site_cookie_request(request):
             response = Response("Cross-origin request blocked", status_code=403)
         else:

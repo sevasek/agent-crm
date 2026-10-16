@@ -27,17 +27,17 @@
         <td>
             <form method="post" action="/stages/{{ s.key }}/move" class="stage-move-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" name="direction" value="up" class="btn-secondary" {% if loop.first %}disabled{% endif %}>&uarr;</button>
-                <button type="submit" name="direction" value="down" class="btn-secondary" {% if loop.last %}disabled{% endif %}>&darr;</button>
+                <button type="submit" name="direction" value="up" class="btn-secondary" aria-label="Move stage up" {% if loop.first %}disabled{% endif %}>&uarr;</button>
+                <button type="submit" name="direction" value="down" class="btn-secondary" aria-label="Move stage down" {% if loop.last %}disabled{% endif %}>&darr;</button>
             </form>
         </td>
         <td><code>{{ s.key }}</code></td>
-        <td><input type="text" name="label" value="{{ s.label }}" form="stage-edit-{{ s.key }}"></td>
-        <td><input type="checkbox" name="is_default" form="stage-edit-{{ s.key }}" {% if s.is_default %}checked{% endif %}></td>
-        <td><input type="checkbox" name="is_qualified_pool" form="stage-edit-{{ s.key }}" {% if s.is_qualified_pool %}checked{% endif %}></td>
-        <td><input type="checkbox" name="triggers_nurture" form="stage-edit-{{ s.key }}" {% if s.triggers_nurture %}checked{% endif %}></td>
-        <td><input type="checkbox" name="is_won" form="stage-edit-{{ s.key }}" {% if s.is_won %}checked{% endif %}></td>
-        <td><input type="checkbox" name="is_lost" form="stage-edit-{{ s.key }}" {% if s.is_lost %}checked{% endif %}></td>
+        <td><input type="text" name="label" value="{{ s.label }}" form="stage-edit-{{ s.key }}" aria-label="Label"></td>
+        <td><input type="checkbox" name="is_default" form="stage-edit-{{ s.key }}" aria-label="Default" {% if s.is_default %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_qualified_pool" form="stage-edit-{{ s.key }}" aria-label="Qualified pool" {% if s.is_qualified_pool %}checked{% endif %}></td>
+        <td><input type="checkbox" name="triggers_nurture" form="stage-edit-{{ s.key }}" aria-label="Triggers nurture" {% if s.triggers_nurture %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_won" form="stage-edit-{{ s.key }}" aria-label="Won" {% if s.is_won %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_lost" form="stage-edit-{{ s.key }}" aria-label="Lost" {% if s.is_lost %}checked{% endif %}></td>
         <td>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="stage-edit-{{ s.key }}">
             <button type="submit" form="stage-edit-{{ s.key }}">Save</button>

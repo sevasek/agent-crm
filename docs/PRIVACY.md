@@ -1,53 +1,39 @@
 # Privacy policy
 
-This CRM stores personal information about leads, partners (contacts/companies), and the
-people who operate the system.
+Replace `ops@example.com` with your own address before you give this page to anyone.
 
-## What we collect
+This CRM stores information about leads and contacts, and about the person who logs in.
 
-- Contact details: name, email, phone number, company.
-- Deal and lead information: service interest, pipeline stage, notes.
-- Research notes: free-text notes an operator or AI agent attaches to a lead, which may
-  include a source URL where the information was found.
-- Call and activity history: a timestamped log of calls, notes, and status changes.
-- Account information for people who log in to the CRM: email and a hashed password.
+## What is stored
 
-## Why we collect it
+- Name, email, phone number, and company.
+- What they were interested in, which stage a deal is in, and notes.
+- Research notes, which may include the web address where the information was found.
+- A log of calls, notes, and status changes, with the time of each one.
+- For the person who logs in: an email address and a password stored so it cannot be read back.
 
-To run a sales/outreach pipeline: tracking who we've contacted, what they're interested in,
-and what to do next.
+## Why
+
+To keep track of who you have contacted, what they want, and what to do next.
 
 ## Who can see it
 
-Only people with a login to this CRM instance, and any automation (bot/API key) explicitly
-configured by the operator. See [SECURITY.md](../SECURITY.md) for how access is controlled.
+People with a login to this CRM, and any agent or automation you have given a key. [SECURITY.md](../SECURITY.md) describes how those keys work.
 
-## How long we keep it
+## How long it is kept
 
-Data is kept for as long as the CRM instance is in active use. See
-[docs/OFFBOARDING.md](OFFBOARDING.md) for how an operator exports or deletes all data when
-shutting an instance down.
+For as long as this CRM is in use. [Offboarding](OFFBOARDING.md) is how the database is exported or deleted when an instance is shut down.
 
-## Access or correction
+## If this CRM has information about you
 
-If you believe this CRM holds information about you and want to see it, correct it, or have
-it deleted, contact the operator of this instance at `ops@example.com`. That is a
-placeholder: each instance operator sets their own contact address here before publishing.
+Write to the operator at `ops@example.com`. You can ask to see your record, correct it, or have it deleted.
 
-## Access and correction requests
+There is no button in the app for that. The operator does it by hand:
 
-Requests arrive at the operator contact address above. If someone asks what personal
-information this CRM holds about them, or asks to correct or delete it: there is currently
-no self-service UI for this. Handle it manually:
-
-1. Search for the person in the admin UI, under Partners and under Leads.
-2. For an export of their full record, see the data export process in
-   [docs/OFFBOARDING.md](OFFBOARDING.md) (adapt the full-instance export to pull just the
-   relevant rows if a single-person export isn't already supported).
-3. For a correction, edit the record directly in the admin UI.
-4. For deletion, see the deletion/retention guidance in
-   [docs/OFFBOARDING.md](OFFBOARDING.md).
+1. Search under Partners and under Leads.
+2. To correct something, edit that page.
+3. To export or delete, follow [Offboarding](OFFBOARDING.md). That exports the whole database. One person's rows have to be taken out of that file by hand.
 
 ## Questions
 
-`ops@example.com` — the instance operator's contact address, configured per deployment.
+`ops@example.com`

@@ -1,5 +1,8 @@
 # MCP: the agent interface
 
+Day-to-day use of the screens is [Using the CRM](USING.md). This page is the
+tool list for an agent.
+
 The admin UI is for a human operator. **`POST /mcp`** is for agents (Grok
 custom connectors, xAI Remote MCP tools, Cursor, or any MCP client). It uses the
 same sqlite database and service layer as the web app, with no second process.

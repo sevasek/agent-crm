@@ -254,7 +254,8 @@ default; `--type lead` is opt-in).
 
 ## Docs
 
-[`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
+[`USING.md`](docs/USING.md) the screens, in plain language ·
+[`SCOPE.md`](docs/SCOPE.md) what's in and out ·
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
 [`CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md) new client instance on a VPS ·

@@ -1,5 +1,8 @@
 # Production reverse proxy and TLS
 
+This page is for putting the CRM on a server. Day-to-day use is
+[Using the CRM](USING.md).
+
 To stand up a new client instance end to end (env, compose, admin, TLS,
 Grok connector), follow [`CLIENT_DEPLOY.md`](CLIENT_DEPLOY.md). This file
 is the proxy and cookie detail that runbook points at.

@@ -1,5 +1,8 @@
 # Cutting a release
 
+This page is for publishing a version of the software. It is not part of using
+the CRM.
+
 The first published image should be `v0.1.0`. Do this on a clean `main`
 after reviewing `[Unreleased]` in [`CHANGELOG.md`](../CHANGELOG.md).
 Do not retag; a tag push is what starts the publish workflow.

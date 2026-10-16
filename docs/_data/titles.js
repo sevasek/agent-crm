@@ -10,4 +10,5 @@ module.exports = {
   RELEASE: "Cutting a release",
   OFFBOARDING: "Offboarding",
   PRIVACY: "Privacy policy",
+  USING: "Using the CRM",
 };

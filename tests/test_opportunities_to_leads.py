@@ -5,6 +5,7 @@ from app.services.partners import create_partner
 from scripts.opportunities_to_leads import (
     ACTIVITY_BODY,
     convert_opportunity_to_lead,
+    main,
     qualifying_opportunities,
     run,
 )
@@ -65,6 +66,27 @@ def test_skips_parent_link_and_won_child(db):
     chosen = {d["id"] for d in qualifying_opportunities(["new"])}
     assert parent_id not in chosen
     assert child_id not in chosen
+
+
+def test_dry_run_cli_never_calls_init_db(db, monkeypatch, capsys):
+    import scripts.opportunities_to_leads as script
+
+    def boom():
+        raise AssertionError("dry-run must not migrate the database")
+
+    monkeypatch.setattr(script, "init_db", boom)
+    assert script.main(["--stage", "new"]) == 0
+    assert "would convert" in capsys.readouterr().out
+
+
+def test_dry_run_cli_aborts_on_unmigrated_schema(db, capsys):
+    import scripts.opportunities_to_leads as script
+
+    with db.get_db() as conn:
+        conn.execute("PRAGMA user_version = 7")
+        conn.commit()
+    assert script.main(["--stage", "new"]) == 1
+    assert "never migrates" in capsys.readouterr().err
 
 
 def test_apply_writes_one_system_activity(db):

@@ -123,7 +123,7 @@ document.addEventListener("keydown", function (event) {
             Sortable.create(list, {
                 group: "pipeline",
                 animation: 150,
-                draggable: ".pipeline-card",
+                draggable: ".pipeline-card:not(.pipeline-card-lost)",
                 filter: "select, a, button, input, textarea, label",
                 preventOnFilter: false,
                 forceFallback: true,
@@ -147,4 +147,15 @@ document.addEventListener("keydown", function (event) {
         bindLists();
     }
     document.body.addEventListener("htmx:afterSwap", bindLists);
+    // A drop's position input must not leak into a later dropdown submit:
+    // the stage select posts the whole form, and a stale index would place
+    // the card at an arbitrary slot in the destination column.
+    document.addEventListener("htmx:afterRequest", function (evt) {
+        var target = evt && evt.target;
+        if (!target || !target.closest) return;
+        var form = target.closest("form.stage-form");
+        if (!form) return;
+        var pos = form.querySelector("input[name=position]");
+        if (pos) pos.remove();
+    });
 })();

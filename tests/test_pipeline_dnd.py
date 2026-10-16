@@ -2,7 +2,8 @@ from pathlib import Path
 
 from app.services.auth import generate_csrf_token
 from app.services.catalog import create_service
-from app.services.deals import create_deal, get_deal, list_deals, set_deal_stage
+from app.services.deals import create_deal, get_deal, list_deals, mark_lost, set_deal_stage
+from app.services.lead_records import create_lead
 from app.services.partners import create_partner
 
 
@@ -159,6 +160,46 @@ def test_dropdown_without_position_appends(logged_in_client, db):
     assert [d["id"] for d in list_deals(stage="proposal", order="board")] == [
         first, incoming,
     ]
+
+
+def test_reorder_ignores_hidden_lead_rows_in_same_stage(db):
+    """A lead sharing the stage must not shift the visible opportunity order."""
+    from app.database import get_db
+
+    alpha = _deal(stage="new", name="Alpha")
+    bravo = _deal(stage="new", name="Bravo")
+    lead, _error = create_lead(company_name="Hidden Lead", email="hidden@lead.example")
+    lead_id = lead["id"]
+    # Interleave the lead between the two opportunities on the board.
+    with get_db() as conn:
+        conn.execute("UPDATE deals SET stage = 'new', board_position = 0 WHERE id = ?", (alpha,))
+        conn.execute("UPDATE deals SET stage = 'new', board_position = 1 WHERE id = ?", (lead_id,))
+        conn.execute("UPDATE deals SET stage = 'new', board_position = 2 WHERE id = ?", (bravo,))
+        conn.commit()
+
+    assert set_deal_stage(alpha, "new", position=1) is True  # drag Alpha below Bravo
+
+    visible = [d["id"] for d in list_deals(stage="new", order="board")]
+    assert visible == [bravo, alpha]
+    with get_db() as conn:
+        lead_pos = conn.execute(
+            "SELECT board_position FROM deals WHERE id = ?", (lead_id,),
+        ).fetchone()[0]
+    assert lead_pos == 1  # untouched by the visible-card renumber
+
+
+def test_lost_cards_are_view_only_and_not_draggable(logged_in_client, db):
+    deal_id = _deal()
+    mark_lost(deal_id, lost_reason="Not a fit")
+    lost_board = logged_in_client.get("/pipeline?lost=1")
+    assert "pipeline-card-lost" in lost_board.text
+    open_board = logged_in_client.get("/pipeline")
+    assert "pipeline-card-lost" not in open_board.text
+    app_js = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.js").read_text()
+    assert '".pipeline-card:not(.pipeline-card-lost)"' in app_js
+    # The drop's position input is cleared after each request so a later
+    # dropdown change appends instead of reusing a stale index.
+    assert "htmx:afterRequest" in app_js
 
 
 def test_app_js_inits_sortable_without_inline_script():

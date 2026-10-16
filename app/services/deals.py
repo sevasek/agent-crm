@@ -455,12 +455,19 @@ def _coerce_board_position(position):
         return None
 
 
-def _apply_board_order(db, deal_id: int, stage: str, position=None) -> None:
-    """Rewrite board_position for every deal in `stage` after placing deal_id."""
+def _apply_board_order(db, deal_id: int, stage: str, position=None, active=1) -> None:
+    """Rewrite board_position for the cards visible on the board in `stage`.
+
+    The board renders one visibility class per view — open opportunities by
+    default, lost ones behind `?lost=1`, never leads — so only that class is
+    renumbered. Hidden rows sharing the stage must not shift the order the
+    user actually sees, otherwise a drop lands a slot off.
+    """
     rows = db.execute(
         "SELECT id FROM deals WHERE stage = ? AND id != ? "
+        "AND type = 'opportunity' AND active = ? "
         "ORDER BY board_position ASC, id ASC",
-        (stage, deal_id),
+        (stage, deal_id, active),
     ).fetchall()
     ids = [row[0] for row in rows]
     if position is None:
@@ -475,10 +482,12 @@ def _apply_board_order(db, deal_id: int, stage: str, position=None) -> None:
         )
 
 
-def _compact_board_order(db, stage: str) -> None:
+def _compact_board_order(db, stage: str, active=1) -> None:
     rows = db.execute(
-        "SELECT id FROM deals WHERE stage = ? ORDER BY board_position ASC, id ASC",
-        (stage,),
+        "SELECT id FROM deals WHERE stage = ? "
+        "AND type = 'opportunity' AND active = ? "
+        "ORDER BY board_position ASC, id ASC",
+        (stage, active),
     ).fetchall()
     for index, row in enumerate(rows):
         db.execute(
@@ -518,12 +527,16 @@ def set_deal_stage(deal_id: int, new_stage: str, position=None) -> bool:
                 "UPDATE deals SET stage = ?, updated_at = ?, closed_at = ? WHERE id = ?",
                 (new_stage, now, closed_at, deal_id),
             )
-            _apply_board_order(db, deal_id, new_stage, parsed_position)
-            _compact_board_order(db, old_stage)
+            _apply_board_order(
+                db, deal_id, new_stage, parsed_position, active=deal.get("active", 1),
+            )
+            _compact_board_order(db, old_stage, active=deal.get("active", 1))
             db.commit()
     else:
         with get_db() as db:
-            _apply_board_order(db, deal_id, new_stage, parsed_position)
+            _apply_board_order(
+                db, deal_id, new_stage, parsed_position, active=deal.get("active", 1),
+            )
             db.commit()
         return True
 

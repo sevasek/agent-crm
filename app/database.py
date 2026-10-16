@@ -194,8 +194,7 @@ CREATE INDEX IF NOT EXISTS idx_stage_automation_actions_automation
 """
 
 
-# Additive-only, except a reviewed table rebuild that only relaxes
-# constraints. See docs/adr/0001-lead-opportunity-model.md.
+# Base schema. Later changes are numbered migrations in this file.
 _SCHEMA_V1 = """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -756,7 +755,7 @@ def _restore_sequence(db, table: str, seq: int) -> None:
 
 
 def _rebuild_table(db, table: str, new_ddl: str, copy_columns, indexes) -> None:
-    """Rebuild one table per ADR 0001 §6.2 steps 1–8."""
+    """Rebuild one table: copy rows, swap the name, recreate indexes, restore sqlite_sequence."""
     seq = _sqlite_sequence(db, table)
     new_name = f"{table}_new"
     db.execute(new_ddl)
@@ -791,7 +790,7 @@ def _seed_lost_reasons(db) -> None:
 
 
 def _backfill_lead_model(db) -> None:
-    """ADR 0001 §6.3: every existing deal is an opportunity; lost-stage → lost."""
+    """Every existing deal is an opportunity; a lost-stage deal is marked lost."""
     row = db.execute(
         "SELECT id FROM lost_reasons WHERE name = ?",
         ("Lost stage (migrated)",),
@@ -825,14 +824,13 @@ def migrate_008(db) -> None:
 
     Relaxes NOT NULL on partner_id/service_id (and activities/delegated_tasks
     partner_id), adds lead columns, lost_reasons, and backfills existing
-    deals as opportunities. See docs/adr/0001-lead-opportunity-model.md §6.
+    deals as opportunities.
     """
     fk_on = db.execute("PRAGMA foreign_keys").fetchone()[0]
     if fk_on:
         raise RuntimeError(
             "migrate_008 requires PRAGMA foreign_keys = 0; a future change "
-            "that turns on foreign keys must update this procedure "
-            "(docs/adr/0001-lead-opportunity-model.md §6.2 step 0)"
+            "that turns on foreign keys must update this procedure"
         )
     before_violations = _fk_violation_keys(db)
 

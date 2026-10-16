@@ -1,4 +1,4 @@
-"""ADR 0001 P3: ingest defaults to lead; type=opportunity keeps today's path."""
+"""Ingest defaults to lead; type=opportunity keeps the partner-and-deal path."""
 from app.services.catalog import create_service
 from app.services.deals import get_deal, list_deals
 from app.services.lead_records import convert_lead, create_lead

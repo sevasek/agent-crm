@@ -1,4 +1,4 @@
-"""ADR 0001 P4: new MCP lead tools, changed deal tools, §3 walkthrough."""
+"""MCP lead tools and the changed deal tools."""
 from app.services.catalog import create_service
 from app.services.deals import create_deal, get_deal
 from app.services.lead_records import create_lead

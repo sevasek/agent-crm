@@ -17,18 +17,16 @@ const assert = (cond, msg) => {
 const read = (p) => fs.readFileSync(path.join(SITE, p), "utf8");
 
 // Lowercased permalinks, not the SCREAMING_CASE source filenames.
-for (const slug of ["mcp", "scope", "data_model", "deploy", "release", "client_deploy"]) {
+for (const slug of ["mcp", "scope", "data_model", "deploy", "release", "client_deploy", "offboarding", "privacy"]) {
   assert(fs.existsSync(path.join(SITE, slug, "index.html")), `${slug}/index.html exists`);
 }
 assert(fs.existsSync(path.join(SITE, "index.html")), "site root index.html exists (from docs/index.md)");
-assert(!fs.existsSync(path.join(SITE, "UI_UPGRADE_PLAN")), "UI_UPGRADE_PLAN.md was not built (internal, not user-facing)");
-assert(!fs.existsSync(path.join(SITE, "adr")), "docs/adr/ was not built (internal design records)");
 
 // The manual home page's own nav must not list itself, and must list the rest.
 const home = read("index.html");
 assert((home.match(/class="topnav"/g) || []).length === 1, "exactly one nav block on the home page");
 assert(!/href="\/">Manual<\/a>\s*<a href="\/">/.test(home), "no duplicate/empty root nav entry");
-for (const label of ["Scope", "Data model", "MCP: the agent interface", "Deploy", "Cutting a release", "New client instance"]) {
+for (const label of ["Scope", "Data model", "MCP: the agent interface", "Deploy", "Cutting a release", "New client instance", "Offboarding", "Privacy policy"]) {
   assert(home.includes(`>${label}<`), `nav includes "${label}"`);
 }
 

@@ -131,7 +131,7 @@ def _website_key(value: str) -> str:
 
 
 def website_key(value: str) -> str:
-    """Public alias for the ingest / duplicate website key (ADR 0001 §5.6)."""
+    """Public alias for the ingest / duplicate website key."""
     return _website_key(value)
 
 

@@ -1,6 +1,6 @@
-"""Fixtures for ADR 0001 lead-model migrations (schema 7 → 8).
+"""Fixtures for lead-model schema upgrades (schema 7 → 8).
 
-The migrated lost-stage deal helper is here so P2 restore_deal can reuse it.
+The migrated lost-stage deal helper is here so restore_deal tests can reuse it.
 """
 import sqlite3
 

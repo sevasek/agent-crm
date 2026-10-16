@@ -1,4 +1,4 @@
-"""Lead records: create, update, list, duplicates, merge, convert (ADR 0001 P2)."""
+"""Lead records: create, update, list, duplicates, merge, convert."""
 from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 

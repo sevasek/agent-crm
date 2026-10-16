@@ -1,8 +1,8 @@
 """Lead ingestion — the automation-facing write path (docs/DATA_MODEL.md → Lead ingest).
 
 One entry point, ingest_lead(), used by the /api/v1/leads endpoint and MCP.
-Default type is lead (ADR 0001 Q1): a new row is a lead, not a partner.
-type=opportunity keeps the pre-ADR behaviour: find-or-create a partner
+Default type is lead: a new row is a lead, not a partner.
+type=opportunity keeps the earlier behaviour: find-or-create a partner
 (email first, else phone+name, else website+name, else name scoped to the
 parent company) and create an opportunity.
 """

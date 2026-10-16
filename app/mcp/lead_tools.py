@@ -1,4 +1,4 @@
-"""MCP wrappers for ADR 0001 lead tools (§8.1)."""
+"""MCP wrappers for the lead tools."""
 from app.mcp.serialize import deal_brief, partner_brief
 from app.mcp.tools import (
     _err,

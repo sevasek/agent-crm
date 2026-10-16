@@ -34,6 +34,24 @@ If you believe this CRM holds information about you and want to see it, correct 
 it deleted, contact the operator of this instance at `ops@example.com`. That is a
 placeholder: each instance operator sets their own contact address here before publishing.
 
+## Access and correction requests
+
+Requests arrive at the operator contact address above. If someone asks what personal
+information this CRM holds about them, or asks to correct or delete it: there is currently
+no self-service UI for this. Handle it manually:
+
+1. Search for the person in the admin UI (Partners, or Leads if lead-model search covers
+   it).
+2. For an export of their full record, see the data export process in
+   [docs/OFFBOARDING.md](OFFBOARDING.md) (adapt the full-instance export to pull just the
+   relevant rows if a single-person export isn't already supported).
+3. For a correction, edit the record directly in the admin UI.
+4. For deletion, see the deletion/retention guidance in
+   [docs/OFFBOARDING.md](OFFBOARDING.md).
+
+A self-service "download my data" / "request correction" flow is a future enhancement: not
+yet decided or built, and deliberately deferred for now.
+
 ## Small business exemption status
 
 The Australian Privacy Act 1988 exempts a "small business operator" (annual turnover under

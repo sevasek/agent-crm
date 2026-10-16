@@ -656,6 +656,7 @@ def _pipeline_board_data(current_tag="", tag_error="", include_lost=False):
             "stage": s,
             "deals": [] if tag_error else annotate_deals(list_deals(
                 stage=s["key"], tags=tag_filter, include_lost=include_lost,
+                order="board",
             )),
         }
         for s in stages
@@ -899,10 +900,12 @@ async def change_deal_stage(
     stage: str = Form(...), next: str = Form("partner"),
     tag: str = Form(""),
     lost: str = Form(""),
+    position: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
     old_stage = deal["stage"] if deal else None
+    parsed_position = _safe_int(position) if str(position).strip() != "" else None
     # Mirror the MCP guard: only active opportunities change stage over HTTP.
     # Leads must be converted first; lost records must be restored first.
     if (
@@ -911,7 +914,7 @@ async def change_deal_stage(
         and deal.get("active", 1)
         and validate_csrf_token(csrf_token, get_session_cookie(request))
     ):
-        set_deal_stage(deal_id, stage)
+        set_deal_stage(deal_id, stage, position=parsed_position)
     include_lost = _truthy_query(lost, "lost")
     if _is_htmx(request) and next == "pipeline":
         current_tag, tag_error = _tag_query(tag)

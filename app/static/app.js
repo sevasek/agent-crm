@@ -91,3 +91,85 @@ document.addEventListener("keydown", function (event) {
     if (!field.form.classList.contains("call-outcome-form")) return;
     event.preventDefault();
 });
+
+// Pipeline kanban: SortableJS drop → the same hx-post the stage <select>
+// already uses (htmx-ext-sortable style). delayOnTouchOnly keeps board
+// scrolling from stealing every mobile gesture.
+(function () {
+    function destStage(list) {
+        var col = list && list.closest && list.closest(".pipeline-column");
+        if (!col) return "";
+        if (col.getAttribute("data-stage")) return col.getAttribute("data-stage");
+        var id = col.id || "";
+        if (id.indexOf("pipeline-col-") === 0) return id.slice("pipeline-col-".length);
+        return "";
+    }
+
+    function postDrop(evt) {
+        if (!evt || !evt.item) return;
+        if (evt.to === evt.from && evt.oldIndex === evt.newIndex) return;
+        var card = evt.item;
+        var form = card.querySelector("form.stage-form");
+        var select = card.querySelector("select[name=stage]");
+        if (!form || !select) return;
+        var stage = destStage(evt.to);
+        if (!stage) return;
+        var pos = form.querySelector("input[name=position]");
+        if (!pos) {
+            pos = document.createElement("input");
+            pos.type = "hidden";
+            pos.name = "position";
+            form.appendChild(pos);
+        }
+        pos.value = String(evt.newIndex);
+        select.value = stage;
+        if (window.htmx) {
+            window.htmx.trigger(select, "change");
+        } else {
+            form.submit();
+        }
+    }
+
+    function bindLists() {
+        if (typeof Sortable === "undefined") return;
+        document.querySelectorAll(".pipeline-card-list").forEach(function (list) {
+            if (Sortable.get(list)) return;
+            Sortable.create(list, {
+                group: "pipeline",
+                animation: 150,
+                draggable: ".pipeline-card:not(.pipeline-card-lost)",
+                filter: "select, a, button, input, textarea, label",
+                preventOnFilter: false,
+                forceFallback: true,
+                fallbackTolerance: 3,
+                fallbackOnBody: true,
+                delay: 200,
+                delayOnTouchOnly: true,
+                touchStartThreshold: 8,
+                emptyInsertThreshold: 24,
+                ghostClass: "sortable-ghost",
+                chosenClass: "sortable-chosen",
+                dragClass: "sortable-drag",
+                onEnd: postDrop
+            });
+        });
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", bindLists);
+    } else {
+        bindLists();
+    }
+    document.body.addEventListener("htmx:afterSwap", bindLists);
+    // A drop's position input must not leak into a later dropdown submit:
+    // the stage select posts the whole form, and a stale index would place
+    // the card at an arbitrary slot in the destination column.
+    document.addEventListener("htmx:afterRequest", function (evt) {
+        var target = evt && evt.target;
+        if (!target || !target.closest) return;
+        var form = target.closest("form.stage-form");
+        if (!form) return;
+        var pos = form.querySelector("input[name=position]");
+        if (pos) pos.remove();
+    });
+})();

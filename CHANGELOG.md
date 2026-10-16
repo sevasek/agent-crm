@@ -32,6 +32,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Optional `scripts/opportunities_to_leads.py` to move early-stage
   opportunities back to leads (dry-run by default). The migration does
   not run it.
+- Pipeline kanban drag-and-drop (SortableJS 1.15.7, vendored). Drop posts
+  to the existing `/deals/{id}/stage` form with an optional `position`
+  field so stage automations still run. Schema v9 adds
+  `deals.board_position` after the lead-model rebuild. The per-card stage
+  dropdown stays as the keyboard / no-JS fallback.
 - Stage automations (schema v7). Named rules, empty until an operator adds
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
   Entering the chosen stage can create a delegated task and/or child deals
@@ -71,10 +76,11 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   (`invalid_stage_role`). The seeded Lost stage label can still be edited.
   Lost is `active=0` plus a lost reason, not a stage.
 - Rollback for this release is restore-only: stop the app and
-  `staleness-cron`, restore `pre-migrate-v7-to-v8-*.db`, deploy the
-  previous (schema 7) image. Schema 8 records created after the
-  migration are lost on rollback. The previous code refuses a schema 8
-  database.
+  `staleness-cron`, restore the pre-migration backup
+  (`pre-migrate-v7-to-v9-*.db` from a schema 7 database, or
+  `pre-migrate-v8-to-v9-*.db` from schema 8), deploy the previous
+  (schema 7) image. Records created after the migration are lost on
+  rollback. The previous code refuses a schema 9 database.
 
 ## [0.1.0] - 2026-10-06
 

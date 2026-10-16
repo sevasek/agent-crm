@@ -104,14 +104,19 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
     if probability_value is not None and (probability_value < 0 or probability_value > 100):
         probability_value = None
     with get_db() as db:
+        max_row = db.execute(
+            "SELECT MAX(board_position) AS m FROM deals WHERE stage = ?",
+            (stage,),
+        ).fetchone()
+        next_pos = (max_row["m"] if max_row["m"] is not None else -1) + 1
         db.execute("""
             INSERT INTO deals (
                 partner_id, service_id, stage, source, value_estimate,
                 pain_points, goals, next_action, next_action_date, offer_id,
                 owner_key, external_ref, parent_deal_id,
-                probability, priority, expected_close
+                probability, priority, expected_close, board_position
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             partner_id, service_id, stage,
             sanitize_text(source, max_len=120) or None,
@@ -127,6 +132,7 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
             probability_value,
             priority_value,
             sanitize_text(expected_close, max_len=32) or None,
+            next_pos,
         ))
         db.commit()
         deal_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -175,7 +181,7 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
 def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
                service_id: int = None, service_slug: str = None, deal_ids=None,
                parent_deal_id: int = None, tags=None, type: str = "opportunity",
-               include_lost: bool = False):
+               include_lost: bool = False, order: str = None):
     wanted_tags, impossible = coerce_tag_filter(tags)
     if impossible:
         return []
@@ -229,7 +235,10 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
             params.extend(ids)
         else:
             return []
-    query += " ORDER BY deals.updated_at DESC"
+    if order == "board":
+        query += " ORDER BY deals.board_position ASC, deals.id ASC"
+    else:
+        query += " ORDER BY deals.updated_at DESC"
     with get_db() as db:
         rows = db.execute(query, params).fetchall()
         deals = [dict(r) for r in rows]
@@ -434,11 +443,69 @@ def restore_deal(deal_id: int):
     return get_deal(deal_id), None
 
 
-def set_deal_stage(deal_id: int, new_stage: str) -> bool:
+def _coerce_board_position(position):
+    """Optional 0-based index from a form field or API. None means 'append'."""
+    if position is None or isinstance(position, bool):
+        return None
+    if isinstance(position, str) and not position.strip():
+        return None
+    try:
+        return int(position)
+    except (TypeError, ValueError):
+        return None
+
+
+def _apply_board_order(db, deal_id: int, stage: str, position=None, active=1) -> None:
+    """Rewrite board_position for the cards visible on the board in `stage`.
+
+    The board renders one visibility class per view — open opportunities by
+    default, lost ones behind `?lost=1`, never leads — so only that class is
+    renumbered. Hidden rows sharing the stage must not shift the order the
+    user actually sees, otherwise a drop lands a slot off.
+    """
+    rows = db.execute(
+        "SELECT id FROM deals WHERE stage = ? AND id != ? "
+        "AND type = 'opportunity' AND active = ? "
+        "ORDER BY board_position ASC, id ASC",
+        (stage, deal_id, active),
+    ).fetchall()
+    ids = [row[0] for row in rows]
+    if position is None:
+        ids.append(deal_id)
+    else:
+        pos = max(0, min(int(position), len(ids)))
+        ids.insert(pos, deal_id)
+    for index, sibling_id in enumerate(ids):
+        db.execute(
+            "UPDATE deals SET board_position = ? WHERE id = ?",
+            (index, sibling_id),
+        )
+
+
+def _compact_board_order(db, stage: str, active=1) -> None:
+    rows = db.execute(
+        "SELECT id FROM deals WHERE stage = ? "
+        "AND type = 'opportunity' AND active = ? "
+        "ORDER BY board_position ASC, id ASC",
+        (stage, active),
+    ).fetchall()
+    for index, row in enumerate(rows):
+        db.execute(
+            "UPDATE deals SET board_position = ? WHERE id = ?",
+            (index, row[0]),
+        )
+
+
+def set_deal_stage(deal_id: int, new_stage: str, position=None) -> bool:
     """Move a deal to a new stage. Fires nurture enrollment when the target
     stage has `triggers_nurture` set (not on every save), fires the deal-won
     webhook when entering `is_won` from a non-won stage, sets `closed_at`
-    when it has `is_won` or `is_lost` set, and logs the transition."""
+    when it has `is_won` or `is_lost` set, and logs the transition.
+
+    `position` is an optional 0-based index in the destination column. A
+    same-stage call with a position only reorders the board (no activity,
+    no automations). A stage change without a position appends the card.
+    """
     stage_meta = pipeline_stages.get_stage(new_stage)
     if not stage_meta:
         return False
@@ -447,17 +514,31 @@ def set_deal_stage(deal_id: int, new_stage: str) -> bool:
     if not deal:
         return False
     old_stage = deal["stage"]
-    if old_stage == new_stage:
+    parsed_position = _coerce_board_position(position)
+    stage_changed = old_stage != new_stage
+    if not stage_changed and parsed_position is None:
         return True
 
     now = datetime.utcnow().isoformat()
-    closed_at = now if (stage_meta["is_won"] or stage_meta["is_lost"]) else None
-    with get_db() as db:
-        db.execute(
-            "UPDATE deals SET stage = ?, updated_at = ?, closed_at = ? WHERE id = ?",
-            (new_stage, now, closed_at, deal_id),
-        )
-        db.commit()
+    if stage_changed:
+        closed_at = now if (stage_meta["is_won"] or stage_meta["is_lost"]) else None
+        with get_db() as db:
+            db.execute(
+                "UPDATE deals SET stage = ?, updated_at = ?, closed_at = ? WHERE id = ?",
+                (new_stage, now, closed_at, deal_id),
+            )
+            _apply_board_order(
+                db, deal_id, new_stage, parsed_position, active=deal.get("active", 1),
+            )
+            _compact_board_order(db, old_stage, active=deal.get("active", 1))
+            db.commit()
+    else:
+        with get_db() as db:
+            _apply_board_order(
+                db, deal_id, new_stage, parsed_position, active=deal.get("active", 1),
+            )
+            db.commit()
+        return True
 
     log_activity(deal["partner_id"], "system", stage_changed_body(old_stage, new_stage), deal_id=deal_id)
 

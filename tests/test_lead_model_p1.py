@@ -110,8 +110,8 @@ def test_schema_7_fixture_preserves_ids_and_backfills_lost(tmp_path, monkeypatch
         assert task["deal_id"] == sample["open_id"]
         assert task["partner_id"] == sample["partner_id"]
 
-    backups = list((tmp_path / "backups").glob("pre-migrate-v7-to-v8-*.db"))
-    assert backups, "expected pre-migrate-v7-to-v8 backup"
+    backups = list((tmp_path / "backups").glob("pre-migrate-v7-to-*.db"))
+    assert backups, "expected pre-migrate-v7-to-* backup"
 
 
 def test_version_0_column_order_maps_by_name(tmp_path, monkeypatch):
@@ -269,7 +269,7 @@ def test_fresh_and_migrated_schemas_match(tmp_path, monkeypatch):
 
     assert fresh_snap == migrated_snap
     with sqlite3.connect(fresh) as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 8
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
 def test_list_deals_defaults_exclude_lost_and_leads(db):

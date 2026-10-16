@@ -1,7 +1,8 @@
-<div id="pipeline-col-{{ col.stage.key }}" class="pipeline-column"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
+<div id="pipeline-col-{{ col.stage.key }}" class="pipeline-column" data-stage="{{ col.stage.key }}"{% if oob %} hx-swap-oob="outerHTML"{% endif %}>
     <h2>{{ col.stage.label }} <span class="muted">({{ col.deals|length }})</span></h2>
+    <div class="pipeline-card-list">
     {% for d in col.deals %}
-    <div class="pipeline-card{% if not d.active %} pipeline-card-lost{% endif %}">
+    <div class="pipeline-card{% if not d.active %} pipeline-card-lost{% endif %}" data-deal-id="{{ d.id }}">
         {% if d.partner_id %}<a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">{{ d.company_name or d.name or ("Record #" ~ d.id) }}</span>{% endif %}
         {% set record = d %}{% include "admin/_record_badges.html" %}
         <div class="muted">{{ d.service_name }}</div>
@@ -37,7 +38,7 @@
         </form>
         {% endif %}
     </div>
-    {% else %}
-    <p class="muted">No deals.</p>
     {% endfor %}
+    </div>
+    {% if not col.deals %}<p class="muted pipeline-empty">No deals.</p>{% endif %}
 </div>

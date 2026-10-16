@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class SchemaVersionError(RuntimeError):
@@ -871,6 +871,36 @@ def migrate_008(db) -> None:
         raise RuntimeError(f"migrate_008 integrity_check failed: {integrity}")
 
 
+def migrate_009(db) -> None:
+    """Per-stage card order on the pipeline board (`deals.board_position`).
+
+    Additive only — does not rebuild `deals`. Existing cards are numbered
+    to match the previous board order (updated_at DESC within each stage).
+    Runs after migrate_008 so the lead-model rebuild does not have to
+    know about board_position.
+    """
+    _add_column_if_missing(
+        db, "deals", "board_position", "board_position INTEGER NOT NULL DEFAULT 0"
+    )
+    stages = [
+        row[0]
+        for row in db.execute("SELECT DISTINCT stage FROM deals").fetchall()
+    ]
+    for stage in stages:
+        rows = db.execute(
+            "SELECT id FROM deals WHERE stage = ? ORDER BY updated_at DESC, id DESC",
+            (stage,),
+        ).fetchall()
+        for pos, row in enumerate(rows):
+            db.execute(
+                "UPDATE deals SET board_position = ? WHERE id = ?",
+                (pos, row[0]),
+            )
+    db.execute(
+        "CREATE INDEX IF NOT EXISTS idx_deals_stage_board ON deals(stage, board_position)"
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
@@ -881,6 +911,7 @@ MIGRATIONS = {
     6: migrate_006,
     7: migrate_007,
     8: migrate_008,
+    9: migrate_009,
 }
 
 

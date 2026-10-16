@@ -1,11 +1,14 @@
 # agent-crm manual
 
-Reference docs for running and operating [agent-crm](https://github.com/sevasek/agent-crm).
-For installing it, see the [README Quick start](https://github.com/sevasek/agent-crm#quick-start).
+If you use the CRM, start with **[Using the CRM](/using/)**.
+The other pages are for installing it, connecting an agent, or looking up a field.
 
-- **[Scope](/scope/)** — what's in and out, and the one design rule that keeps it generic.
-- **[Data model](/data_model/)** — entities, schema, the deal pipeline, nurture hand-off.
-- **[MCP: the agent interface](/mcp/)** — the tool set an AI agent gets over `/mcp`.
-- **[New client instance](/client_deploy/)** — stand up a separate CRM on a VPS.
-- **[Deploy](/deploy/)** — production reverse proxy and TLS.
-- **[Cutting a release](/release/)** — the release checklist.
+- **[Using the CRM](/using/)** — the screens, and the words on them.
+- **[Scope](/scope/)** — what is included, and what is left out.
+- **[Privacy policy](/privacy/)** — what an instance stores, and how someone asks about their record.
+- **[Data model](/data_model/)** — every field in the database.
+- **[MCP: the agent interface](/mcp/)** — the tool set an agent gets.
+- **[New client instance](/client_deploy/)** — a separate CRM on a server.
+- **[Deploy](/deploy/)** — the web address, the lock, and the proxy.
+- **[Offboarding](/offboarding/)** — export or delete a customer's data and remove the instance.
+- **[Cutting a release](/release/)** — publishing a version of the software.

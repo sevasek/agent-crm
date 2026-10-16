@@ -1,16 +1,14 @@
 # Data model
 
-Glossary, schema, the opportunity pipeline, nurture hand-off, deal-won
-invoice hand-off and lead ingest. For what
-the app does and does not attempt, see [`SCOPE.md`](SCOPE.md). For the agent
-interface, see [`MCP.md`](MCP.md).
+Every field in the database, plus the ingest rules and the two outbound notifications.
+Day-to-day use is [Using the CRM](USING.md). What the product includes is [Scope](SCOPE.md).
+The agent tools are [MCP: the agent interface](MCP.md).
 
-The schema lives in `app/database.py`. No ORM.
+The tables are created in `app/database.py`.
 
 ## Glossary
 
-These terms replace the older "Entities" list. Do not use "deal" alone in
-new documentation: use **lead**, **opportunity** or **deal record**.
+Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguous: the deals table holds both leads and opportunities.
 
 | Term | Definition |
 |---|---|
@@ -37,11 +35,13 @@ Other tables: `services` (catalogue), `deal_tags`, `activities`,
 
 ### Why one `partners` table
 
-A company is a partner with `is_company=1`. Its employees are partners whose
-`parent_id` points at it. One table answers "who", contacts roll up to their
-company for free, and a solo lead with no company is just a partner with no
-parent rather than a special case needing a join. The hierarchy is one level
-deep by convention (only `is_company=1` rows are offered as parents).
+A company is a partner with `is_company=1`. Its people are partners whose
+`parent_id` points at that company. A person with no company is a partner with
+no parent. Only a company can be chosen as a parent.
+
+A lead is not a partner. A lead is a row in `deals` that can exist before
+anyone is confirmed. Turning it into an opportunity is what creates or links
+the partner.
 
 ### Why `deals` is separate from `partners`
 
@@ -89,8 +89,9 @@ The catalogue. Operator-defined and empty on a fresh install.
 
 ### `deals`
 
-One table holds leads and opportunities (`type`). Schema 8 made
-`partner_id` and `service_id` nullable so a lead can exist without either.
+One table holds leads and opportunities (`type`). A lead does not need a
+partner or a service, so `partner_id` and `service_id` can be empty. An
+opportunity needs both.
 
 | Column | Type | Notes |
 |---|---|---|

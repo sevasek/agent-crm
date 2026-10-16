@@ -1,6 +1,6 @@
 # agent-crm
 
-**A small CRM your AI agent can work.** It exposes an MCP endpoint so an agent
+**A small CRM your AI agent can run.** It exposes an MCP endpoint so an agent
 can search contacts, run the call queue, log calls and move deals, without being
 able to delete anything or send email. A plain web app shows you everything it did.
 
@@ -16,9 +16,9 @@ FastAPI, sqlite, Jinja2, Docker. One container, one database file, no external s
 
 ## Who it's for
 
-**A good fit** if you are one person (a solo consultant, a small clinic, a
-tradie) who sells through calls and follow-ups, and you want an agent to do the
-CRM busywork while you keep a clear view of the pipeline.
+**A good fit** if you are one person (a solo consultant, a small clinic, or
+a one-person trade business) who sells through calls and follow-ups, and you
+want an agent to do the CRM busywork while you keep a clear view of the pipeline.
 
 **Not a fit** if you need multiple users with roles and permissions, email sent
 and received inside the CRM, reports and dashboards, or a native mobile app.
@@ -254,37 +254,31 @@ default; `--type lead` is opt-in).
 
 ## Docs
 
-[`SCOPE.md`](docs/SCOPE.md) what's in and out and why ·
+[`USING.md`](docs/USING.md) the screens, in plain language ·
+[`SCOPE.md`](docs/SCOPE.md) what's in and out ·
 [`DATA_MODEL.md`](docs/DATA_MODEL.md) entities, schema and ingest rules ·
 [`MCP.md`](docs/MCP.md) the agent interface ·
 [`CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md) new client instance on a VPS ·
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
 [`OFFBOARDING.md`](docs/OFFBOARDING.md) removing a cancelled customer's instance ·
 [`PRIVACY.md`](docs/PRIVACY.md) what the CRM collects, why, and how to ask about it ·
-[`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
-[`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) phases 1–4 shipped, 5 deferred
+[`RELEASE.md`](docs/RELEASE.md) how to cut a version tag
 
-`docs/*.md` also builds into a static manual site, styled with the app's own
-`app/static/style.css` and Pico.css so it looks like the app. This is a
-doc-build-time tool only — it needs Node, but the app itself never does (see
-[`docs/UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md)); nothing it adds
-(`node_modules/`, `package.json`, `eleventy.config.js`, `_site/`) is in the
-Docker image.
+Those files also build into a static manual that uses the same CSS as the app.
+The running app does not use Node, and the image does not include the manual
+build. To build it locally:
 
 ```bash
 npm ci
 npm run docs:build   # writes ./_site
 npm run docs:serve   # live-reload at http://localhost:8080
-npm run docs:test    # build + smoke-check the output
+npm run docs:test    # build and check the output
 ```
 
 ## Contributing
 
-Planned work, known gaps and deferred ideas are tracked in
-[GitHub Issues](https://github.com/sevasek/agent-crm/issues); there is no separate
-TODO file. The scope is deliberately narrow, so please open an issue to discuss a feature
-before sending a pull request. Bug fixes are welcome directly. Run the tests
-first:
+Open an issue before a pull request that adds a feature. The scope is narrow
+on purpose. Bug fixes can go straight to a pull request. Run the tests first:
 
 ```bash
 pip install -r requirements-dev.txt

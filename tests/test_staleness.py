@@ -90,8 +90,7 @@ def test_lost_records_never_flagged_stale(db):
 def test_leads_stay_out_of_default_staleness_gate(db):
     """Leads are not in the staleness gate (list_due_deals type=opportunity).
 
-    ADR 0001 does not define lead staleness; P5 keeps them out rather than
-    inventing a rule. Open opportunities still gate as before.
+    Open opportunities still gate as before.
     """
     from app.services.lead_records import create_lead
 

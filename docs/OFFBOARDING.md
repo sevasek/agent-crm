@@ -1,5 +1,9 @@
 # Offboarding an instance
 
+This page is for the person who hosts the CRM, when a customer's copy is being
+shut down. A contact who wants their own record corrected should use
+[Privacy policy](PRIVACY.md).
+
 When a managed-hosting customer cancels, for a single-host multi-instance
 setup (see [`README.md`](../README.md#multiple-instances-on-one-host)).
 Replace `acme` with the instance name.

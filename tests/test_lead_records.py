@@ -1,4 +1,4 @@
-"""ADR 0001 P2: lead service layer, duplicates, convert, merge, lost/restore."""
+"""Lead service layer: duplicates, convert, merge, lost and restore."""
 from app.database import get_db
 from app.services.activities import log_activity
 from app.services.catalog import create_service

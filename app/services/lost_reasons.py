@@ -1,4 +1,4 @@
-"""Operator-configured lost reasons (ADR 0001 §5.2 / §8.1)."""
+"""Operator-configured lost reasons."""
 from datetime import datetime, timezone
 
 from app.database import IntegrityConflict, get_db

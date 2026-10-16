@@ -1,4 +1,4 @@
-"""ADR 0001 P1: schema 8 rebuild, null-safe reads, stages is_lost deprecation."""
+"""Schema 8 rebuild, null-safe reads, and the is_lost stage rule."""
 import logging
 import sqlite3
 

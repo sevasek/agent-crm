@@ -1,20 +1,10 @@
 // Doc-build-time only — turns docs/*.md into a static manual, reusing the
 // app's own CSS so it looks like the app. Not loaded by the app, not run in
-// the Docker image (node_modules/output are .dockerignore'd); see
-// docs/UI_UPGRADE_PLAN.md for why the running app itself stays Node-free.
+// the Docker image (node_modules/output are .dockerignore'd).
 
 const TITLES = require("./docs/_data/titles.js");
 
 module.exports = function (eleventyConfig) {
-  // Internal engineering plan, not user-facing help content — and its prose
-  // contains literal `{% for %}` / `{% include %}` Jinja examples that a
-  // template engine would otherwise try to parse as real tags.
-  eleventyConfig.ignores.add("docs/UI_UPGRADE_PLAN.md");
-
-  // Architecture decision records: internal design history for reviewers,
-  // not user-facing help content.
-  eleventyConfig.ignores.add("docs/adr/**");
-
   // Same files the app itself serves from /static — not copies of a
   // separately maintained stylesheet.
   eleventyConfig.addPassthroughCopy({ "app/static/vendor/pico.min.css": "assets/pico.min.css" });

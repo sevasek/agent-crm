@@ -1,16 +1,12 @@
-"""Optional operator script: move early-stage opportunities back to leads.
+"""Move early-stage opportunities back to leads.
 
-The schema 8 migration does not guess which opportunities were really leads
-(ADR 0001 D12). An operator who wants that cleanup runs this after the
-release, against a copy first.
+Dry-run unless you pass --apply. Selects open opportunities in the given
+stages that have no won child and no parent deal. Copies empty lead contact
+columns from the partner, sets type=lead, keeps partner_id, and writes one
+system activity per changed record.
 
     python scripts/opportunities_to_leads.py --stage new --stage contacted
     python scripts/opportunities_to_leads.py --stage new --apply
-
-Default is dry-run. Selects open opportunities in the given stages that
-have no won child and no parent_deal_id. Copies empty lead contact columns
-from the partner, sets type=lead, keeps partner_id, and writes one system
-activity per changed record.
 """
 import argparse
 import sys
@@ -30,7 +26,7 @@ NEEDS_SCHEMA = 8
 USAGE = (
     "Usage: python scripts/opportunities_to_leads.py --stage KEY [--stage KEY ...] "
     "[--dry-run | --apply]\n"
-    "Default is dry-run. --apply writes. See docs/DATA_MODEL.md and ADR 0001 §6.5."
+    "Default is dry-run. --apply writes. See docs/DATA_MODEL.md."
 )
 
 PARTNER_CONTACT_FIELDS = (

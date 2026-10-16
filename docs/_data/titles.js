@@ -8,5 +8,7 @@ module.exports = {
   CLIENT_DEPLOY: "New client instance",
   DEPLOY: "Deploy",
   RELEASE: "Cutting a release",
+  OFFBOARDING: "Offboarding",
   PRIVACY: "Privacy policy",
+  USING: "Using the CRM",
 };

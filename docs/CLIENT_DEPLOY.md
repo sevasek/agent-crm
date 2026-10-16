@@ -1,5 +1,8 @@
 # New client instance
 
+This page is for standing up a separate CRM for someone else, on a server you
+run. Day-to-day use is [Using the CRM](USING.md).
+
 One CRM process, one sqlite file, one set of secrets, one public hostname.
 A second client on the same VPS is another copy of those four things. It does
 not share a database, admin user, session cookie, or OAuth issuer with any

@@ -158,7 +158,7 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
     used by the lead-ingestion API to avoid piling up duplicate deals when an ETL job
     re-submits the same lead on a later run.
 
-    Open is active = 1 and the stage is not is_won (ADR 0001 §2 / §5.8).
+    Open is active = 1 and the stage is not is_won.
     """
     won = pipeline_stages.won_stage_keys()
     with get_db() as db:

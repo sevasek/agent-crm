@@ -81,7 +81,7 @@ def deal_due_status(deal, today=None, action_date=None, won_stage_keys=None,
                     closed_stage_keys=None):
     """`due` / `overdue` / None. Won or lost (active=0) deals are not gated.
 
-    Open is active = 1 and the stage is not is_won (ADR 0001 §2 / §5.8).
+    Open is active = 1 and the stage is not is_won.
     `closed_stage_keys` is accepted for older callers and treated as won keys
     when `won_stage_keys` is omitted.
     """

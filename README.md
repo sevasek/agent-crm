@@ -11,8 +11,9 @@ able to delete anything or send email. A plain web app shows you everything it d
 
 FastAPI, sqlite, Jinja2, Docker. One container, one database file, no external services.
 
-> **Status: pre-1.0.** The MCP tool set and the schema may change between
-> releases. Back up `data/crm.db` before upgrading.
+> **Status: 1.0.** Breaking changes to the MCP tool set or schema are now
+> called out in [`CHANGELOG.md`](CHANGELOG.md) under a major version bump.
+> Back up `data/crm.db` before upgrading.
 
 ## Who it's for
 
@@ -131,10 +132,9 @@ at 256 MB RAM. `docker stop` / `docker kill` leave the container stopped under
 `restart: unless-stopped` — a maintenance stop is not a crash, so start it
 again with `docker compose ... up -d` when you are done.
 
-Once a `v*` tag exists, you can run a published multi-arch image instead of
-building from the working copy (`build: .` stays the default). How to cut
-the first tag (`v0.1.0`) and what the workflow publishes:
-[`docs/RELEASE.md`](docs/RELEASE.md).
+You can run a published multi-arch image instead of building from the
+working copy (`build: .` stays the default). How to cut a tag and what the
+workflow publishes: [`docs/RELEASE.md`](docs/RELEASE.md).
 
 ```yaml
 # compose override (a third -f file, or docker-compose.override.yml)

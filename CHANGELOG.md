@@ -5,19 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-The project is pre-1.0. Tagged releases publish a multi-arch image to
+Tagged releases publish a multi-arch image to
 [`ghcr.io/sevasek/agent-crm`](https://github.com/sevasek/agent-crm/pkgs/container/agent-crm)
-as `vX.Y.Z` and `latest`. Until the first tag, install from source with
-`docker compose ... --build` as documented in the README.
+as `vX.Y.Z` and `latest`, as documented in the README.
 
 ## [Unreleased]
 
-### Changed
-
-- Admin UI follows `prefers-color-scheme` again. The Phase 1
-  `data-theme="light"` lock is gone; custom colors (`--bg-alt`, pills, nav,
-  cards, errors, call-outcome chips) have light/dark pairs using the same
-  selectors Pico 2.1.1 uses. Filled brand buttons stay `#2c5aa0`. Closes #87.
+## [1.0.0] - 2026-10-17
 
 ### Added
 
@@ -58,6 +52,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Changed
 
+- Admin UI follows `prefers-color-scheme` again. The Phase 1
+  `data-theme="light"` lock is gone; custom colors (`--bg-alt`, pills, nav,
+  cards, errors, call-outcome chips) have light/dark pairs using the same
+  selectors Pico 2.1.1 uses. Filled brand buttons stay `#2c5aa0`. Closes #87.
 - **Breaking.** `POST /api/v1/leads`, MCP `ingest_leads` and
   `inject_leads.py` default to `type=lead` and no longer create a partner.
   Send `"type": "opportunity"` (CLI `--type opportunity`) to keep the old
@@ -256,5 +254,6 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   (HTTPEndpoint method dispatch, 1.1.0), PYSEC-2026-248 (path in authority,
   1.3.0), and PYSEC-2026-249 (urlencoded `request.form()` limits, 1.3.1).
 
-[Unreleased]: https://github.com/sevasek/agent-crm/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sevasek/agent-crm/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/sevasek/agent-crm/compare/v0.1.0...v1.0.0
 [0.1.0]: https://github.com/sevasek/agent-crm/releases/tag/v0.1.0

@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% block title %}{{ "Edit deal" if deal else "New deal" }} — crm{% endblock %}
 {% block content %}
-<h1>{{ "Edit deal" if deal else "New deal" }}</h1>
-{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<h1>{{ "Edit opportunity" if deal else "New opportunity" }} {% if deal %}{% set record = deal %}{% include "admin/_record_badges.html" %}{% endif %}</h1>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <form method="post" action="{{ '/deals/' ~ deal.id ~ '/edit' if deal else '/deals/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if deal %}
-    <p class="muted">{{ partner.name }} · {{ service.name }} · <span class="pill">{{ deal.stage }}</span>
+    <p class="muted">{{ partner.name if partner else "No partner" }} · {{ service.name if service else "No service" }} · <span class="pill">{{ deal.stage }}</span>
         — stage changes on the partner page.
     </p>
     {% else %}
@@ -113,9 +113,41 @@
                value="{% if form_tags is not none %}{{ form_tags }}{% elif deal and deal.tags %}{{ deal.tags | join(', ') }}{% endif %}">
         <p class="muted">Comma-separated. Lowercase letters, digits, hyphens and colons. Saving replaces the set.</p>
     </div>
-    <button type="submit">{{ "Save" if deal else "Create deal" }}</button>
-    {% if deal %}
+    <button type="submit">{{ "Save" if deal else "Create opportunity" }}</button>
+    {% if deal and deal.partner_id %}
     <a class="btn btn-secondary" href="/partners/{{ deal.partner_id }}">Cancel</a>
+    {% elif deal %}
+    <a class="btn btn-secondary" href="/deals">Cancel</a>
     {% endif %}
 </form>
+{% if deal and deal.active %}
+<h2>Mark lost</h2>
+<form method="post" action="/deals/{{ deal.id }}/lost">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="lost_reason">Lost reason</label>
+        <select id="lost_reason" name="lost_reason" required>
+            <option value="">— select —</option>
+            {% for r in lost_reasons %}
+            <option value="{{ r.name }}">{{ r.name }}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="lost_note">Note</label>
+        <textarea id="lost_note" name="note"></textarea>
+    </div>
+    <button type="submit">Mark lost</button>
+</form>
+{% elif deal and not deal.active %}
+<p>This opportunity is lost{% if deal.lost_reason %} ({{ deal.lost_reason.name }}){% endif %}.</p>
+{% if not deal.merged_into_id %}
+<form method="post" action="/deals/{{ deal.id }}/restore">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit">Restore</button>
+</form>
+{% else %}
+<p class="muted">Merged into #{{ deal.merged_into_id }}. Restore is not available.</p>
+{% endif %}
+{% endif %}
 {% endblock %}

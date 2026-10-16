@@ -142,6 +142,32 @@ def test_create_icp_empty_operator_is_html_error_not_422(logged_in_client, db):
     assert icp.list_criteria() == []
 
 
+def test_new_lead_empty_identity_is_html_error_not_422(logged_in_client, db):
+    from app.services.lead_records import list_leads
+
+    resp = logged_in_client.post("/leads/new", data={
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+        "company_name": "",
+        "email": "",
+    })
+    _html_client_error(resp)
+    assert "A lead needs a company" in resp.text
+    assert list_leads() == []
+
+
+def test_new_lost_reason_empty_name_is_html_error_not_422(logged_in_client, db):
+    from app.services.lost_reasons import list_lost_reasons
+
+    before = {r["name"] for r in list_lost_reasons()}
+    resp = logged_in_client.post("/lost-reasons/new", data={
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+        "name": "",
+    })
+    _html_client_error(resp)
+    assert "Name is required" in resp.text
+    assert {r["name"] for r in list_lost_reasons()} == before
+
+
 def test_new_deal_empty_partner_and_service_is_html_error_not_422(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example")
     sid = create_service("Consulting", "consulting")

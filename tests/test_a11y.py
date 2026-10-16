@@ -32,6 +32,14 @@ def test_pipeline_nav_marks_current_page(logged_in_client):
     assert 'href="/partners" aria-current="page"' not in resp.text
 
 
+def test_leads_nav_marks_current_page(logged_in_client):
+    resp = logged_in_client.get("/leads")
+    assert resp.status_code == 200
+    _assert_skip_and_main(resp.text)
+    assert 'href="/leads" aria-current="page">Leads</a>' in resp.text
+    assert 'href="/deals" aria-current="page"' not in resp.text
+
+
 def test_login_error_is_announced(client):
     resp = client.post(
         "/auth/login",

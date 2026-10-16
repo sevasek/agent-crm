@@ -12,6 +12,12 @@
     --pill-due-fg: #856404;
     --pill-overdue-bg: #fdecea;
     --pill-overdue-fg: #b00020;
+    --pill-lead-bg: #e8f0fe;
+    --pill-lead-fg: #1a4d8f;
+    --pill-opportunity-bg: #e6f4ea;
+    --pill-opportunity-fg: #1e6b34;
+    --pill-lost-bg: #fdecea;
+    --pill-lost-fg: #b00020;
     --pill-tag-on-bg: #e7eef8;
     --chip-hover: #f0f4fa;
     --success-bg: #f0f7f0;
@@ -53,6 +59,12 @@
         --pill-due-fg: #f0c14b;
         --pill-overdue-bg: #3d1a1c;
         --pill-overdue-fg: #f5a5a0;
+        --pill-lead-bg: #1a2740;
+        --pill-lead-fg: #8ab4f8;
+        --pill-opportunity-bg: #1a2e1f;
+        --pill-opportunity-fg: #7dce9a;
+        --pill-lost-bg: #3d1a1c;
+        --pill-lost-fg: #f5a5a0;
         --pill-tag-on-bg: #1e2d4a;
         --chip-hover: #1a2740;
         --success-bg: #1a2e1f;
@@ -83,6 +95,12 @@
     --pill-due-fg: #f0c14b;
     --pill-overdue-bg: #3d1a1c;
     --pill-overdue-fg: #f5a5a0;
+    --pill-lead-bg: #1a2740;
+    --pill-lead-fg: #8ab4f8;
+    --pill-opportunity-bg: #1a2e1f;
+    --pill-opportunity-fg: #7dce9a;
+    --pill-lost-bg: #3d1a1c;
+    --pill-lost-fg: #f5a5a0;
     --pill-tag-on-bg: #1e2d4a;
     --chip-hover: #1a2740;
     --success-bg: #1a2e1f;
@@ -223,6 +241,9 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
 .pill-due { background: var(--pill-due-bg); color: var(--pill-due-fg); }
 .pill-overdue { background: var(--pill-overdue-bg); color: var(--pill-overdue-fg); }
+.pill-lead { background: var(--pill-lead-bg); color: var(--pill-lead-fg); }
+.pill-opportunity { background: var(--pill-opportunity-bg); color: var(--pill-opportunity-fg); }
+.pill-lost { background: var(--pill-lost-bg); color: var(--pill-lost-fg); text-transform: lowercase; }
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pipeline-board {

@@ -9,5 +9,4 @@ module.exports = {
   DEPLOY: "Deploy",
   RELEASE: "Cutting a release",
   PRIVACY: "Privacy policy",
-  "cutover-from-sevasek-crm": "Cutover from sevasek CRM",
 };

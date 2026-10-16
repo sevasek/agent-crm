@@ -8,8 +8,6 @@ edited. Pass --replace to reset these two names to the definitions below.
     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
         -f docker-compose.traefik.yml run --rm app \
         python scripts/seed_sevasek_automations.py
-
-Equivalent MCP calls are in docs/cutover-from-sevasek-crm.md.
 """
 import sys
 

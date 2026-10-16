@@ -63,6 +63,11 @@ def closed_stage_keys() -> set:
     return _keys_with_role("is_won") | _keys_with_role("is_lost")
 
 
+def won_stage_keys() -> set:
+    """Stages flagged is_won. Used with deals.active = 1 as the open test (D6)."""
+    return _keys_with_role("is_won")
+
+
 def create_stage(key: str, label: str, *, position=None, is_default=False,
                   is_qualified_pool=False, triggers_nurture=False, is_won=False, is_lost=False):
     """Returns (stage_dict, None) on success or (None, error_code) on failure."""
@@ -74,6 +79,8 @@ def create_stage(key: str, label: str, *, position=None, is_default=False,
         return None, "label_required"
     if is_won and is_lost:
         return None, "won_lost_conflict"
+    if is_lost:
+        return None, "invalid_stage_role"
     with get_db() as db:
         if db.execute("SELECT id FROM pipeline_stages WHERE key = ?", (key,)).fetchone():
             return None, "duplicate_key"
@@ -116,6 +123,8 @@ def update_stage(key: str, **fields):
     resulting_lost = updates.get("is_lost", stage["is_lost"])
     if resulting_won and resulting_lost:
         return None, "won_lost_conflict"
+    if updates.get("is_lost") and not stage["is_lost"]:
+        return None, "invalid_stage_role"
     if not updates:
         return stage, None
     with get_db() as db:

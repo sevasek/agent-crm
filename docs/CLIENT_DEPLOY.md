@@ -119,7 +119,7 @@ keeps the old environment.
 
 ## Updates
 
-From the repo root:
+From the repo root, after `git pull`:
 
 ```bash
 docker compose --project-name crm-black-diamond \
@@ -129,8 +129,9 @@ docker compose --project-name crm-black-diamond \
   up -d --build
 ```
 
-That rebuilds only this project's containers. `docker compose ps` should
-show the app `healthy`. Check `/health` again.
+That rebuilds only this project's containers. Startup applies any pending
+migrations. `docker compose ps` should show the app `healthy`. Check
+`/health` again.
 
 Same command without `--build` after an `.env`-only edit, so the container
 is recreated with the new values.

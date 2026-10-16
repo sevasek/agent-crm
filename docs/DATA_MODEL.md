@@ -67,7 +67,7 @@ existing is not the same fact as a sales process being underway.
 | `title` | TEXT | Role at the company. Meaningful for people. |
 | `address` | TEXT | |
 | `social_url` | TEXT | Derived primary social link (first filled of the per-platform columns). |
-| `linkedin_url`, `x_url`, `instagram_url`, `facebook_url`, `youtube_url` | TEXT | Per-platform profiles. |
+| `linkedin_url`, `x_url`, `instagram_url`, `facebook_url`, `youtube_url` | TEXT | Per-platform profiles. A legacy `social_url` is copied onto the matching column at startup. |
 | `preferred_channel` | TEXT | `email`, `phone` or `text`. Validated in `app/services/partners.py`, not by a `CHECK`; an unrecognised value becomes null. |
 | `industry` | TEXT | Mostly for companies. |
 | `team_size` | INTEGER | Validated non-negative; bad input becomes null. |
@@ -149,6 +149,8 @@ Writes:
 - `update_deal` takes `tags` to replace the set (`[]` clears it). `add_tags` and `remove_tags` merge, and run after a replace when both are sent (`remove_tags` wins on overlap). Omitting all three leaves the set alone.
 - `bulk_update_deals` takes `add_tags` / `remove_tags` for the same selection it already uses (`deal_ids`, or `service_slug` plus optional stage and owner).
 - Lead ingest (`POST /api/v1/leads` and MCP `ingest_leads`) takes an optional `tags` array. A re-run merges those tags onto the open deal. Leaving `tags` off the payload leaves the existing set alone. Entries that are not valid slugs are dropped so one bad label cannot fail the lead.
+
+Schema v2 (`migrate_002`) creates `deal_tags` and copies any `external_ref` whose lowercased form is a `campaign:` slug onto a tag. Later startups do not repeat that copy, so removing a tag sticks. `external_ref` is not rewritten.
 
 ### `lost_reasons`
 

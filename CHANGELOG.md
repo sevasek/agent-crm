@@ -74,6 +74,12 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - **Breaking.** Creating a new `is_lost` stage is refused
   (`invalid_stage_role`). The seeded Lost stage label can still be edited.
   Lost is `active=0` plus a lost reason, not a stage.
+- Rollback for this release is restore-only: stop the app and
+  `staleness-cron`, restore the pre-migration backup
+  (`pre-migrate-v7-to-v9-*.db` from a schema 7 database, or
+  `pre-migrate-v8-to-v9-*.db` from schema 8), deploy the previous
+  (schema 7) image. Records created after the migration are lost on
+  rollback. The previous code refuses a schema 9 database.
 
 ## [0.1.0] - 2026-10-06
 

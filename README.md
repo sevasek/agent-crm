@@ -154,7 +154,7 @@ Then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d`
 
 See [`CHANGELOG.md`](CHANGELOG.md) for what changed between tags.
 
-### Backup, restore and upgrade
+### Backup and restore
 
 All data is one sqlite file, `./data/crm.db`, in WAL mode. Do not `cp` it while
 the app runs: you can copy a torn database. Use the shipped online-backup

@@ -130,6 +130,56 @@ def _website_key(value: str) -> str:
     return text
 
 
+def website_key(value: str) -> str:
+    """Public alias for the ingest / duplicate website key (ADR 0001 §5.6)."""
+    return _website_key(value)
+
+
+def match_existing_partner(*, email, name, phone, website, is_company, parent_id):
+    """Identity waterfall: email, then phone+name, then website+name, then name+parent.
+
+    Used by ingest (until P3) and by convert_lead `partner_action=auto`.
+    Returns the first hit, same as the former leads._match_existing_partner.
+    """
+    if email:
+        partner = get_partner_by_email(email)
+        if partner:
+            return partner
+    if phone:
+        partner = get_partner_by_phone_and_name(name, phone, is_company=is_company)
+        if partner:
+            return partner
+    if website:
+        partner = get_partner_by_website_and_name(name, website, is_company=is_company)
+        if partner:
+            return partner
+    return get_person_by_name(name, parent_id=parent_id, is_company=is_company)
+
+
+def find_all_partner_matches(*, email="", name="", phone="", website="",
+                             is_company=None, parent_id=None, company_name=""):
+    """Every partner that matches any ingest identity key. Used by convert auto."""
+    found = []
+    seen = set()
+
+    def _add(partner):
+        if partner and partner["id"] not in seen:
+            seen.add(partner["id"])
+            found.append(partner)
+
+    if email:
+        _add(get_partner_by_email(email))
+    if phone and name:
+        _add(get_partner_by_phone_and_name(name, phone, is_company=is_company))
+    if website and name:
+        _add(get_partner_by_website_and_name(name, website, is_company=is_company))
+    if name:
+        _add(get_person_by_name(name, parent_id=parent_id, is_company=bool(is_company)))
+    if company_name and company_name.strip().lower() != (name or "").strip().lower():
+        _add(get_company_by_name(company_name))
+    return found
+
+
 def create_partner(name, is_company=False, parent_id=None, email="", phone="", website="", title="",
                     address="", social_url="", preferred_channel="", industry="", team_size=None,
                     linkedin_url="", x_url="", instagram_url="", facebook_url="", youtube_url="",

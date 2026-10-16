@@ -13,8 +13,8 @@ def _partners_count():
 def test_create_lead_and_error_codes(client, db, monkeypatch):
     _enable(monkeypatch)
     created, err = call(client, "create_lead", {
-        "company_name": "Harbour Physio",
-        "website": "https://harbourphysio.example",
+        "company_name": "Riverstone Dental",
+        "website": "https://riverstonedental.example",
         "source": "research:directory",
     })
     assert err is False
@@ -41,11 +41,11 @@ def test_create_lead_and_error_codes(client, db, monkeypatch):
 def test_update_get_list_find_duplicates(client, db, monkeypatch):
     _enable(monkeypatch)
     lead, _ = call(client, "create_lead", {
-        "company_name": "Harbour Physio", "website": "https://harbourphysio.example",
+        "company_name": "Riverstone Dental", "website": "https://riverstonedental.example",
     })
     lead_id = lead["lead"]["id"]
     updated, _ = call(client, "update_lead", {
-        "lead_id": lead_id, "phone": "0400 111 222", "industry": "Physio",
+        "lead_id": lead_id, "phone": "0400 111 222", "industry": "Dental",
     })
     assert updated["lead"]["phone"] == "0400 111 222"
 
@@ -64,11 +64,11 @@ def test_update_get_list_find_duplicates(client, db, monkeypatch):
     assert "last_researched_at" in got["lead"]
     assert got["lead"]["research_note_count"] == 0
 
-    listed, _ = call(client, "list_leads", {"query": "Harbour"})
+    listed, _ = call(client, "list_leads", {"query": "Riverstone"})
     assert listed["count"] == 1
 
     dups, _ = call(client, "find_duplicates", {
-        "company_name": "Harbour Physio", "website": "https://harbourphysio.example",
+        "company_name": "Riverstone Dental", "website": "https://riverstonedental.example",
     })
     assert any(m["id"] == lead_id and m["strength"] == "strong" for m in dups["matches"])
 
@@ -135,36 +135,36 @@ def test_section_3_walkthrough_partners_unchanged_until_convert(client, db, monk
     before = _partners_count()
 
     dups, _ = call(client, "find_duplicates", {
-        "company_name": "Harbour Physio",
-        "website": "https://harbourphysio.example",
+        "company_name": "Riverstone Dental",
+        "website": "https://riverstonedental.example",
     })
     assert dups["matches"] == []
     assert _partners_count() == before
 
     created, _ = call(client, "create_lead", {
-        "company_name": "Harbour Physio",
-        "website": "https://harbourphysio.example",
+        "company_name": "Riverstone Dental",
+        "website": "https://riverstonedental.example",
         "source": "research:directory",
-        "tags": ["campaign:physio-illawarra-2026-10"],
+        "tags": ["campaign:example-2026-10"],
     })
     lead_id = created["lead"]["id"]
     assert created["lead"]["partner_id"] is None
     assert _partners_count() == before
 
     call(client, "update_lead", {
-        "lead_id": lead_id, "phone": "0400 111 000", "industry": "Physiotherapy",
+        "lead_id": lead_id, "phone": "0400 111 000", "industry": "Dentistry",
     })
     call(client, "log_activity", {
         "deal_id": lead_id,
         "type": "research",
-        "source_url": "https://harbourphysio.example/about",
+        "source_url": "https://riverstonedental.example/about",
         "body": "Website says they plan a second clinic in 2027.",
     })
     call(client, "update_lead", {
         "lead_id": lead_id,
         "contact_name": "Pat Manager",
         "title": "Practice manager",
-        "email": "pm@harbourphysio.example",
+        "email": "pm@riverstonedental.example",
     })
     assert _partners_count() == before
 

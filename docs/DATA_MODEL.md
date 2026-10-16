@@ -139,7 +139,7 @@ Labels on a deal. A campaign is a tag, not a separate table. A deal has many tag
 | Column | Type | Notes |
 |---|---|---|
 | `deal_id` | INTEGER NOT NULL | FK to `deals(id)`. With `tag`, the primary key. |
-| `tag` | TEXT NOT NULL | Lowercase slug of letters, digits, hyphens and colons. Examples: `campaign:icp-hc-illawarra-2026-09`, `church`, `illawarra`. At most 80 characters. |
+| `tag` | TEXT NOT NULL | Lowercase slug of letters, digits, hyphens and colons. Examples: `campaign:example-2026-09`, `clinic`, `referral`. At most 80 characters. |
 
 `get_deal` and `list_deals` always include `tags`, an empty list when the deal has none. `list_deals` accepts `tags` (one or more). A deal must carry every listed tag, and the filter combines with stage, owner, service and parent. `list_tags` returns each tag in use with a `count` of deals.
 

@@ -147,13 +147,13 @@ def test_phone_only_dedups_by_name_and_company(db):
     first = ingest_lead({
         "name": "Jane Doe",
         "phone": "0400 000 000",
-        "company_name": "Acme Childcare",
+        "company_name": "Acme Retail",
         "service_slug": "consulting",
     })
     second = ingest_lead({
         "name": "Jane Doe",
         "phone": "0400 111 111",
-        "company_name": "Acme Childcare",
+        "company_name": "Acme Retail",
         "service_slug": "consulting",
     })
 
@@ -219,7 +219,7 @@ def test_phone_only_company_name_drift_matches_on_phone_and_name(db):
     first = ingest_lead({
         "name": "Jane Doe",
         "phone": "0400 000 000",
-        "company_name": "Acme Childcare",
+        "company_name": "Acme Retail",
         "service_slug": "consulting",
     })
     drifted = ingest_lead({
@@ -297,11 +297,11 @@ def test_is_company_true_string_is_truthy(db):
 
 
 def test_company_and_phone_without_email_creates_company_deal(db):
-    create_service("Dead Lead Reactivation", "dead-lead-reactivation")
+    create_service("Winback Campaign", "win-back")
     result = ingest_lead({
         "company_name": "Cafe North",
         "phone": "0400 222 333",
-        "service_slug": "dead-lead-reactivation",
+        "service_slug": "win-back",
         "source": "scrape:cafes",
     })
     assert result["status"] == "created"

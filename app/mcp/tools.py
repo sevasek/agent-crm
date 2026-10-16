@@ -517,7 +517,7 @@ def list_catalog_tool(_arguments):
             for r in list_lost_reasons()
         ],
     )
-    # Live sevasek/crm always returns this list. Other clients leave the env
+    # Some deployments pin this list. Other clients leave the env
     # unset so the key stays absent and bots are not told a fixed owner enum.
     owners = configured_task_owners()
     if owners:
@@ -1183,7 +1183,7 @@ _TAGS_PROP = {
     "maxItems": MAX_TAGS,
     "description": (
         "Lowercase slugs of letters, digits, hyphens and colons "
-        "(campaign:icp-hc-illawarra-2026-09, church, illawarra)."
+        "(campaign:example-2026-09, clinic, referral)."
     ),
 }
 
@@ -1377,7 +1377,7 @@ TOOLS = [
                     "description": (
                         "Match deals that carry every one of these tags. "
                         "Lowercase slugs of letters, digits, hyphens and colons "
-                        "(campaign:icp-hc-illawarra-2026-09, church)."
+                        "(campaign:example-2026-09, clinic)."
                     ),
                 },
                 "due_only": {"type": "boolean", "description": "Only deals whose next action is due/overdue."},
@@ -1407,7 +1407,7 @@ TOOLS = [
         "description": (
             "Tags currently in use, with how many deals carry each one. "
             "A tag is a lowercase slug of letters, digits, hyphens and colons "
-            "(campaign:icp-hc-illawarra-2026-09, church, illawarra). "
+            "(campaign:example-2026-09, clinic, referral). "
             "Use with list_deals(tags=...) to pull every deal in a campaign."
         ),
         "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
@@ -1474,7 +1474,7 @@ TOOLS = [
             "Today's calls: deals with a dialable phone. Default is qualified-pool only, "
             "ranked by the call-priority score. For ingested niche lists still at stage=new, "
             "pass include_new=true and/or stage=new plus service_slug "
-            "(e.g. dead-lead-reactivation). Optional filters: source_prefix, owner."
+            "(e.g. win-back). Optional filters: source_prefix, owner."
         ),
         "inputSchema": {
             "type": "object",
@@ -1600,7 +1600,7 @@ TOOLS = [
                             "offer_id": {"type": "integer", "minimum": 1},
                             "external_ref": {
                                 "type": "string",
-                                "description": "Freeform project/engagement ref (e.g. acme-childcare-2026). Does not clobber pain_points/goals. Timeline notes: log_activity type=note.",
+                                "description": "Freeform project/engagement ref (e.g. acme-retail-2026). Does not clobber pain_points/goals. Timeline notes: log_activity type=note.",
                             },
                             "type": {
                                 "type": "string",
@@ -2081,7 +2081,7 @@ TOOLS = [
             "(optionally stage and owner). add_tags merges; remove_tags drops. "
             "Selects opportunities only. lost_reason marks matching opportunities lost. "
             "Uses set_deal_stage so nurture side effects fire. "
-            "Example: service_slug=dead-lead-reactivation, stage=new, set_stage=contacted, "
+            "Example: service_slug=win-back, stage=new, set_stage=contacted, "
             "next_action_date=today. Or deal_ids plus add_tags=[\"campaign:spring\"]."
         ),
         "inputSchema": {

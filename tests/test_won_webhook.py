@@ -15,7 +15,7 @@ class FakeResponse:
 PARTNER = {"id": 7, "name": "Jane Doe", "email": "jane@acme.example"}
 SERVICE = {"id": 3, "name": "Consulting", "slug": "consulting"}
 DEAL = {"id": 42, "value_estimate": 1500.0, "offer_id": 9}
-OFFER = {"id": 9, "name": "Discovery Session", "price": 350.0, "currency": "AUD"}
+OFFER = {"id": 9, "name": "Discovery Session", "price": 350.0, "currency": "USD"}
 
 
 def _configure(monkeypatch, token=None):
@@ -68,7 +68,7 @@ def test_successful_hand_off_posts_expected_payload(monkeypatch):
             "id": 9,
             "name": "Discovery Session",
             "price": 350.0,
-            "currency": "AUD",
+            "currency": "USD",
         },
     }
 

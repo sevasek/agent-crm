@@ -118,9 +118,9 @@ def test_mark_lost_not_now_posts_webhook_for_lead_without_partner(db, monkeypatc
     _configure(monkeypatch)
     create_service("Consulting", "consulting", nurture_list_slug="automation-interest")
     lead, error = create_lead(
-        company_name="Harbour Physio",
+        company_name="Riverstone Dental",
         contact_name="Pat Manager",
-        email="pat@harbour.example",
+        email="pat@riverstone.example",
         service_slug="consulting",
     )
     assert error is None
@@ -136,7 +136,7 @@ def test_mark_lost_not_now_posts_webhook_for_lead_without_partner(db, monkeypatc
     assert lost_error is None
     assert updated["nurture"]["status"] == SENT
     assert captured["json"] == {
-        "email": "pat@harbour.example",
+        "email": "pat@riverstone.example",
         "name": "Pat Manager",
         "list_slug": "automation-interest",
         "partner_id": None,

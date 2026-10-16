@@ -184,7 +184,7 @@ def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
     "---" is filtered out here instead).
 
     Default pool is the pipeline's `is_qualified_pool` stages. Campaign
-    work (dead-lead lists at stage=new) uses `include_new=True` and/or an
+    work (win-back lists at stage=new) uses `include_new=True` and/or an
     explicit `stage` / `service_slug` / `source_prefix`. Explicit `stage`
     replaces the pool; `include_new` unions the default stage with it.
     No matching stage configured means nothing to call.

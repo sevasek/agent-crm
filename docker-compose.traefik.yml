@@ -1,4 +1,4 @@
-# Traefik overlay for a host that already runs Traefik (the sevasek VPS).
+# Traefik overlay for a host that already runs Traefik.
 # docker-compose.prod.yml still publishes a loopback port for Caddy or nginx;
 # this file clears that publish.
 #
@@ -11,12 +11,11 @@
 # port 8000. n8n and anything else on TRAEFIK_NETWORK reach the app at
 # http://crm:8000 (network alias `crm`; the compose service stays `app`).
 #
-# APP_UID / APP_GID are read from .env (entrypoint default 1000:1000).
-# The sevasek data directory is owned by uid 1004. Set APP_UID=1004 and
-# APP_GID=1004 or a 0700 volume owned by 1004 will not start: production
-# drops CAP_DAC_OVERRIDE, so root cannot traverse that directory to chown it.
+# The host data directory may be owned by a non-default uid. Set APP_UID/APP_GID
+# to the directory's owner (e.g. 1004) or a 0700 volume owned by that uid will not start:
+# production drops CAP_DAC_OVERRIDE, so root cannot traverse that directory to chown it.
 #
-# CRM_HOST=crm.sevasek.com
+# CRM_HOST=crm.example.com
 # TRAEFIK_NETWORK=proxy          # external network Traefik and n8n share
 # TRAEFIK_ENTRYPOINT=websecure
 # TRAEFIK_CERTRESOLVER=letsencrypt

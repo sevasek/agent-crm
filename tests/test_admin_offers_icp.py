@@ -6,7 +6,7 @@ from app.services import offers, icp
 
 
 def _qualified_deal(db, phone="0400 111 222"):
-    pid = create_partner("Jane Doe", email="jane@x.example", phone=phone, industry="Childcare", team_size=25)
+    pid = create_partner("Jane Doe", email="jane@x.example", phone=phone, industry="Retail", team_size=25)
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid, source="referral")
     set_deal_stage(deal_id, "contacted")
@@ -171,13 +171,13 @@ def test_delete_icp_criterion(logged_in_client, db):
 
 def test_call_view_shows_fit_score(logged_in_client, db):
     icp.create_criterion("team_size", "gt", "10", weight=5, label="Big team")
-    icp.create_criterion("industry", "fuzzy_match", "childcare", weight=3, label="Childcare")
+    icp.create_criterion("industry", "fuzzy_match", "retail", weight=3, label="Retail")
     pid, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.get(f"/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert "Fit 8/8" in resp.text
     assert "Big team" in resp.text
-    assert "Childcare" in resp.text
+    assert "Retail" in resp.text
 
 
 def test_call_view_no_fit_section_without_criteria(logged_in_client, db):

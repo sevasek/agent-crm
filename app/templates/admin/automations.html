@@ -73,7 +73,7 @@
             <label><input type="checkbox" name="enabled" {% if a.enabled %}checked{% endif %}> Enabled</label>
         </div>
         <h3>Delegated task</h3>
-        <p class="muted">Leave the title blank to skip the task. Owner is a slug such as willow.</p>
+        <p class="muted">Leave the title blank to skip the task. Owner is a slug such as agent or your own team's slug.</p>
         <div class="form-row">
             <label for="task-title-{{ a.id }}">Title</label>
             <input type="text" id="task-title-{{ a.id }}" name="task_title" value="{{ task.title }}">
@@ -158,7 +158,7 @@
     </div>
     <div class="form-row">
         <label for="task_owner">Owner</label>
-        <input type="text" id="task_owner" name="task_owner" placeholder="willow">
+        <input type="text" id="task_owner" name="task_owner" placeholder="agent">
     </div>
     <div class="form-row">
         <label for="task_brief">Brief</label>

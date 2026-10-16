@@ -25,7 +25,7 @@ def test_offer_create_list_attach_get_deal(client, db, monkeypatch):
     catalog, _ = call(client, "list_catalog")
     assert any(o["id"] == offer_id for o in catalog["offers"])
 
-    partner_id = create_partner("Acme Childcare", is_company=True, phone="0400111222")
+    partner_id = create_partner("Acme Retail", is_company=True, phone="0400111222")
     deal, _ = call(client, "create_deal", {
         "partner_id": partner_id,
         "service_id": service_id,
@@ -42,12 +42,12 @@ def test_offer_create_list_attach_get_deal(client, db, monkeypatch):
 def test_ingest_phone_company_no_email(client, db, monkeypatch):
     """MCP ingest_leads accepts company+phone scraped rows with no email."""
     _enable(monkeypatch)
-    create_service("Dead Lead Reactivation", "dead-lead-reactivation")
+    create_service("Winback Campaign", "win-back")
     lead = {
         "type": "opportunity",
         "company_name": "Northside Cafe",
         "phone": "0400 333 444",
-        "service_slug": "dead-lead-reactivation",
+        "service_slug": "win-back",
     }
     assert "email" not in lead
     payload, _ = call(client, "ingest_leads", {"leads": [lead]})
@@ -63,12 +63,12 @@ def test_ingest_phone_company_no_email(client, db, monkeypatch):
 
 def test_call_queue_returns_new_dead_leads_with_phone(client, db, monkeypatch):
     _enable(monkeypatch)
-    create_service("Dead Lead Reactivation", "dead-lead-reactivation")
+    create_service("Winback Campaign", "win-back")
     ingest, _ = call(client, "ingest_leads", {"leads": [{
         "type": "opportunity",
         "company_name": "Southside Cafe",
         "phone": "0400 333 555",
-        "service_slug": "dead-lead-reactivation",
+        "service_slug": "win-back",
         "source": "scrape:cafes",
     }]})
     deal_id = ingest["results"][0]["deal_id"]
@@ -77,7 +77,7 @@ def test_call_queue_returns_new_dead_leads_with_phone(client, db, monkeypatch):
 
     campaign, _ = call(client, "get_call_queue", {
         "stage": "new",
-        "service_slug": "dead-lead-reactivation",
+        "service_slug": "win-back",
     })
     assert campaign["ok"] is True
     assert [c["deal"]["id"] for c in campaign["calls"]] == [deal_id]
@@ -85,7 +85,7 @@ def test_call_queue_returns_new_dead_leads_with_phone(client, db, monkeypatch):
 
     via_flag, _ = call(client, "get_call_queue", {
         "include_new": True,
-        "service_slug": "dead-lead-reactivation",
+        "service_slug": "win-back",
     })
     assert [c["deal"]["id"] for c in via_flag["calls"]] == [deal_id]
 
@@ -108,20 +108,20 @@ def test_list_deals_filters_by_owner(client, db, monkeypatch):
 
 def test_bulk_update_deals_by_service_slug(client, db, monkeypatch):
     _enable(monkeypatch)
-    create_service("Dead Lead Reactivation", "dead-lead-reactivation")
+    create_service("Winback Campaign", "win-back")
     create_service("Consulting", "consulting")
     a = create_partner("Cafe A", is_company=True, phone="0400100001")
     b = create_partner("Cafe B", is_company=True, phone="0400100002")
-    keep = create_partner("Acme Childcare", is_company=True, phone="0400100003")
+    keep = create_partner("Acme Retail", is_company=True, phone="0400100003")
     from app.services.catalog import get_service_by_slug
-    dlr = get_service_by_slug("dead-lead-reactivation")
+    dlr = get_service_by_slug("win-back")
     hc = get_service_by_slug("consulting")
     d1 = create_deal(a, dlr["id"])
     d2 = create_deal(b, dlr["id"])
     d3 = create_deal(keep, hc["id"])
     today = date.today().isoformat()
     payload, _ = call(client, "bulk_update_deals", {
-        "service_slug": "dead-lead-reactivation",
+        "service_slug": "win-back",
         "stage": "new",
         "set_stage": "contacted",
         "next_action": "Call",
@@ -136,7 +136,7 @@ def test_bulk_update_deals_by_service_slug(client, db, monkeypatch):
 
 def test_search_partners_finds_nested_people(client, db, monkeypatch):
     _enable(monkeypatch)
-    company_id = create_partner("Acme Childcare", is_company=True, phone="0400999000")
+    company_id = create_partner("Acme Retail", is_company=True, phone="0400999000")
     person_id = create_partner(
         "Jane Nested", parent_id=company_id, email="jane@nested.example",
     )

@@ -105,7 +105,7 @@
     </div>
     <div class="form-row">
         <label for="tags">Tags</label>
-        <input type="text" id="tags" name="tags" placeholder="illawarra, research"
+        <input type="text" id="tags" name="tags" placeholder="referral, research"
                value="{% if form_tags is not none %}{{ form_tags }}{% elif lead and lead.tags %}{{ lead.tags | join(', ') }}{% endif %}">
     </div>
     <button type="submit">{{ "Save" if lead else "Create lead" }}</button>

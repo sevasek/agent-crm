@@ -1,4 +1,4 @@
-"""Upgrade an unversioned sevasek-shaped database and check what survives."""
+"""Upgrade an unversioned legacy-shaped database and check what survives."""
 import sqlite3
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
@@ -7,7 +7,7 @@ from app.database import SCHEMA_VERSION, get_install_id, get_user_version, init_
 from app.routers.auth import cookie_signer
 from app.services.auth import SECRET_KEY, check_env_api_key
 from app.services.mcp_oauth import issue_tokens, load_refresh_token, refresh_access
-from tests.legacy_sevasek_fixture import build_legacy_sevasek_db
+from tests.legacy_fixture import build_legacy_db
 
 
 def _counts(path):
@@ -28,14 +28,14 @@ def _counts(path):
 def _upgrade(tmp_path, monkeypatch):
     path = tmp_path / "data" / "crm.db"
     path.parent.mkdir()
-    build_legacy_sevasek_db(path)
+    build_legacy_db(path)
     before = _counts(path)
     monkeypatch.setattr("app.database.DB_PATH", str(path))
     monkeypatch.delenv("BACKUP_DIR", raising=False)
     monkeypatch.setenv("SECRET_KEY", "test-secret-key")
     monkeypatch.setenv("CRM_MCP_API_KEY", "kept-mcp-key")
     # Signed before migrate, the way a connector holds a refresh token.
-    issued = issue_tokens("grok-connector")
+    issued = issue_tokens("example-connector")
     old_session = URLSafeTimedSerializer(SECRET_KEY, salt="session").dumps(
         {"user_id": 1, "sv": 0}
     )
@@ -57,16 +57,16 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
         for row in conn.execute("SELECT deal_id, tag FROM deal_tags ORDER BY deal_id")
     }
     assert tags == {
-        (1, "campaign:icp-hc-illawarra-2026-09"),
-        (4, "campaign:dead-leads-2026"),
+        (1, "campaign:example-2026-09"),
+        (4, "campaign:winback-2026"),
     }
     refs = {
         row["id"]: row["external_ref"]
         for row in conn.execute("SELECT id, external_ref FROM deals ORDER BY id")
     }
-    assert refs[1] == "campaign:icp-hc-illawarra-2026-09"
-    assert refs[4] == "Campaign:Dead-Leads-2026"
-    assert refs[5] == "success-agent:mustard-seed"
+    assert refs[1] == "campaign:example-2026-09"
+    assert refs[4] == "Campaign:Winback-2026"
+    assert refs[5] == "success-agent:example-client"
 
     children = {
         row["id"]: (row["parent_deal_id"], row["source"], row["stage"])
@@ -74,8 +74,8 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
             "SELECT id, parent_deal_id, source, stage FROM deals WHERE parent_deal_id IS NOT NULL"
         )
     }
-    assert children[2] == (1, "hc-spawn:1", "new")
-    assert children[3] == (1, "hc-spawn:1", "qualified")
+    assert children[2] == (1, "legacy-spawn:1", "new")
+    assert children[3] == (1, "legacy-spawn:1", "qualified")
 
     tasks = {
         row["id"]: (
@@ -92,19 +92,19 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
                FROM delegated_tasks"""
         )
     }
-    assert tasks[1][0] == "willow"
-    assert tasks[1][1] == "Send HC kickoff"
+    assert tasks[1][0] == "agent"
+    assert tasks[1][1] == "Send audit kickoff"
     assert tasks[1][3] == "2026-09-01T00:00:00"
     assert tasks[1][5] is None
-    assert tasks[2][0] == "hermes"
+    assert tasks[2][0] == "research-bot"
     assert tasks[2][5] == "HTTP 502"
 
-    joe = conn.execute("SELECT owner_key FROM deals WHERE id = 4").fetchone()["owner_key"]
-    assert joe == "joe-bot"
+    carol = conn.execute("SELECT owner_key FROM deals WHERE id = 4").fetchone()["owner_key"]
+    assert carol == "sales-bot"
 
     offer = conn.execute("SELECT price, currency FROM offers WHERE id = 1").fetchone()
     assert offer["price"] == 700
-    assert offer["currency"] == "AUD"
+    assert offer["currency"] == "USD"
 
     names = {
         row[0]
@@ -142,12 +142,12 @@ def test_oauth_refresh_survives_same_secret_and_browser_session_does_not(tmp_pat
 
     loaded = load_refresh_token(issued["refresh_token"])
     assert loaded is not None
-    assert loaded["cid"] == "grok-connector"
+    assert loaded["cid"] == "example-connector"
     assert loaded["typ"] == "mcp_refresh"
-    refreshed, error = refresh_access("grok-connector", issued["refresh_token"])
+    refreshed, error = refresh_access("example-connector", issued["refresh_token"])
     assert error is None
     assert refreshed["access_token"]
-    assert load_refresh_token(refreshed["refresh_token"])["cid"] == "grok-connector"
+    assert load_refresh_token(refreshed["refresh_token"])["cid"] == "example-connector"
 
     # install_id is created on this upgrade and mixed into the session signer.
     # A cookie from before app_install existed does not verify.

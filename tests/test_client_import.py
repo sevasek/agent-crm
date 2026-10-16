@@ -10,18 +10,18 @@ from app.services.activities import list_activities_for_partner
 from app.services.client_import import parse_client_markdown, parse_client_file, import_client, import_paths
 
 FIXTURES = Path(__file__).parent / "fixtures" / "clients"
-ACME = FIXTURES / "acme-childcare-jane-doe.md"
+ACME = FIXTURES / "acme-retail-jane-doe.md"
 
 
 def test_parse_frontmatter():
     record = parse_client_file(ACME)
-    assert record["company"] == "Acme Childcare"
+    assert record["company"] == "Acme Retail"
     assert record["name"] == "Jane Doe"
     assert record["title"] == "Director"
-    assert record["industry"] == "Childcare"
+    assert record["industry"] == "Retail"
     assert record["team_size"] == "12"
     assert record["service_slug"] == "consulting"
-    assert "KidPlatform" in record["notes"]
+    assert "OpsPlatform" in record["notes"]
 
 
 def test_parse_block_scalars():
@@ -96,9 +96,9 @@ def test_import_acme_seed_creates_company_person_deal(db):
     assert result["person"] == "created"
     assert result["deal"] == "created"
 
-    company = get_company_by_name("Acme Childcare")
+    company = get_company_by_name("Acme Retail")
     assert company["is_company"] == 1
-    assert company["industry"] == "Childcare"
+    assert company["industry"] == "Retail"
     assert company["team_size"] == 12
     assert company["website"] == "https://acme.example"
 
@@ -115,7 +115,7 @@ def test_import_acme_seed_creates_company_person_deal(db):
     assert "scattergun" in deals[0]["pain_points"]
 
     notes = list_activities_for_partner(jane["id"])
-    assert any("KidPlatform" in (a["body"] or "") for a in notes)
+    assert any("OpsPlatform" in (a["body"] or "") for a in notes)
 
 
 def test_reimport_does_not_duplicate(db):
@@ -138,11 +138,11 @@ def test_reimport_does_not_overwrite_team_size_zero(db):
     import_client({
         "company": "Zero Team Co",
         "team_size": "12",
-        "industry": "Childcare",
+        "industry": "Retail",
     })
     company = get_partner(company_id)
     assert company["team_size"] == 0
-    assert company["industry"] == "Childcare"
+    assert company["industry"] == "Retail"
 
 
 def test_email_match_does_not_cross_companies(db):
@@ -195,7 +195,7 @@ def test_person_only_email_does_not_attach_to_company_person(db):
 def test_reimport_fills_empty_fields_only(db):
     create_service("Consulting", "consulting")
     import_client(parse_client_file(ACME))
-    company = get_company_by_name("Acme Childcare")
+    company = get_company_by_name("Acme Retail")
     from app.services.partners import update_partner
     update_partner(company["id"], industry="Edited")
 
@@ -217,12 +217,12 @@ def test_import_paths_directory(db):
     create_service("Consulting", "consulting")
     results = import_paths([FIXTURES])
     files = {Path(r["file"]).name for r in results}
-    assert "acme-childcare-jane-doe.md" in files
+    assert "acme-retail-jane-doe.md" in files
     assert "solo-lead.md" in files
     assert get_company_by_name("Solo Lead Pty") is not None
     solo = get_company_by_name("Solo Lead Pty")
     assert any("company-only note" in (a["body"] or "") for a in list_activities_for_partner(solo["id"]))
-    assert get_company_by_name("Acme Childcare") is not None
+    assert get_company_by_name("Acme Retail") is not None
 
 
 def test_email_on_company_does_not_create_person(db):
@@ -285,7 +285,7 @@ def test_import_type_lead_does_not_create_partners(db):
     assert len(list_partners()) == before
     lead = get_deal(result["deal_id"])
     assert lead["type"] == "lead"
-    assert lead["company_name"] == "Acme Childcare"
+    assert lead["company_name"] == "Acme Retail"
     assert lead["contact_name"] == "Jane Doe"
     again = import_client(parse_client_file(ACME), record_type="lead")
     assert again["deal"] == "duplicate_open_lead"

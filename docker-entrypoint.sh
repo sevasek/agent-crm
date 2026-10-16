@@ -32,7 +32,7 @@ if [ "$(id -u)" = "0" ]; then
   # directory that already exists so a container started without the mount
   # (the CI `id` probe, local dev) still drops privileges. A 0700 directory
   # already owned by APP_UID is left alone — set APP_UID/APP_GID to the
-  # host owner (1004 on the sevasek VPS) instead of the image default 1000.
+  # host owner (matching the container's APP_UID) instead of the image default 1000.
   backup_dir="${BACKUP_DIR:-/app/backups}"
   if [ -d "$backup_dir" ]; then
     prepare_data_volume_as_root "$backup_dir" "$uid" "$gid"

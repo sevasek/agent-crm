@@ -36,8 +36,8 @@ def configured_task_owners():
     """Owner slugs from DELEGATED_TASK_OWNERS, in order, with blanks dropped.
 
     Empty when the env is unset. list_catalog includes `delegated_task_owners`
-    only then — the live sevasek CRM always sends paul, bethany, willow, joe,
-    unassigned, and other clients should not inherit that enum.
+    only then — other clients leave the env unset so the key stays absent and
+    bots are not told a fixed owner enum.
     """
     raw = os.getenv("DELEGATED_TASK_OWNERS") or ""
     owners = []

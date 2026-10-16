@@ -279,7 +279,7 @@ def test_list_deals_defaults_exclude_lost_and_leads(db):
 
     open_id = create_deal(partner_id, service_id)
     other_id = create_deal(partner_id, service_id)
-    lead_id = insert_lead(db, company_name="Harbour Physio")
+    lead_id = insert_lead(db, company_name="Riverstone Dental")
     with get_db() as conn:
         conn.execute(
             """UPDATE deals SET active = 0, lost_reason_id = (
@@ -300,7 +300,7 @@ def test_list_deals_defaults_exclude_lost_and_leads(db):
     assert leads[0]["service_id"] is None
     assert leads[0]["partner_name"] is None
     assert leads[0]["service_name"] is None
-    assert leads[0]["company_name"] == "Harbour Physio"
+    assert leads[0]["company_name"] == "Riverstone Dental"
 
     everyone = list_deals(type="all", include_lost=True)
     assert {row["id"] for row in everyone} == {open_id, lead_id, other_id}
@@ -337,7 +337,7 @@ def test_get_partner_and_service_accept_null():
 def test_get_deal_tool_and_delegated_task_tolerate_null_partner(db):
     from app.mcp.tools import create_delegated_task_tool, get_deal_tool
 
-    lead_id = insert_lead(db, company_name="Harbour Physio")
+    lead_id = insert_lead(db, company_name="Riverstone Dental")
     got = get_deal_tool({"deal_id": lead_id})
     assert got["ok"] is True
     assert got["partner"] is None
@@ -356,12 +356,12 @@ def test_lost_child_does_not_block_new_child(db):
     from app.services.deals import create_deal, set_deal_stage
     from app.services.stage_automations import create_automation
 
-    pipeline_stages.create_stage("hc_presented", "HC presented", position=20)
-    parent_service = create_service("Health Check", "health-check-p1")
-    child_service = create_service("Automation Delivery", "automation-delivery-p1")
+    pipeline_stages.create_stage("audit_presented", "Audit presented", position=20)
+    parent_service = create_service("Website Audit", "audit-p1")
+    child_service = create_service("Implementation", "implementation-p1")
     automation, error = create_automation(
         "Spawn delivery",
-        "hc_presented",
+        "audit_presented",
         actions=[{
             "type": "spawn_child_deals",
             "service_ids": [child_service],
@@ -370,7 +370,7 @@ def test_lost_child_does_not_block_new_child(db):
     assert error is None
     partner_id = create_partner("Clinic", email="clinic@x.example")
     parent_id = create_deal(partner_id, parent_service)
-    assert set_deal_stage(parent_id, "hc_presented") is True
+    assert set_deal_stage(parent_id, "audit_presented") is True
     children = list_deals(parent_deal_id=parent_id)
     assert len(children) == 1
     child_id = children[0]["id"]
@@ -384,7 +384,7 @@ def test_lost_child_does_not_block_new_child(db):
         conn.commit()
     assert list_deals(parent_deal_id=parent_id) == []
     assert set_deal_stage(parent_id, "qualified") is True
-    assert set_deal_stage(parent_id, "hc_presented") is True
+    assert set_deal_stage(parent_id, "audit_presented") is True
     after = list_deals(parent_deal_id=parent_id)
     assert len(after) == 1
     assert after[0]["id"] != child_id

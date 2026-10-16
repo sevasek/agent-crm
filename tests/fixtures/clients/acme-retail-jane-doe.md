@@ -1,10 +1,10 @@
 ---
-company: Acme Childcare
+company: Acme Retail
 name: Jane Doe
 title: Director
 email: jane@acme.example
 phone: 0400 111 222
-industry: Childcare
+industry: Retail
 team_size: 12
 website: https://acme.example
 address: Springfield
@@ -16,5 +16,5 @@ pain_points: No visibility on business processes, systems described as scattergu
 goals: A clear view of what to automate first
 ---
 
-KidPlatform integration research. Childcare centre; KidPlatform pricing is banded by
+OpsPlatform integration research. Retail centre; OpsPlatform pricing is banded by
 enrolled-child / team count, so team_size is a real qualification signal.

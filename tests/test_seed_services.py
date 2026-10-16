@@ -36,7 +36,7 @@ def test_slug_from_name():
     from app.services.catalog import slug_from_name
 
     assert slug_from_name("AI Concierge") == "ai-concierge"
-    assert slug_from_name("IT Support") == "it-support"
+    assert slug_from_name("Training") == "training"
     assert slug_from_name("Monthly Retainer") == "monthly-retainer"
     assert slug_from_name("x") is None
 

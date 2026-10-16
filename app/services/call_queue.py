@@ -7,7 +7,7 @@ column, and not a learned/predictive model. See docs/DATA_MODEL.md → Scoring.
 """
 
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.services.auth import clean_owner_key
@@ -69,7 +69,7 @@ def days_in_qualified(qualified_at, now=None):
     ts = _parse_ts(qualified_at)
     if not ts:
         return None
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     return max(0, (now - ts).days)
 
 
@@ -193,7 +193,7 @@ def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
     weighted score. Campaign filters use a simpler recency sort (has
     next_action_date, then created_at, then name).
     """
-    now = now or datetime.utcnow()
+    now = now or datetime.now(timezone.utc).replace(tzinfo=None)
     pool_keys = pipeline_stages.qualified_pool_keys()
     if stage:
         pool_keys = [stage]

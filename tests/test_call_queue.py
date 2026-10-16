@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_db
 from app.services.partners import create_partner
@@ -212,7 +212,7 @@ def test_recency_breaks_ties_newer_first(db):
     set_deal_stage(older_deal, "qualified")
     set_deal_stage(newer_deal, "qualified")
 
-    old_ts = (datetime.utcnow() - timedelta(days=20)).strftime("%Y-%m-%d %H:%M:%S")
+    old_ts = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=20)).strftime("%Y-%m-%d %H:%M:%S")
     with get_db() as conn:
         conn.execute(
             "UPDATE activities SET occurred_at = ? WHERE deal_id = ? AND body LIKE ?",

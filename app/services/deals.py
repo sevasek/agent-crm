@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 from app.services.auth import clean_owner_key, sanitize_text
@@ -348,7 +348,7 @@ def update_deal_fields(deal_id: int, **fields):
         updates["expected_close"] = sanitize_text(updates["expected_close"] or "", max_len=32) or None
     if not updates:
         return False
-    updates["updated_at"] = datetime.utcnow().isoformat()
+    updates["updated_at"] = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     set_clause = ", ".join(f"{k} = ?" for k in updates)
     values = list(updates.values()) + [deal_id]
     with get_db() as db:
@@ -369,7 +369,7 @@ def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
     reason = resolve_lost_reason(lost_reason_id, lost_reason)
     if not reason:
         return None, "invalid_lost_reason"
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     note_text = sanitize_text(note or "", max_len=2000, allow_newlines=True) or None
     with get_db() as db:
         db.execute(
@@ -429,7 +429,7 @@ def restore_deal(deal_id: int):
         meta = pipeline_stages.get_stage(stage)
         if meta and meta["is_lost"]:
             stage = pipeline_stages.default_stage_key()
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     with get_db() as db:
         db.execute(
             """UPDATE deals
@@ -519,7 +519,7 @@ def set_deal_stage(deal_id: int, new_stage: str, position=None) -> bool:
     if not stage_changed and parsed_position is None:
         return True
 
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     if stage_changed:
         closed_at = now if (stage_meta["is_won"] or stage_meta["is_lost"]) else None
         with get_db() as db:

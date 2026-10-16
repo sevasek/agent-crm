@@ -52,8 +52,8 @@
     {% if d.goals %}<br><span class="muted">Goals: {{ d.goals }}</span>{% endif %}
     <form class="next-action-form" method="post" action="/deals/{{ d.id }}/next-action">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <input type="text" name="next_action" value="{{ d.next_action or '' }}" placeholder="Next action">
-        <input type="date" name="next_action_date" value="{{ (d.next_action_date or '')[:10] }}">
+        <input type="text" name="next_action" value="{{ d.next_action or '' }}" placeholder="Next action" aria-label="Next action">
+        <input type="date" name="next_action_date" value="{{ (d.next_action_date or '')[:10] }}" aria-label="Next action date">
         {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
         {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
         <button type="submit">Save</button>
@@ -61,7 +61,7 @@
     <p><a class="btn btn-secondary" href="/deals/{{ d.id }}/edit">Edit deal</a></p>
     <form class="stage-form" method="post" action="/deals/{{ d.id }}/stage">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <select name="stage" onchange="this.form.submit()">
+        <select name="stage" aria-label="Stage for deal #{{ d.id }}" onchange="this.form.submit()">
             {% for s in stages %}
             <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
             {% endfor %}
@@ -76,7 +76,7 @@
 <form method="post" action="/partners/{{ partner.id }}/activities" style="margin-bottom:1rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
-        <select name="type" style="width:auto;">
+        <select name="type" style="width:auto;" aria-label="Activity type">
             <option value="note">Note</option>
             <option value="call">Call</option>
             <option value="email">Email</option>
@@ -84,7 +84,7 @@
         </select>
     </div>
     <div class="form-row">
-        <textarea name="body" placeholder="What happened?"></textarea>
+        <textarea name="body" placeholder="What happened?" aria-label="Activity note"></textarea>
     </div>
     <button type="submit">Add</button>
 </form>

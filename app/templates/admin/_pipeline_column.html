@@ -26,6 +26,7 @@
             {% if current_tag %}<input type="hidden" name="tag" value="{{ current_tag }}">{% endif %}
             {% if current_lost %}<input type="hidden" name="lost" value="1">{% endif %}
             <select name="stage"
+                    aria-label="Stage for deal #{{ d.id }}"
                     hx-post="/deals/{{ d.id }}/stage"
                     hx-include="closest form"
                     hx-swap="none"

@@ -28,20 +28,17 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Searchable partner picker on the new-deal form (vendored Tom Select 2.6.2
   under `/static/vendor/`). The native `<select name="partner_id">` stays in
   the form. Other selects are unchanged.
-- Lead / opportunity model (schema 8, `migrate_008`, ADR 0001). One `deals`
+- Lead / opportunity model (ADR 0001). One `deals`
   table with `type`, nullable `partner_id` / `service_id`, `lost_reasons`,
   `mark_lost` / `restore_deal` / `convert_lead` / `merge_leads`, MCP lead
-  tools, admin Leads and Lost reasons pages. P1–P7 ship together; do not
-  deploy an intermediate phase live.
+  tools, admin Leads and Lost reasons pages.
 - Optional `scripts/opportunities_to_leads.py` to move early-stage
-  opportunities back to leads (dry-run by default). The migration does
-  not run it.
+  opportunities back to leads (dry-run by default).
 - Pipeline kanban drag-and-drop (SortableJS 1.15.7, vendored). Drop posts
   to the existing `/deals/{id}/stage` form with an optional `position`
-  field so stage automations still run. Schema v9 adds
-  `deals.board_position` after the lead-model rebuild. The per-card stage
-  dropdown stays as the keyboard / no-JS fallback.
-- Stage automations (schema v7). Named rules, empty until an operator adds
+  field so stage automations still run. Deals have a `board_position`
+  column. The per-card stage dropdown stays as the keyboard / no-JS fallback.
+- Stage automations. Named rules, empty until an operator adds
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
   Entering the chosen stage can create a delegated task and/or child deals
   (`source` `automation:<automation id>`, no price). Re-entry does not
@@ -53,9 +50,9 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   restriction. `/mcp` is not on either list.
 - `DELEGATED_TASK_OWNERS`. When set, `list_catalog` returns
   `delegated_task_owners`.
-- Production compose bind-mounts `./backups` at `/app/backups` so the
-  automatic pre-upgrade snapshot can be written on a read-only root.
-  The entrypoint chowns that directory when it exists.
+- Production compose bind-mounts `./backups` at `/app/backups` so
+  `scripts/backup.sh` can write on a read-only root. The entrypoint
+  chowns that directory when it exists.
 - `.github/workflows/deploy.yml`, skipped unless repository variables
   `DEPLOY_ENABLED=true` and `DEPLOY_REPOSITORY` equals this repository.
 
@@ -78,12 +75,6 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - **Breaking.** Creating a new `is_lost` stage is refused
   (`invalid_stage_role`). The seeded Lost stage label can still be edited.
   Lost is `active=0` plus a lost reason, not a stage.
-- Rollback for this release is restore-only: stop the app and
-  `staleness-cron`, restore the pre-migration backup
-  (`pre-migrate-v7-to-v9-*.db` from a schema 7 database, or
-  `pre-migrate-v8-to-v9-*.db` from schema 8), deploy the previous
-  (schema 7) image. Records created after the migration are lost on
-  rollback. The previous code refuses a schema 9 database.
 
 ## [0.1.0] - 2026-10-06
 
@@ -117,7 +108,7 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 - Production reverse-proxy + TLS examples (Caddy and nginx) in
   [`docs/DEPLOY.md`](docs/DEPLOY.md).
 - Deal tags (`deal_tags`): campaign slugs and other labels on deals, with
-  MCP / ingest / UI filter and write support. Schema v2.
+  MCP / ingest / UI filter and write support.
 - Online sqlite backup and restore (`./scripts/backup.sh`,
   `./scripts/restore.sh`): backup API (safe under load), `PRAGMA
   integrity_check`, mode-0600 files in `./backups/`, `BACKUP_KEEP_DAYS`

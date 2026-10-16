@@ -202,22 +202,6 @@ shows `healthy` and you can log in.
 Optional sub-minute RPO: run [Litestream](https://litestream.io/) beside the
 app to replicate `data/crm.db` to S3/GCS. It is not bundled and not required.
 
-Upgrade: take a backup (`./scripts/backup.sh`), then `git pull` and re-run
-the `up -d --build` command above. `init_db()` stores `PRAGMA user_version`
-and applies numbered additive migrations inside a transaction. A process
-holding an exclusive migrate lock (file lock + `BEGIN IMMEDIATE`) is the
-only one that migrates, so `app` and `staleness-cron` cannot race. If the
-on-disk version is *newer* than this code, startup refuses with a clear
-error — an older container will not mutate a newer schema. An online backup
-is taken automatically before any migration of an existing database
-(`backups/pre-migrate-vN-to-vM-*.db`). Schema v2 adds `deal_tags` and, once,
-copies any `external_ref` that is a `campaign:` slug onto a tag (the ref is
-left unchanged; later startups do not restore a removed tag).
-
-To roll back: `down`, check out the previous version (or previous image),
-and restore the pre-migrate backup. Serving a published GHCR image shrinks
-the outage to a container swap instead of a rebuild.
-
 ### Multiple instances on one host
 
 `scripts/new-instance.sh NAME TZ EMAIL` allocates the next free `CRM_PORT`

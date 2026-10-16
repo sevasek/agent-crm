@@ -5,11 +5,7 @@ invoice hand-off and lead ingest. For what
 the app does and does not attempt, see [`SCOPE.md`](SCOPE.md). For the agent
 interface, see [`MCP.md`](MCP.md).
 
-The schema lives in `app/database.py`. `PRAGMA user_version` is the schema
-version; numbered migrations run inside a transaction on startup.
-Migrations are additive-only except the reviewed schema 8 rebuild
-(`migrate_008`, ADR 0001). A database newer than the running code refuses
-to start. No ORM.
+The schema lives in `app/database.py`. No ORM.
 
 ## Glossary
 
@@ -67,7 +63,7 @@ existing is not the same fact as a sales process being underway.
 | `title` | TEXT | Role at the company. Meaningful for people. |
 | `address` | TEXT | |
 | `social_url` | TEXT | Derived primary social link (first filled of the per-platform columns). |
-| `linkedin_url`, `x_url`, `instagram_url`, `facebook_url`, `youtube_url` | TEXT | Per-platform profiles. A legacy `social_url` is copied onto the matching column at startup. |
+| `linkedin_url`, `x_url`, `instagram_url`, `facebook_url`, `youtube_url` | TEXT | Per-platform profiles. |
 | `preferred_channel` | TEXT | `email`, `phone` or `text`. Validated in `app/services/partners.py`, not by a `CHECK`; an unrecognised value becomes null. |
 | `industry` | TEXT | Mostly for companies. |
 | `team_size` | INTEGER | Validated non-negative; bad input becomes null. |
@@ -127,7 +123,7 @@ One table holds leads and opportunities (`type`). Schema 8 made
 | `lost_reason_id` | INTEGER | FK to `lost_reasons(id)`. Required when `active = 0`. |
 | `lost_note` | TEXT | Free text for the loss. |
 | `merged_into_id` | INTEGER | FK to `deals(id)`. Set by `merge_leads` on the source. |
-| `board_position` | INTEGER NOT NULL DEFAULT 0 | 0-based order within `stage` on the pipeline board. Schema v9. Drag-and-drop and `set_deal_stage(..., position=)` rewrite the column; a stage change without a position appends. The deals list still sorts by `updated_at`. |
+| `board_position` | INTEGER NOT NULL DEFAULT 0 | 0-based order within `stage` on the pipeline board. Drag-and-drop and `set_deal_stage(..., position=)` rewrite the column; a stage change without a position appends. The deals list still sorts by `updated_at`. |
 
 `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false`.
 Leads never appear in a pipeline stage column.
@@ -149,8 +145,6 @@ Writes:
 - `update_deal` takes `tags` to replace the set (`[]` clears it). `add_tags` and `remove_tags` merge, and run after a replace when both are sent (`remove_tags` wins on overlap). Omitting all three leaves the set alone.
 - `bulk_update_deals` takes `add_tags` / `remove_tags` for the same selection it already uses (`deal_ids`, or `service_slug` plus optional stage and owner).
 - Lead ingest (`POST /api/v1/leads` and MCP `ingest_leads`) takes an optional `tags` array. A re-run merges those tags onto the open deal. Leaving `tags` off the payload leaves the existing set alone. Entries that are not valid slugs are dropped so one bad label cannot fail the lead.
-
-Schema v2 (`migrate_002`) creates `deal_tags` and copies any `external_ref` whose lowercased form is a `campaign:` slug onto a tag. Later startups do not repeat that copy, so removing a tag sticks. `external_ref` is not rewritten.
 
 ### `lost_reasons`
 
@@ -281,11 +275,8 @@ See [`MCP.md`](MCP.md) for the webhook behaviour.
 
 ### `stage_automations` and `stage_automation_actions`
 
-Operator configuration. Schema version 7 creates the tables and inserts no
-rows. A stage change runs nothing extra until someone adds an automation
-in the admin UI or over MCP. Schema version 9 adds `deals.board_position`
-for pipeline card order after the lead-model rebuild (schema 8); it does
-not rebuild `deals`.
+Operator configuration. A new database has no rows. A stage change runs
+nothing extra until someone adds an automation in the admin UI or over MCP.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -441,9 +432,9 @@ an array of slugs merged onto the deal record.
 The CLI exits 0 when every item is a success status, including
 `duplicate_open_lead` and `duplicate_open_opportunity`.
 
-An optional cleanup script `scripts/opportunities_to_leads.py` can move
+An optional script `scripts/opportunities_to_leads.py` can move
 early-stage opportunities back to leads (`--stage` repeatable, dry-run
-by default, `--apply` to write). The migration never runs it.
+by default, `--apply` to write).
 
 **Why an API rather than direct database access:** the database is one sqlite
 file with a single-writer assumption. A second process touching it would break

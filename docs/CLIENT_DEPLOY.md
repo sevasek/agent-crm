@@ -61,9 +61,7 @@ sudo -E scripts/new-instance.sh black-diamond Australia/Sydney jem@client.exampl
 - prints a Caddy site block and a systemd backup timer, scoped to this
   instance
 
-Migrations run inside the process on startup (`init_db`). A brand-new
-database is created at the current schema. You do not run a migrate
-command by hand.
+Starting the process creates the database if it does not exist yet.
 
 The catalogue is empty apart from the starter pipeline (New, Contacted,
 Qualified, Nurture, Proposal, Won, Lost). Those rows are editable. Do not
@@ -119,7 +117,7 @@ keeps the old environment.
 
 ## Updates
 
-From the repo root, after `git pull`:
+From the repo root:
 
 ```bash
 docker compose --project-name crm-black-diamond \
@@ -129,9 +127,8 @@ docker compose --project-name crm-black-diamond \
   up -d --build
 ```
 
-That rebuilds only this project's containers. Startup applies any pending
-migrations. `docker compose ps` should show the app `healthy`. Check
-`/health` again.
+That rebuilds only this project's containers. `docker compose ps` should
+show the app `healthy`. Check `/health` again.
 
 Same command without `--build` after an `.env`-only edit, so the container
 is recreated with the new values.

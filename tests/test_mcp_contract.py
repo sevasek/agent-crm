@@ -1,15 +1,15 @@
-"""MCP names and fields the live sevasek bots already call.
+"""MCP names and fields existing bot clients already call.
 
-The live tool list was read from the crm.sevasek.com MCP connection on
-2026-10-07 (27 tools). agent-crm adds list_tags and the stage-automation
-tools. Live names and their argument names stay. Extra properties are
-allowed. A missing live property is not.
+The reference tool list (27 tools) was pinned from a live deployment's MCP
+connection. agent-crm adds list_tags and the stage-automation tools. Those
+names and their argument names stay. Extra properties are allowed. A
+missing pinned property is not.
 """
 from app.mcp.tools import TOOLS
 from app.services.leads import ALLOWED_LEAD_KEYS
 
-# input property names on the live server. required flags are noted only
-# where the live schema required them.
+# Input property names as pinned. Required flags are noted only where the
+# pinned schema required them.
 LIVE_TOOL_PROPS = {
     "bulk_update_deals": ["deal_ids", "next_action", "next_action_date", "owner", "owner_key", "service_slug", "set_stage", "stage"],
     "complete_delegated_task": ["result_notes", "task_id"],
@@ -96,9 +96,9 @@ def test_list_catalog_includes_delegated_task_owners_when_configured(client, db,
 
     monkeypatch.setenv(
         "DELEGATED_TASK_OWNERS",
-        "paul, bethany, willow, joe, unassigned",
+        "alice, bob, agent, carol, unassigned",
     )
     payload, _is_error = call(client, "list_catalog")
     assert payload["delegated_task_owners"] == [
-        "paul", "bethany", "willow", "joe", "unassigned",
+        "alice", "bob", "agent", "carol", "unassigned",
     ]

@@ -24,7 +24,6 @@ def test_prod_compose_mounts_backups_and_keeps_memory_cap():
 def test_entrypoint_prepares_an_existing_backup_dir_and_documents_uid():
     text = (REPO / "docker-entrypoint.sh").read_text()
     assert "BACKUP_DIR:-/app/backups" in text
-    assert "1004" in text
     assert 'uid="${APP_UID:-1000}"' in text
 
 
@@ -34,4 +33,3 @@ def test_deploy_workflow_cannot_fire_for_a_fork():
     assert "vars.DEPLOY_REPOSITORY == github.repository" in text
     assert "pull_request" not in text
     assert "docker-compose.traefik.yml" in text
-    assert "uid 1004" in text

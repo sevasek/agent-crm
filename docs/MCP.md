@@ -154,8 +154,9 @@ set of child services; saving replaces the action list.
 `list_catalog` includes `delegated_task_owners` only when
 `DELEGATED_TASK_OWNERS` is set (comma-separated slugs).
 
-Sevasek's previous Health Check behaviour is the optional script
-`scripts/seed_sevasek_automations.py` (two named automations).
+An optional script, `scripts/seed_example_automations.py`, seeds two named
+example automations (requires the example services from
+`scripts/seed_services.py`).
 
 ## Delegated tasks and webhooks
 
@@ -259,21 +260,21 @@ not written back into the CRM.
 {"name": "list_deals", "arguments": {"parent_deal_id": 28}}
 
 {"name": "ingest_leads", "arguments": {"leads": [
-  {"name": "Ada North", "email": "ada@example.com", "service_slug": "consulting",
-   "tags": ["campaign:icp-hc-illawarra-2026-09", "illawarra"]}
+  {"name": "Ada Stone", "email": "ada@example.com", "service_slug": "consulting",
+   "tags": ["campaign:example-2026-09", "referral"]}
 ]}}
 
 {"name": "update_deal", "arguments": {
-  "deal_id": 28, "add_tags": ["church"]
+  "deal_id": 28, "add_tags": ["clinic"]
 }}
 
 {"name": "bulk_update_deals", "arguments": {
   "deal_ids": [28, 29],
-  "add_tags": ["campaign:icp-hc-illawarra-2026-09"]
+  "add_tags": ["campaign:example-2026-09"]
 }}
 
 {"name": "list_deals", "arguments": {
-  "tags": ["campaign:icp-hc-illawarra-2026-09", "illawarra"],
+  "tags": ["campaign:example-2026-09", "referral"],
   "stage": "new"
 }}
 
@@ -289,7 +290,7 @@ parent's `partner_id`, and cycles are rejected. It appears on `get_deal`
 ## Deal tags
 
 A tag is a lowercase slug of letters, digits, hyphens and colons, such as
-`campaign:icp-hc-illawarra-2026-09` or `church`. Deals return `tags` (`[]`
+`campaign:example-2026-09` or `clinic`. Deals return `tags` (`[]`
 when none). `list_deals` with `tags` (or a single `tag`) returns only deals
 that carry every listed tag, and that filter combines with the others.
 `list_tags` is the set of tags in use and how many deals have each one.

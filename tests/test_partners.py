@@ -47,7 +47,7 @@ def test_new_partner_form_hides_company_only_fields(logged_in_client):
 
 
 def test_company_edit_form_hides_person_only_fields(logged_in_client):
-    pid = create_partner("Acme Childcare", is_company=True, team_size=12)
+    pid = create_partner("Acme Retail", is_company=True, team_size=12)
     resp = logged_in_client.get(f"/partners/{pid}/edit")
     assert resp.status_code == 200
     html = resp.text
@@ -104,7 +104,7 @@ def test_create_company_via_form_drops_person_fields(logged_in_client, db):
         "/partners/new",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
-            "name": "Acme Childcare",
+            "name": "Acme Retail",
             "is_company": "1",
             "parent_id": str(company_id),
             "title": "Director",
@@ -126,7 +126,7 @@ def test_create_company_via_form_drops_person_fields(logged_in_client, db):
 
 
 def test_create_person_via_form_drops_team_size(logged_in_client, db):
-    company_id = create_partner("Acme Childcare", is_company=True)
+    company_id = create_partner("Acme Retail", is_company=True)
     resp = logged_in_client.post(
         "/partners/new",
         data={
@@ -163,15 +163,15 @@ def test_partner_detail_lists_social_platforms(logged_in_client):
 
 
 def test_create_and_get_partner(db):
-    pid = create_partner("Acme Childcare", is_company=True, email="info@acme.example")
+    pid = create_partner("Acme Retail", is_company=True, email="info@acme.example")
     partner = get_partner(pid)
-    assert partner["name"] == "Acme Childcare"
+    assert partner["name"] == "Acme Retail"
     assert partner["is_company"] == 1
     assert partner["email"] == "info@acme.example"
 
 
 def test_person_linked_to_company(db):
-    company_id = create_partner("Acme Childcare", is_company=True)
+    company_id = create_partner("Acme Retail", is_company=True)
     person_id = create_partner("Jane Doe", parent_id=company_id, title="Director")
 
     children = get_children(company_id)
@@ -201,15 +201,15 @@ def test_update_partner(db):
 
 def test_create_partner_with_profile_extras(db):
     pid = create_partner(
-        "Acme Childcare", is_company=True,
+        "Acme Retail", is_company=True,
         address="123 Example St, Springfield", social_url="https://linkedin.com/company/acme",
-        industry="Childcare", team_size=12,
+        industry="Retail", team_size=12,
     )
     partner = get_partner(pid)
     assert partner["address"] == "123 Example St, Springfield"
     assert partner["social_url"] == "https://linkedin.com/company/acme"
     assert partner["linkedin_url"] == "https://linkedin.com/company/acme"
-    assert partner["industry"] == "Childcare"
+    assert partner["industry"] == "Retail"
     assert partner["team_size"] == 12
 
 
@@ -299,7 +299,7 @@ def test_preferred_channel_validated(db):
 
 
 def test_team_size_rejects_garbage(db):
-    pid = create_partner("Acme Childcare", is_company=True, team_size="not-a-number")
+    pid = create_partner("Acme Retail", is_company=True, team_size="not-a-number")
     assert get_partner(pid)["team_size"] is None
 
     pid2 = create_partner("Another Co", is_company=True, team_size=-5)
@@ -308,8 +308,8 @@ def test_team_size_rejects_garbage(db):
 
 def test_update_partner_profile_extras(db):
     pid = create_partner("Jane Doe")
-    assert update_partner(pid, industry="Childcare", team_size="7", preferred_channel="email")
+    assert update_partner(pid, industry="Retail", team_size="7", preferred_channel="email")
     partner = get_partner(pid)
-    assert partner["industry"] == "Childcare"
+    assert partner["industry"] == "Retail"
     assert partner["team_size"] == 7
     assert partner["preferred_channel"] == "email"

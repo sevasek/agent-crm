@@ -19,9 +19,9 @@ def test_default_ingest_creates_lead_and_not_a_partner(db):
     before = _partners_count()
     result = ingest_lead({
         "name": "Pat Manager",
-        "email": "pm@harbourphysio.example",
-        "company_name": "Harbour Physio",
-        "website": "https://harbourphysio.example",
+        "email": "pm@riverstonedental.example",
+        "company_name": "Riverstone Dental",
+        "website": "https://riverstonedental.example",
         "service_slug": "consulting",
         "source": "research:directory",
     })
@@ -35,20 +35,20 @@ def test_default_ingest_creates_lead_and_not_a_partner(db):
     lead = get_deal(result["deal_id"])
     assert lead["type"] == "lead"
     assert lead["contact_name"] == "Pat Manager"
-    assert lead["company_name"] == "Harbour Physio"
-    assert lead["email"] == "pm@harbourphysio.example"
+    assert lead["company_name"] == "Riverstone Dental"
+    assert lead["email"] == "pm@riverstonedental.example"
     assert list_deals() == []
     assert list_deals(type="lead")[0]["id"] == lead["id"]
 
 
 def test_lead_ingest_never_changes_existing_partner(db):
     _consulting(db)
-    partner_id = create_partner("Harbour Physio", is_company=True, email="pm@harbourphysio.example")
+    partner_id = create_partner("Riverstone Dental", is_company=True, email="pm@riverstonedental.example")
     before = get_partner(partner_id)
     result = ingest_lead({
         "type": "lead",
         "name": "Pat Manager",
-        "email": "pm@harbourphysio.example",
+        "email": "pm@riverstonedental.example",
         "phone": "0400 111 222",
         "title": "Practice manager",
     })
@@ -95,12 +95,12 @@ def test_weak_key_only_creates_a_new_lead(db):
 
 
 def test_strong_email_match_merges_oldest_and_lists_also_matched(db):
-    first, _ = create_lead(company_name="Harbour One", email="same@harbour.example")
-    second, _ = create_lead(company_name="Harbour Two", email="same@harbour.example")
+    first, _ = create_lead(company_name="Harbour One", email="same@riverstone.example")
+    second, _ = create_lead(company_name="Harbour Two", email="same@riverstone.example")
     result = ingest_lead({
         "type": "lead",
         "name": "Pat",
-        "email": "same@harbour.example",
+        "email": "same@riverstone.example",
         "phone": "0400 000 111",
         "title": "Director",
     })
@@ -117,10 +117,10 @@ def test_strong_email_match_merges_oldest_and_lists_also_matched(db):
 def test_strong_match_on_opportunity_fills_deal_fields_only(db):
     _consulting(db)
     lead, _ = create_lead(
-        company_name="Harbour Physio",
+        company_name="Riverstone Dental",
         contact_name="Pat Manager",
-        email="pm@harbourphysio.example",
-        website="https://harbourphysio.example",
+        email="pm@riverstonedental.example",
+        website="https://riverstonedental.example",
     )
     converted, error = convert_lead(
         lead["id"], service_slug="consulting", partner_action="create",
@@ -130,7 +130,7 @@ def test_strong_match_on_opportunity_fills_deal_fields_only(db):
     result = ingest_lead({
         "type": "lead",
         "name": "Pat Manager",
-        "email": "pm@harbourphysio.example",
+        "email": "pm@riverstonedental.example",
         "phone": "0400 999 000",
         "title": "Should stay off the opportunity",
         "pain_points": "Phone-only booking",
@@ -154,8 +154,8 @@ def test_omitted_type_sets_deprecation_header(client, db, monkeypatch):
     resp = client.post("/api/v1/leads", json={
         "leads": [{
             "name": "Pat Manager",
-            "email": "pm@harbourphysio.example",
-            "company_name": "Harbour Physio",
+            "email": "pm@riverstonedental.example",
+            "company_name": "Riverstone Dental",
         }]
     }, headers={"X-API-Key": "test-crm-api-key"})
     assert resp.status_code == 200
@@ -172,8 +172,8 @@ def test_explicit_type_skips_deprecation_header(client, db, monkeypatch):
     resp = client.post("/api/v1/leads", json={
         "leads": [{
             "type": "lead",
-            "company_name": "Harbour Physio",
-            "website": "https://harbourphysio.example",
+            "company_name": "Riverstone Dental",
+            "website": "https://riverstonedental.example",
         }]
     }, headers={"X-API-Key": "test-crm-api-key"})
     assert resp.status_code == 200

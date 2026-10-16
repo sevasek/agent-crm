@@ -65,7 +65,7 @@
     <div class="form-row">
         <label for="external_ref">External ref</label>
         <input type="text" id="external_ref" name="external_ref"
-               placeholder="e.g. acme-childcare-2026"
+               placeholder="e.g. acme-retail-2026"
                value="{{ deal.external_ref if deal and deal.external_ref else '' }}">
     </div>
     <div class="form-row">
@@ -109,7 +109,7 @@
     <div class="form-row">
         <label for="tags">Tags</label>
         <input type="text" id="tags" name="tags"
-               placeholder="church, illawarra, campaign:icp-hc-illawarra-2026-09"
+               placeholder="clinic, referral, campaign:example-2026-09"
                value="{% if form_tags is not none %}{{ form_tags }}{% elif deal and deal.tags %}{{ deal.tags | join(', ') }}{% endif %}">
         <p class="muted">Comma-separated. Lowercase letters, digits, hyphens and colons. Saving replaces the set.</p>
     </div>

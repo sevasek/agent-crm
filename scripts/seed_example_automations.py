@@ -1,13 +1,14 @@
-"""Create the two stage automations sevasek/crm used to hard-code.
+"""Create two example stage automations.
 
-Does not insert services, stages, or prices. Those rows have to exist
-already (they do on a database upgraded from the live CRM). Re-running
-does not duplicate a name and does not overwrite an automation you have
-edited. Pass --replace to reset these two names to the definitions below.
+Does not insert services, stages, or prices. The example services from
+scripts/seed_services.py must exist first (or create your own with matching
+slugs). Re-running does not duplicate a name and does not overwrite an
+automation you have edited. Pass --replace to reset these two names to the
+definitions below.
 
     docker compose -f docker-compose.yml -f docker-compose.prod.yml \
         -f docker-compose.traefik.yml run --rm app \
-        python scripts/seed_sevasek_automations.py
+        python scripts/seed_example_automations.py
 """
 import sys
 
@@ -25,28 +26,28 @@ from app.services.stage_automations import (
 # Names are the idempotency key. Rename in the admin UI if you want a
 # different label; this script will then create the original name again
 # the next time it runs without --replace.
-SEVASEK_AUTOMATIONS = (
+SEED_AUTOMATIONS = (
     {
-        "name": "HC paid: send kickoff",
-        "stage_key": "hc_paid",
-        "service_slug": "health-check",
+        "name": "Proposal: send follow-up",
+        "stage_key": "proposal",
+        "service_slug": "consulting",
         "actions": [
             {
                 "type": "delegated_task",
-                "owner": "willow",
-                "title": "Send HC kickoff",
-                "brief": "Paid Health Check. Send the kickoff.",
+                "owner": "agent",
+                "title": "Follow up on proposal",
+                "brief": "Proposal sent. Send the follow-up.",
             },
         ],
     },
     {
-        "name": "HC presented: spawn delivery and support",
-        "stage_key": "hc_presented",
-        "service_slug": "health-check",
+        "name": "Won: spawn follow-on deals",
+        "stage_key": "won",
+        "service_slug": "consulting",
         "actions": [
             {
                 "type": "spawn_child_deals",
-                "service_slugs": ["automation-delivery", "automations-support"],
+                "service_slugs": ["website-rebuild", "monthly-retainer"],
             },
         ],
     },
@@ -56,7 +57,7 @@ SEVASEK_AUTOMATIONS = (
 def _missing_catalog():
     problems = []
     seen = set()
-    for spec in SEVASEK_AUTOMATIONS:
+    for spec in SEED_AUTOMATIONS:
         stage_key = spec["stage_key"]
         if stage_key not in seen and not pipeline_stages.get_stage(stage_key):
             problems.append(f"stage {stage_key} is not in the pipeline")
@@ -70,7 +71,7 @@ def _missing_catalog():
     return problems
 
 
-def seed_sevasek_automations(replace=False):
+def seed_example_automations(replace=False):
     """Returns {"created": [...], "existing": [...], "replaced": [...]}.
 
     Raises SystemExit when a required stage or service is missing.
@@ -84,7 +85,7 @@ def seed_sevasek_automations(replace=False):
             + "\nCreate those stages and services first. This script does not insert them."
         )
     created, existing, replaced = [], [], []
-    for spec in SEVASEK_AUTOMATIONS:
+    for spec in SEED_AUTOMATIONS:
         current = get_automation_by_name(spec["name"])
         if current and not replace:
             existing.append(spec["name"])
@@ -120,7 +121,7 @@ def main(argv=None):
     replace = "--replace" in args
     init_db()
     with db_timeout(30):
-        result = seed_sevasek_automations(replace=replace)
+        result = seed_example_automations(replace=replace)
     for name in result["created"]:
         print(f"created {name}")
     for name in result["replaced"]:

@@ -39,7 +39,7 @@ def test_company_name_creates_parent_company(client, monkeypatch):
     client.post("/api/v1/leads", json={
         "leads": [_opp({
             "name": "Jane Doe", "email": "jane@acme.example",
-            "company_name": "Acme Childcare", "service_slug": "consulting",
+            "company_name": "Acme Retail", "service_slug": "consulting",
         })]
     }, headers=_headers())
 

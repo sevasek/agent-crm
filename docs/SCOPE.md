@@ -23,8 +23,8 @@ must not live inside `app/` or run automatically at startup.
 Stage automations follow the same rule. A deal entering a stage runs whatever
 rows an operator saved (a delegated task, child deals, or both), scoped
 optionally to one service and one offer. A fresh database has none, so a
-stage change does nothing extra. `scripts/seed_sevasek_automations.py` is the
-sevasek import for that table. It does not run at startup and it does not
+stage change does nothing extra. `scripts/seed_example_automations.py` is an
+optional example import for that table. It does not run at startup and it does not
 insert services, stages, or prices.
 
 ## In scope

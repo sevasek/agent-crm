@@ -36,7 +36,7 @@ def _partners_count():
 
 def test_create_lead_does_not_create_a_partner(db):
     before = _partners_count()
-    lead, error = create_lead(company_name="Harbour Physio", website="https://harbourphysio.example")
+    lead, error = create_lead(company_name="Riverstone Dental", website="https://riverstonedental.example")
     assert error is None
     assert lead["type"] == "lead"
     assert lead["partner_id"] is None
@@ -66,11 +66,11 @@ def test_create_lead_invalid_service_and_partner(db):
 
 
 def test_update_lead_fill_empty_and_errors(db):
-    lead, _error = create_lead(company_name="Harbour Physio", phone="0400111222")
-    updated, error = update_lead(lead["id"], phone="0499000000", website="https://harbourphysio.example")
+    lead, _error = create_lead(company_name="Riverstone Dental", phone="0400111222")
+    updated, error = update_lead(lead["id"], phone="0499000000", website="https://riverstonedental.example")
     assert error is None
     assert updated["phone"] == "0400111222"
-    assert updated["website"] == "https://harbourphysio.example"
+    assert updated["website"] == "https://riverstonedental.example"
     updated, error = update_lead(lead["id"], phone="0499000000", fill_empty_only=False)
     assert updated["phone"] == "0499000000"
     _, error = update_lead(lead["id"] + 99, company_name="x")
@@ -86,7 +86,7 @@ def test_update_lead_fill_empty_and_errors(db):
 
 
 def test_update_lead_invalid_tags_write_no_fields(db):
-    lead, _error = create_lead(company_name="Harbour Physio", phone="0400111222")
+    lead, _error = create_lead(company_name="Riverstone Dental", phone="0400111222")
     updated, error = update_lead(lead["id"], next_action="Call back", tags=[123])
     assert error == "invalid"
     assert updated is None
@@ -100,7 +100,7 @@ def test_update_lead_invalid_tags_write_no_fields(db):
 
 
 def test_mark_lost_and_restore_and_i2(db):
-    lead, _error = create_lead(company_name="Harbour Physio")
+    lead, _error = create_lead(company_name="Riverstone Dental")
     _, error = mark_lost(lead["id"], lost_reason="not-a-real-reason")
     assert error == "invalid_lost_reason"
     assert get_deal(lead["id"])["active"] == 1
@@ -154,7 +154,7 @@ def test_set_deal_stage_lost_shim(db):
 
 def test_convert_errors_and_partner_actions(db):
     sid = create_service("Online booking", "online-booking")
-    lead, _error = create_lead(company_name="Harbour Physio", website="https://harbourphysio.example")
+    lead, _error = create_lead(company_name="Riverstone Dental", website="https://riverstonedental.example")
     result, error = convert_lead(lead["id"])
     assert error == "missing_service"
     result, error = convert_lead(999, service_slug="online-booking")
@@ -177,11 +177,11 @@ def test_convert_errors_and_partner_actions(db):
     assert result["opportunity"]["service_id"] == sid
     assert result["partner_created"] is True
     assert _partners_count() == before + 1
-    assert result["partner"]["name"] == "Harbour Physio"
+    assert result["partner"]["name"] == "Riverstone Dental"
     assert result["partner"]["is_company"] == 1
 
     other, _error = create_lead(
-        company_name="Harbour Physio 2", contact_name="Pat Manager",
+        company_name="Riverstone Dental 2", contact_name="Pat Manager",
         website="https://other.example",
     )
     result, error = convert_lead(
@@ -207,7 +207,7 @@ def test_convert_errors_and_partner_actions(db):
 def test_convert_auto_create_and_link_and_activity_partner(db):
     create_service("Online booking", "online-booking")
     lead, _error = create_lead(
-        company_name="Solo Clinic", contact_name="Ada North",
+        company_name="Solo Clinic", contact_name="Ada Stone",
         email="ada@solo.example", website="https://solo.example",
     )
     log_activity(None, "research", "Website is phone-only", deal_id=lead["id"],
@@ -219,7 +219,7 @@ def test_convert_auto_create_and_link_and_activity_partner(db):
     assert result["partner_created"] is True
     assert _partners_count() == before + 2  # company + person
     person = result["partner"]
-    assert person["name"] == "Ada North"
+    assert person["name"] == "Ada Stone"
     assert person["parent_id"]
     with get_db() as db:
         acts = list(db.execute(
@@ -243,8 +243,8 @@ def test_convert_auto_create_and_link_and_activity_partner(db):
 def test_convert_create_company_and_person(db):
     create_service("Online booking", "online-booking")
     lead, _error = create_lead(
-        company_name="Harbour Physio", contact_name="Pat Lee",
-        website="https://harbourphysio.example",
+        company_name="Riverstone Dental", contact_name="Pat Lee",
+        website="https://riverstonedental.example",
     )
     before = _partners_count()
     result, error = convert_lead(lead["id"], service_slug="online-booking", partner_action="create")
@@ -254,17 +254,17 @@ def test_convert_create_company_and_person(db):
     assert result["partner"]["is_company"] == 0
     from app.services.partners import get_partner
     company = get_partner(result["partner"]["parent_id"])
-    assert company["name"] == "Harbour Physio"
+    assert company["name"] == "Riverstone Dental"
     assert company["is_company"] == 1
 
 
 def test_convert_create_onto_preexisting_company_not_partner_created(db):
     create_service("Online booking", "online-booking")
     existing = create_partner(
-        "Harbour Physio", is_company=True, website="https://harbourphysio.example",
+        "Riverstone Dental", is_company=True, website="https://riverstonedental.example",
     )
     lead, _error = create_lead(
-        company_name="Harbour Physio", website="https://harbourphysio.example",
+        company_name="Riverstone Dental", website="https://riverstonedental.example",
     )
     before = _partners_count()
     result, error = convert_lead(
@@ -304,8 +304,8 @@ def test_find_duplicates_strong_weak_and_denylist(db):
 
 
 def test_merge_leads_and_cannot_restore(db):
-    target, _error = create_lead(company_name="Harbour Physio", email="a@h.example")
-    source, _error = create_lead(company_name="Harbour Physio", phone="0400111222", website="https://h.example")
+    target, _error = create_lead(company_name="Riverstone Dental", email="a@h.example")
+    source, _error = create_lead(company_name="Riverstone Dental", phone="0400111222", website="https://h.example")
     apply_tags_both = __import__("app.services.deal_tags", fromlist=["apply_deal_tags"]).apply_deal_tags
     apply_tags_both(target["id"], replace=["shared", "keep"])
     apply_tags_both(source["id"], replace=["shared", "extra"])
@@ -339,9 +339,9 @@ def test_merge_leads_and_cannot_restore(db):
 
 
 def test_merge_leads_dedupes_duplicate_source_ids(db):
-    target, _error = create_lead(company_name="Harbour Physio", email="a@h.example")
+    target, _error = create_lead(company_name="Riverstone Dental", email="a@h.example")
     source, _error = create_lead(
-        company_name="Harbour Physio", phone="0400111222", email="b@h.example",
+        company_name="Riverstone Dental", phone="0400111222", email="b@h.example",
     )
     result, error = merge_leads(target["id"], [source["id"], source["id"]])
     assert error is None
@@ -352,9 +352,9 @@ def test_merge_leads_dedupes_duplicate_source_ids(db):
 
 
 def test_merge_leads_missing_duplicate_reason_fails_before_writes(db):
-    target, _error = create_lead(company_name="Harbour Physio", email="a@h.example")
+    target, _error = create_lead(company_name="Riverstone Dental", email="a@h.example")
     source, _error = create_lead(
-        company_name="Harbour Physio", phone="0400111222", email="b@h.example",
+        company_name="Riverstone Dental", phone="0400111222", email="b@h.example",
     )
     from app.services.lost_reasons import get_lost_reason_by_name
     update_lost_reason(get_lost_reason_by_name("Duplicate")["id"], name="Duplicate renamed")
@@ -368,11 +368,11 @@ def test_merge_leads_missing_duplicate_reason_fails_before_writes(db):
 
 
 def test_list_leads_and_get_lead(db):
-    create_lead(company_name="Harbour Physio", email="pm@harbour.example", source="research:directory")
+    create_lead(company_name="Riverstone Dental", email="pm@riverstone.example", source="research:directory")
     create_lead(company_name="Other", email="o@x.example")
-    rows = list_leads(query="harbour")
+    rows = list_leads(query="riverstone")
     assert len(rows) == 1
-    assert rows[0]["company_name"] == "Harbour Physio"
+    assert rows[0]["company_name"] == "Riverstone Dental"
     assert "fit_score" in rows[0]
     full = get_lead(rows[0]["id"])
     assert full["possible_duplicates"] is not None
@@ -404,10 +404,10 @@ def test_i1_opportunity_has_partner_and_service(db):
 
 
 def test_activities_research_and_null_partner(db):
-    lead, _error = create_lead(company_name="Harbour Physio")
+    lead, _error = create_lead(company_name="Riverstone Dental")
     activity_id = log_activity(
         None, "research", "Found a second clinic plan",
-        deal_id=lead["id"], source_url="https://harbourphysio.example/news",
+        deal_id=lead["id"], source_url="https://riverstonedental.example/news",
     )
     from app.services.activities import list_activities_for_deal, clean_source_url
     assert clean_source_url("ftp://nope") is None
@@ -416,4 +416,4 @@ def test_activities_research_and_null_partner(db):
     assert rows[0]["id"] == activity_id
     assert rows[0]["type"] == "research"
     assert rows[0]["partner_id"] is None
-    assert rows[0]["source_url"] == "https://harbourphysio.example/news"
+    assert rows[0]["source_url"] == "https://riverstonedental.example/news"

@@ -8,9 +8,9 @@
 # DEPLOY_SSH_KEY, DEPLOY_SSH_KNOWN_HOSTS.
 #
 # The SSH user is the server account that owns the checkout and ./data
-# (uid 1004 on the sevasek VPS). The workflow does not sudo. APP_UID in
+# (matching APP_UID on the target host). The workflow does not sudo. APP_UID in
 # that host's .env must be the same uid. Leave the variables unset until
-# ready to deploy; a push to main only skips this job.
+# you intend to deploy; a push to main only skips this job.
 
 name: Deploy
 

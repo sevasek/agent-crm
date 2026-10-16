@@ -33,7 +33,7 @@ def test_fixture_matches_part_a_shape():
     ):
         assert key in lead
     assert lead["name"] == "Jane Doe"
-    assert lead["company_name"] == "Acme Childcare"
+    assert lead["company_name"] == "Acme Retail"
     assert lead["service_slug"] == "consulting"
 
 
@@ -61,7 +61,7 @@ def test_in_process_inject_against_db_fixture(db, capsys):
     partner = get_partner_by_email("jane@acme.example")
     assert partner is not None
     assert partner["name"] == "Jane Doe"
-    company = get_company_by_name("Acme Childcare")
+    company = get_company_by_name("Acme Retail")
     assert company is not None
     assert partner["parent_id"] == company["id"]
     deals = list_deals(partner_id=partner["id"])
@@ -80,7 +80,7 @@ def test_in_process_default_type_is_lead(db, capsys):
     assert get_partner_by_email("jane@acme.example") is None
     leads = list_deals(type="lead")
     assert len(leads) == 1
-    assert leads[0]["company_name"] == "Acme Childcare"
+    assert leads[0]["company_name"] == "Acme Retail"
 
 
 def test_in_process_duplicate_exits_zero(db, capsys):

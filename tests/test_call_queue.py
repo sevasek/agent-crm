@@ -147,13 +147,13 @@ def test_leads_and_lost_opportunities_never_appear(db):
 
 
 def test_include_new_returns_dialable_new_stage_deals(db):
-    sid = create_service("Dead Lead Reactivation", "dead-lead-reactivation")
+    sid = create_service("Winback Campaign", "win-back")
     pid = create_partner("Cafe North", is_company=True, phone="0400 555 001")
     deal_id = create_deal(pid, sid, source="scrape:cafes")
     assert list_todays_calls() == []
-    calls = list_todays_calls(include_new=True, service_slug="dead-lead-reactivation")
+    calls = list_todays_calls(include_new=True, service_slug="win-back")
     assert [c["id"] for c in calls] == [deal_id]
-    staged = list_todays_calls(stage="new", service_slug="dead-lead-reactivation")
+    staged = list_todays_calls(stage="new", service_slug="win-back")
     assert [c["id"] for c in staged] == [deal_id]
     assert staged[0]["partner_phone"] == "0400 555 001"
 

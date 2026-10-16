@@ -68,8 +68,8 @@ command by hand.
 The catalogue is empty apart from the starter pipeline (New, Contacted,
 Qualified, Nurture, Proposal, Won, Lost). Those rows are editable. Do not
 run `scripts/seed_services.py` unless you want three example services.
-Offers default to currency USD; pass `AUD` when creating an offer for an
-Australian client.
+Offers default to currency USD; pass the client's ISO 4217 currency code
+when creating an offer in a different currency.
 
 ## TLS
 

@@ -41,15 +41,15 @@ def test_new_lead_empty_identity_is_html_error(logged_in_client, db):
 def test_create_lead_and_list(logged_in_client, db):
     resp = logged_in_client.post("/leads/new", data={
         "csrf_token": _csrf(logged_in_client),
-        "company_name": "Harbour Physio",
+        "company_name": "Riverstone Dental",
         "contact_name": "Pat Manager",
-        "email": "pat@harbour.example",
+        "email": "pat@riverstone.example",
         "source": "research:directory",
     }, follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"].startswith("/leads/")
     page = logged_in_client.get("/leads")
-    assert "Harbour Physio" in page.text
+    assert "Riverstone Dental" in page.text
     assert "pill-lead" in page.text
     assert list_partners() == []
 
@@ -150,8 +150,8 @@ def test_lost_reason_create_honors_unchecked_active(logged_in_client, db):
 def test_convert_from_ui(logged_in_client, db):
     create_service("Consulting", "consulting")
     lead, _ = create_lead(
-        company_name="Harbour Physio", contact_name="Pat Manager",
-        email="pat@harbour.example", service_slug="consulting",
+        company_name="Riverstone Dental", contact_name="Pat Manager",
+        email="pat@riverstone.example", service_slug="consulting",
     )
     before = len(list_partners())
     resp = logged_in_client.post(f"/leads/{lead['id']}/convert", data={

@@ -121,11 +121,11 @@ def test_call_view_shows_deal_tags(logged_in_client, db):
     from app.services.deal_tags import apply_deal_tags
 
     pid, _, deal_id = _qualified_deal(db)
-    apply_deal_tags(deal_id, replace=["church", "illawarra"])
+    apply_deal_tags(deal_id, replace=["clinic", "referral"])
     resp = logged_in_client.get(f"/deals/{deal_id}/call")
     assert resp.status_code == 200
-    assert 'class="pill pill-tag">church</span>' in resp.text
-    assert 'class="pill pill-tag">illawarra</span>' in resp.text
+    assert 'class="pill pill-tag">clinic</span>' in resp.text
+    assert 'class="pill pill-tag">referral</span>' in resp.text
     assert 'href="/deals?tag=' not in resp.text
 
 

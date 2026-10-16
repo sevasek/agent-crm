@@ -3,14 +3,14 @@
     {
       "name": "Jane Doe",
       "email": "jane@acme.example",
-      "company_name": "Acme Childcare",
+      "company_name": "Acme Retail",
       "service_slug": "consulting",
       "phone": "",
       "title": "Director",
       "source": "existing client research",
       "value_estimate": null,
-      "pain_points": "No visibility on business processes; systems described as scattergun. Evaluating KidPlatform as a childcare platform.",
-      "goals": "A clear view of what to automate first, and whether KidPlatform is a fit for a childcare centre."
+      "pain_points": "No visibility on business processes; systems described as scattergun. Evaluating OpsPlatform as a retail platform.",
+      "goals": "A clear view of what to automate first, and whether OpsPlatform is a fit for a retail centre."
     }
   ]
 }

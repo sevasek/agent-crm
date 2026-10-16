@@ -130,7 +130,7 @@ shows the tool call and the data that changes. Section 8 defines the tools.
 
 ### Step 1: The agent finds a candidate
 
-The agent finds "Harbour Physio" in a directory. It has a name and a
+The agent finds "Riverstone Dental" in a directory. It has a name and a
 website only.
 
 1. The agent calls `find_duplicates` with `company_name` and `website`.
@@ -139,10 +139,10 @@ website only.
 
 ```json
 {
-  "company_name": "Harbour Physio",
-  "website": "https://harbourphysio.example",
+  "company_name": "Riverstone Dental",
+  "website": "https://riverstonedental.example",
   "source": "research:directory",
-  "tags": ["campaign:physio-illawarra-2026-10"]
+  "tags": ["campaign:example-2026-10"]
 }
 ```
 
@@ -279,7 +279,7 @@ changes are:
 | `partner_id` | INTEGER | **Now nullable** | FK to `partners(id)`. Required when `type = 'opportunity'`. |
 | `service_id` | INTEGER | **Now nullable** | FK to `services(id)`. Required when `type = 'opportunity'`. |
 | `type` | TEXT NOT NULL DEFAULT 'opportunity' | New | `lead` or `opportunity`. The service layer validates it. |
-| `name` | TEXT | New | Short title, for example "Harbour Physio: online booking". Optional. The UI shows company name or contact name if it is empty. |
+| `name` | TEXT | New | Short title, for example "Riverstone Dental: online booking". Optional. The UI shows company name or contact name if it is empty. |
 | `contact_name` | TEXT | New | Lead contact data. Odoo `contact_name`. |
 | `company_name` | TEXT | New | Odoo `partner_name`. |
 | `email` | TEXT | New | Odoo `email_from`. |
@@ -654,7 +654,7 @@ Response, per lead:
 
 ```json
 {
-  "email": "pm@harbourphysio.example",
+  "email": "pm@riverstonedental.example",
   "status": "created",
   "type": "lead",
   "deal_id": 412,

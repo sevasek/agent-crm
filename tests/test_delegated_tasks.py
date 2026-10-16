@@ -24,7 +24,7 @@ class FakeResponse:
 
 def _deal_without_email(db):
     sid = create_service("Consulting", "consulting")
-    pid = create_partner("Acme Childcare", is_company=True, phone="0400111222")
+    pid = create_partner("Acme Retail", is_company=True, phone="0400111222")
     deal_id = create_deal(pid, sid)
     return pid, deal_id
 
@@ -128,7 +128,7 @@ def test_webhook_fires_once_for_agent_delegated(db, monkeypatch):
     payload = calls[0]["json"]
     assert payload["task_id"] == task["id"]
     assert payload["deal_id"] == deal_id
-    assert payload["partner_name"] == "Acme Childcare"
+    assert payload["partner_name"] == "Acme Retail"
     assert payload["title"] == "Send Jane Discovery Meeting reminder"
     assert payload["due_date"] == "2026-09-16"
     assert payload["crm_links"]["deal"] == f"https://crm.example.com/deals/{deal_id}/edit"
@@ -194,7 +194,7 @@ def test_mcp_handoff_to_agent(client, db, monkeypatch):
     monkeypatch.setattr("app.services.delegated_tasks.httpx.post", fake_post)
 
     sid = create_service("Consulting", "consulting")
-    pid = create_partner("Acme Childcare", is_company=True, phone="0400111222")
+    pid = create_partner("Acme Retail", is_company=True, phone="0400111222")
     deal_id = create_deal(pid, sid)
 
     created, _ = call(client, "create_delegated_task", {
@@ -283,7 +283,7 @@ def test_mcp_get_delegated_task_exposes_webhook_delivery(client, db, monkeypatch
 
     monkeypatch.setattr("app.services.delegated_tasks.httpx.post", fake_post)
     sid = create_service("Consulting", "consulting")
-    pid = create_partner("Acme Childcare", is_company=True, phone="0400111222")
+    pid = create_partner("Acme Retail", is_company=True, phone="0400111222")
     deal_id = create_deal(pid, sid)
     created, _ = call(client, "create_delegated_task", {
         "deal_id": deal_id,

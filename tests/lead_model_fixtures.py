@@ -172,7 +172,7 @@ def sqlite_master_snapshot(path):
     return [(row[0], row[1], row[2], row[3]) for row in rows]
 
 
-def insert_lead(database, *, company_name="Harbour Physio", email=None, active=1):
+def insert_lead(database, *, company_name="Riverstone Dental", email=None, active=1):
     """Insert a lead row with null partner/service (no create_lead yet)."""
     with database.get_db() as db:
         db.execute(

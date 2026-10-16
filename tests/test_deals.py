@@ -145,7 +145,7 @@ def test_transition_into_won_triggers_webhook(db, monkeypatch):
     monkeypatch.setattr("app.services.deals.notify_deal_won", fake_notify)
 
     pid, sid, deal_id = _setup(db)
-    offer, _ = create_offer("Discovery Session", service_id=sid, price=350, currency="AUD")
+    offer, _ = create_offer("Discovery Session", service_id=sid, price=350, currency="USD")
     update_deal_fields(deal_id, offer_id=offer["id"], value_estimate=1500)
     set_deal_stage(deal_id, "won")
 

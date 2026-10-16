@@ -1,7 +1,7 @@
 """Deal tags — labels on a deal, including campaign slugs.
 
 A tag is a lowercase slug of letters, digits, hyphens and colons, for example
-`campaign:icp-hc-illawarra-2026-09`, `church`, `illawarra`. Stored in
+`campaign:example-2026-09`, `clinic`, `referral`. Stored in
 `deal_tags` (deal_id, tag), not as a column on `deals`.
 """
 import re
@@ -17,7 +17,7 @@ MAX_TAGS = 50
 CAMPAIGN_PREFIX = "campaign:"
 TAG_HELP = (
     "Tags are lowercase slugs of letters, digits, hyphens and colons "
-    "(for example campaign:icp-hc-illawarra-2026-09, church, illawarra)."
+    "(for example campaign:example-2026-09, clinic, referral)."
 )
 
 

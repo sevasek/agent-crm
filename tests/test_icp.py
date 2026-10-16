@@ -92,7 +92,7 @@ def test_delete_criterion(db):
 
 
 def test_match_is_not_null(db):
-    assert icp.match_criterion({"industry": "Childcare"}, "industry", "is_not_null", "") is True
+    assert icp.match_criterion({"industry": "Retail"}, "industry", "is_not_null", "") is True
     assert icp.match_criterion({"industry": ""}, "industry", "is_not_null", "") is False
     assert icp.match_criterion({}, "industry", "is_not_null", "") is False
 
@@ -104,10 +104,10 @@ def test_match_boolean(db):
 
 
 def test_match_fuzzy(db):
-    assert icp.match_criterion({"industry": "Childcare Centre"}, "industry", "fuzzy_match", "childcare") is True
-    assert icp.match_criterion({"industry": "Chyldkare"}, "industry", "fuzzy_match", "childcare") is True
-    assert icp.match_criterion({"industry": "Plumbing"}, "industry", "fuzzy_match", "childcare") is False
-    assert icp.match_criterion({"industry": None}, "industry", "fuzzy_match", "childcare") is False
+    assert icp.match_criterion({"industry": "Retail Centre"}, "industry", "fuzzy_match", "retail") is True
+    assert icp.match_criterion({"industry": "Reteil"}, "industry", "fuzzy_match", "retail") is True
+    assert icp.match_criterion({"industry": "Plumbing"}, "industry", "fuzzy_match", "retail") is False
+    assert icp.match_criterion({"industry": None}, "industry", "fuzzy_match", "retail") is False
 
 
 def test_match_numeric_operators(db):
@@ -122,10 +122,10 @@ def test_match_numeric_operators(db):
 
 def test_score_fit_sums_matched_weights(db):
     icp.create_criterion("team_size", "gt", "10", weight=5)
-    icp.create_criterion("industry", "fuzzy_match", "childcare", weight=3)
+    icp.create_criterion("industry", "fuzzy_match", "retail", weight=3)
     icp.create_criterion("email", "is_not_null", "", weight=2)
 
-    row = {"team_size": 25, "industry": "Childcare Centre", "email": None}
+    row = {"team_size": 25, "industry": "Retail Centre", "email": None}
     result = icp.score_fit(row)
     assert result["score"] == 8  # team_size + industry match, email doesn't
     assert result["max"] == 10
@@ -141,10 +141,10 @@ def test_score_fit_ignores_inactive_criteria(db):
 
 
 def test_build_matchable_row():
-    partner = {"industry": "Childcare", "team_size": 25, "is_company": 1, "email": "a@b.com"}
+    partner = {"industry": "Retail", "team_size": 25, "is_company": 1, "email": "a@b.com"}
     deal = {"source": "referral", "value_estimate": 5000, "pain_points": "no crm", "goals": "track leads"}
     row = icp.build_matchable_row(partner, deal)
-    assert row["industry"] == "Childcare"
+    assert row["industry"] == "Retail"
     assert row["source"] == "referral"
     assert row["value_estimate"] == 5000
 
@@ -153,17 +153,17 @@ def test_lead_scores_from_own_columns_not_linked_partner():
     partner = {"industry": "Partner Industry", "team_size": 99, "email": "partner@x.example", "is_company": 1}
     lead = {
         "type": "lead",
-        "company_name": "Harbour Physio",
+        "company_name": "Riverstone Dental",
         "contact_name": "",
-        "industry": "Physiotherapy",
+        "industry": "Dentistry",
         "team_size": 8,
-        "email": "pm@harbour.example",
+        "email": "pm@riverstone.example",
         "source": "research:directory",
     }
     row = icp.build_matchable_row(partner, lead)
-    assert row["industry"] == "Physiotherapy"
+    assert row["industry"] == "Dentistry"
     assert row["team_size"] == 8
-    assert row["email"] == "pm@harbour.example"
+    assert row["email"] == "pm@riverstone.example"
     assert row["is_company"] is True
     lead_with_contact = dict(lead, contact_name="Pat Manager")
     assert icp.build_matchable_row(partner, lead_with_contact)["is_company"] is False

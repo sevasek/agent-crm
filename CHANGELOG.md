@@ -45,8 +45,8 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
   Entering the chosen stage can create a delegated task and/or child deals
   (`source` `automation:<automation id>`, no price). Re-entry does not
-  duplicate an open task or an open child. `scripts/seed_sevasek_automations.py`
-  loads sevasek's two Health Check rules; it does not run on boot.
+  duplicate an open task or an open child. `scripts/seed_example_automations.py`
+  loads two example rules; it does not run on boot.
 - `docker-compose.traefik.yml`: no published host port, network alias `crm`
   so other containers can call `http://crm:8000`, Traefik labels.
 - `LEADS_IP_ALLOWLIST` and `STAGES_IP_ALLOWLIST`. Unset means no IP

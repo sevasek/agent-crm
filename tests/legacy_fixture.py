@@ -1,17 +1,16 @@
-"""Unversioned sqlite file shaped like a sevasek/crm database.
+"""Unversioned sqlite file shaped like a pre-agent-crm legacy CRM database.
 
-sevasek/crm is private and was not readable from this environment. This
-fixture is reconstructed from the columns agent-crm's v0 upgrade already
-knows how to add, plus the live catalog (service slugs, Health Check stage
-keys and role flags) read from crm.sevasek.com's MCP list_catalog on
-2026-10-07. user_version stays 0. deal_tags, app_install, users.session_version
-and mcp_oauth_used_codes are absent on purpose: those are agent-crm additions.
-A leftover rate_limit_hits table is included so migrate_003 still drops it.
+Reconstructed from the columns agent-crm's v0 upgrade already knows how to
+add, plus a representative catalog (service slugs, custom stage keys and
+role flags). user_version stays 0. deal_tags, app_install,
+users.session_version and mcp_oauth_used_codes are absent on purpose: those
+are agent-crm additions. A leftover rate_limit_hits table is included so
+migrate_003 still drops it.
 """
 import sqlite3
 
 
-def build_legacy_sevasek_db(path):
+def build_legacy_db(path):
     conn = sqlite3.connect(path)
     conn.executescript(
         """
@@ -156,12 +155,12 @@ def build_legacy_sevasek_db(path):
         ("qualified", "Qualified", 2, 0, 1, 0, 0, 0),
         ("nurture", "Nurture", 3, 0, 0, 1, 0, 0),
         ("proposal", "Proposal", 4, 0, 0, 0, 0, 0),
-        ("hc_booked", "HC booked", 5, 0, 0, 0, 0, 0),
-        ("hc_paid", "HC paid", 6, 0, 0, 0, 0, 0),
-        ("hc_in_delivery", "HC in delivery", 7, 0, 0, 0, 0, 0),
-        ("hc_presented", "HC presented", 8, 0, 0, 0, 0, 0),
+        ("audit_booked", "Audit booked", 5, 0, 0, 0, 0, 0),
+        ("audit_paid", "Audit paid", 6, 0, 0, 0, 0, 0),
+        ("audit_in_delivery", "Audit in delivery", 7, 0, 0, 0, 0, 0),
+        ("audit_presented", "Audit presented", 8, 0, 0, 0, 0, 0),
         ("won", "Won", 9, 0, 0, 0, 1, 0),
-        ("hc_won", "HC won", 10, 0, 0, 0, 1, 0),
+        ("audit_won", "Audit won", 10, 0, 0, 0, 1, 0),
         ("lost", "Lost", 11, 0, 0, 0, 0, 1),
     ]
     conn.executemany(
@@ -172,11 +171,11 @@ def build_legacy_sevasek_db(path):
     )
 
     services = [
-        (1, "Health Check", "health-check"),
-        (2, "Automation Delivery", "automation-delivery"),
-        (5, "Automations Support", "automations-support"),
-        (6, "IT Support", "it-support"),
-        (3, "Dead Lead Reactivation", "dead-lead-reactivation"),
+        (1, "Website Audit", "website-audit"),
+        (2, "Implementation", "implementation"),
+        (5, "Maintenance", "maintenance"),
+        (6, "Training", "training"),
+        (3, "Winback Campaign", "win-back"),
         (4, "GEO", "geo"),
     ]
     conn.executemany(
@@ -186,58 +185,58 @@ def build_legacy_sevasek_db(path):
     conn.execute(
         """INSERT INTO offers
            (id, name, is_default, service_id, price, currency, price_anchor, active)
-           VALUES (1, 'Health Check', 1, 1, 700, 'AUD', 'A$700', 1)"""
+           VALUES (1, 'Website Audit', 1, 1, 700, 'USD', '$700', 1)"""
     )
     conn.execute(
         """INSERT INTO offers
            (id, name, is_default, service_id, price, currency, active)
-           VALUES (3, 'Automation Delivery', 0, 2, NULL, 'AUD', 1)"""
+           VALUES (3, 'Implementation', 0, 2, NULL, 'USD', 1)"""
     )
 
     conn.execute(
         """INSERT INTO partners
            (id, is_company, name, email, phone, owner_key, social_url)
-           VALUES (1, 1, 'North Church', 'office@north.example', '+61290000000', 'paul', NULL)"""
+           VALUES (1, 1, 'Acme Co', 'office@acme.example', '+61290000000', 'alice', NULL)"""
     )
     conn.execute(
         """INSERT INTO partners
            (id, is_company, parent_id, name, email, title, owner_key, social_url)
-           VALUES (2, 0, 1, 'Ada North', 'ada@north.example', 'Office', 'bethany',
-                   'https://www.linkedin.com/in/ada-north')"""
+           VALUES (2, 0, 1, 'Ada Stone', 'ada@stone.example', 'Office', 'bob',
+                   'https://www.linkedin.com/in/ada-stone')"""
     )
 
-    # Parent Health Check, then the two ladder children, then unrelated deals.
+    # Parent Website Audit, then the two ladder children, then unrelated deals.
     conn.execute(
         """INSERT INTO deals
            (id, partner_id, service_id, stage, source, value_estimate, offer_id,
             owner_key, external_ref, pain_points, goals)
-           VALUES (1, 1, 1, 'hc_presented', 'referral', 700, 1, 'paul',
-                   'campaign:icp-hc-illawarra-2026-09', 'Manual roster', 'Fewer hours')"""
+           VALUES (1, 1, 1, 'audit_presented', 'referral', 700, 1, 'alice',
+                   'campaign:example-2026-09', 'Manual roster', 'Fewer hours')"""
     )
     conn.execute(
         """INSERT INTO deals
            (id, partner_id, service_id, stage, source, parent_deal_id, owner_key)
-           VALUES (2, 1, 2, 'new', 'hc-spawn:1', 1, 'paul')"""
+           VALUES (2, 1, 2, 'new', 'legacy-spawn:1', 1, 'alice')"""
     )
     conn.execute(
         """INSERT INTO deals
            (id, partner_id, service_id, stage, source, parent_deal_id, owner_key)
-           VALUES (3, 1, 5, 'qualified', 'hc-spawn:1', 1, 'paul')"""
+           VALUES (3, 1, 5, 'qualified', 'legacy-spawn:1', 1, 'alice')"""
     )
     conn.execute(
         """INSERT INTO deals
            (id, partner_id, service_id, stage, source, owner_key, external_ref)
-           VALUES (4, 2, 3, 'new', 'campaign', 'joe-bot', 'Campaign:Dead-Leads-2026')"""
+           VALUES (4, 2, 3, 'new', 'campaign', 'sales-bot', 'Campaign:Winback-2026')"""
     )
     conn.execute(
         """INSERT INTO deals
            (id, partner_id, service_id, stage, source, owner_key, external_ref)
-           VALUES (5, 2, 4, 'contacted', 'ingest', 'paul', 'success-agent:mustard-seed')"""
+           VALUES (5, 2, 4, 'contacted', 'ingest', 'alice', 'success-agent:example-client')"""
     )
 
     conn.execute(
         """INSERT INTO activities (id, partner_id, deal_id, type, body, occurred_at)
-           VALUES (1, 1, 1, 'note', 'Presented the Health Check', '2026-09-01T01:00:00')"""
+           VALUES (1, 1, 1, 'note', 'Presented the Website Audit', '2026-09-01T01:00:00')"""
     )
     conn.execute(
         """INSERT INTO activities (id, partner_id, deal_id, type, body, occurred_at)
@@ -248,8 +247,8 @@ def build_legacy_sevasek_db(path):
         """INSERT INTO delegated_tasks
            (id, deal_id, partner_id, title, brief, owner, status, created_by,
             webhook_notified_at, webhook_last_attempt_at, webhook_last_error)
-           VALUES (1, 1, 1, 'Send HC kickoff', 'Paid Health Check. Send the kickoff.',
-                   'willow', 'done', 'joe',
+           VALUES (1, 1, 1, 'Send audit kickoff', 'Paid Website Audit. Send the kickoff.',
+                   'agent', 'done', 'carol',
                    '2026-09-01T00:00:00', '2026-09-01T00:00:00', NULL)"""
     )
     conn.execute(
@@ -257,18 +256,18 @@ def build_legacy_sevasek_db(path):
            (id, deal_id, partner_id, title, brief, owner, status, created_by,
             webhook_notified_at, webhook_last_attempt_at, webhook_last_error)
            VALUES (2, 4, 2, 'Chase the list', 'Dead leads',
-                   'hermes', 'delegated', 'joe',
+                   'research-bot', 'delegated', 'carol',
                    NULL, '2026-09-03T00:00:00', 'HTTP 502')"""
     )
 
     conn.execute(
         """INSERT INTO users (id, email, name, password_hash)
-           VALUES (1, 'paul@sevasek.example', 'Paul', 'pbkdf2-sha256$stored-hash')"""
+           VALUES (1, 'admin@example.com', 'Admin', 'pbkdf2-sha256$stored-hash')"""
     )
     conn.execute(
         """INSERT INTO mcp_oauth_clients
            (client_id, client_name, redirect_uris, token_endpoint_auth_method)
-           VALUES ('grok-connector', 'Grok', '["https://connector.example/callback"]', 'none')"""
+           VALUES ('example-connector', 'Example Connector', '["https://connector.example/callback"]', 'none')"""
     )
     conn.execute(
         "INSERT INTO rate_limit_hits (bucket, hit_at) VALUES ('login:203.0.113.8', 1.0)"

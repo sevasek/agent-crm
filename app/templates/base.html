@@ -30,6 +30,13 @@
     </nav>
     {% endif %}
     <main id="main" class="{% block main_class %}container{% endblock %}">
+        {% if user and (request.state.secret_key_is_default or request.state.cookies_insecure) %}
+        <p class="error" role="alert">⚠️ This instance is running with insecure defaults. Before using it with real data:
+            {% if request.state.secret_key_is_default and request.state.cookies_insecure %}SECRET_KEY is still the placeholder value, and SECURE_COOKIES is not enabled. See docs/DEPLOY.md for how to fix both.
+            {% elif request.state.secret_key_is_default %}SECRET_KEY is still the placeholder value. See docs/DEPLOY.md for how to fix it.
+            {% else %}SECURE_COOKIES is not enabled. See docs/DEPLOY.md for how to fix it.
+            {% endif %}Sessions and CSRF tokens are weaker until this is done.<br>New here? Visit <a href="/settings">Settings</a> to change your password and set up API keys.</p>
+        {% endif %}
         {% block content %}{% endblock %}
     </main>
     <script src="/static/vendor/htmx.min.js"></script>

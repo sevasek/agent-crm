@@ -82,6 +82,69 @@ def test_lost_filter_shows_lost_opportunity_only(logged_in_client, db):
     assert "Lost Cafe" not in pipeline.text
     lost_board = logged_in_client.get("/pipeline?lost=1")
     assert "Lost Cafe" in lost_board.text
+    # Lost records are view-only: no stage form to no-op on them.
+    assert "stage-form" not in lost_board.text
+
+
+def test_stage_change_rejected_for_lost_and_lead(logged_in_client, db):
+    pid = create_partner("Lost Cafe")
+    sid = create_service("Consulting", "consulting")
+    deal_id = create_deal(pid, sid)
+    mark_lost(deal_id, lost_reason="Not a fit")
+    resp = logged_in_client.post(f"/deals/{deal_id}/stage", data={
+        "csrf_token": _csrf(logged_in_client),
+        "stage": "contacted",
+        "next": "pipeline",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    lost = get_deal(deal_id)
+    assert lost["stage"] == "new"
+    assert lost["active"] == 0
+
+    lead, _ = create_lead(company_name="Lead Cafe", email="lead@cafe.example")
+    assert get_deal(lead["id"])["type"] == "lead"
+    resp = logged_in_client.post(f"/deals/{lead['id']}/stage", data={
+        "csrf_token": _csrf(logged_in_client),
+        "stage": "contacted",
+        "next": "pipeline",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert get_deal(lead["id"])["stage"] != "contacted"
+
+    # An active opportunity still moves.
+    opp_id = create_deal(create_partner("Open Cafe", phone="0400111000"), sid)
+    resp = logged_in_client.post(f"/deals/{opp_id}/stage", data={
+        "csrf_token": _csrf(logged_in_client),
+        "stage": "contacted",
+        "next": "pipeline",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert get_deal(opp_id)["stage"] == "contacted"
+
+
+def test_edit_deal_page_redirects_leads_to_lead_form(logged_in_client, db):
+    lead, _ = create_lead(company_name="Lead Cafe", email="lead@cafe.example")
+    resp = logged_in_client.get(f"/deals/{lead['id']}/edit", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == f"/leads/{lead['id']}"
+
+
+def test_lost_reason_create_honors_unchecked_active(logged_in_client, db):
+    resp = logged_in_client.post("/lost-reasons/new", data={
+        "csrf_token": _csrf(logged_in_client),
+        "name": "Needs a nudge",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    row = next(r for r in list_lost_reasons() if r["name"] == "Needs a nudge")
+    assert row["active"] == 0
+    resp = logged_in_client.post("/lost-reasons/new", data={
+        "csrf_token": _csrf(logged_in_client),
+        "name": "Stays active",
+        "active": "on",
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    row = next(r for r in list_lost_reasons() if r["name"] == "Stays active")
+    assert row["active"] == 1
 
 
 def test_convert_from_ui(logged_in_client, db):

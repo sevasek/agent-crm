@@ -1,12 +1,12 @@
 """Operator-configured lost reasons (ADR 0001 §5.2 / §8.1)."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import IntegrityConflict, get_db
 from app.services.auth import sanitize_text
 
 
 def _now():
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def list_lost_reasons(active_only: bool = False):

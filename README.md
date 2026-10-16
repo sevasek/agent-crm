@@ -276,6 +276,7 @@ default; `--type lead` is opt-in).
 [`CLIENT_DEPLOY.md`](docs/CLIENT_DEPLOY.md) new client instance on a VPS ·
 [`DEPLOY.md`](docs/DEPLOY.md) reverse proxy and TLS ·
 [`OFFBOARDING.md`](docs/OFFBOARDING.md) removing a cancelled customer's instance ·
+[`PRIVACY.md`](docs/PRIVACY.md) what the CRM collects, why, and how to ask about it ·
 [`RELEASE.md`](docs/RELEASE.md) how to cut a version tag ·
 [`UI_UPGRADE_PLAN.md`](docs/UI_UPGRADE_PLAN.md) phases 1–4 shipped, 5 deferred
 

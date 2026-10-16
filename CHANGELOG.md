@@ -21,6 +21,10 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ### Added
 
+- Setup banner on every admin page while `SECRET_KEY` is still the
+  placeholder value or secure cookies are off, plus a pointer to Settings
+  for first-time account setup. Disappears once the env is fixed and the
+  container is recreated. Closes #118.
 - Searchable partner picker on the new-deal form (vendored Tom Select 2.6.2
   under `/static/vendor/`). The native `<select name="partner_id">` stays in
   the form. Other selects are unchanged.

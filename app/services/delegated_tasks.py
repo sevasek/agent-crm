@@ -8,7 +8,7 @@ list_delegated_tasks(owner=<default owner>, status=delegated).
 """
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import httpx
 
@@ -71,7 +71,7 @@ def _clean_due_date(value):
 
 
 def _now():
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def get_task(task_id: int):

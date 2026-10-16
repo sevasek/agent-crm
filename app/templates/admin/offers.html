@@ -18,23 +18,23 @@
     {% for o in offers %}
     <form id="offer-edit-{{ o.id }}" method="post" action="/offers/{{ o.id }}/edit"></form>
     <tr>
-        <td><input type="text" name="name" value="{{ o.name }}" form="offer-edit-{{ o.id }}"></td>
+        <td><input type="text" name="name" value="{{ o.name }}" form="offer-edit-{{ o.id }}" aria-label="Name"></td>
         <td>
-            <select name="service_id" form="offer-edit-{{ o.id }}">
+            <select name="service_id" form="offer-edit-{{ o.id }}" aria-label="Service">
                 <option value="">— none —</option>
                 {% for s in services %}
                 <option value="{{ s.id }}" {% if o.service_id == s.id %}selected{% endif %}>{{ s.name }}</option>
                 {% endfor %}
             </select>
         </td>
-        <td><input type="number" name="price" step="0.01" min="0" value="{% if o.price is not none %}{{ o.price }}{% endif %}" form="offer-edit-{{ o.id }}"></td>
-        <td><input type="text" name="currency" value="{{ o.currency or 'USD' }}" form="offer-edit-{{ o.id }}" size="4"></td>
-        <td><input type="text" name="description" value="{{ o.description or '' }}" form="offer-edit-{{ o.id }}"></td>
-        <td><input type="text" name="pitch" value="{{ o.pitch or '' }}" form="offer-edit-{{ o.id }}"></td>
-        <td><input type="text" name="proof_point" value="{{ o.proof_point or '' }}" form="offer-edit-{{ o.id }}"></td>
-        <td><input type="text" name="price_anchor" value="{{ o.price_anchor or '' }}" form="offer-edit-{{ o.id }}"></td>
-        <td><input type="checkbox" name="is_default" form="offer-edit-{{ o.id }}" {% if o.is_default %}checked{% endif %}></td>
-        <td><input type="checkbox" name="active" form="offer-edit-{{ o.id }}" {% if o.active %}checked{% endif %}></td>
+        <td><input type="number" name="price" step="0.01" min="0" value="{% if o.price is not none %}{{ o.price }}{% endif %}" form="offer-edit-{{ o.id }}" aria-label="Price (USD)"></td>
+        <td><input type="text" name="currency" value="{{ o.currency or 'USD' }}" form="offer-edit-{{ o.id }}" size="4" aria-label="Currency"></td>
+        <td><input type="text" name="description" value="{{ o.description or '' }}" form="offer-edit-{{ o.id }}" aria-label="Description"></td>
+        <td><input type="text" name="pitch" value="{{ o.pitch or '' }}" form="offer-edit-{{ o.id }}" aria-label="Pitch"></td>
+        <td><input type="text" name="proof_point" value="{{ o.proof_point or '' }}" form="offer-edit-{{ o.id }}" aria-label="Proof point"></td>
+        <td><input type="text" name="price_anchor" value="{{ o.price_anchor or '' }}" form="offer-edit-{{ o.id }}" aria-label="Price anchor"></td>
+        <td><input type="checkbox" name="is_default" form="offer-edit-{{ o.id }}" aria-label="Default" {% if o.is_default %}checked{% endif %}></td>
+        <td><input type="checkbox" name="active" form="offer-edit-{{ o.id }}" aria-label="Active" {% if o.active %}checked{% endif %}></td>
         <td>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="offer-edit-{{ o.id }}">
             <button type="submit" form="offer-edit-{{ o.id }}">Save</button>

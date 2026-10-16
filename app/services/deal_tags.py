@@ -5,7 +5,7 @@ A tag is a lowercase slug of letters, digits, hyphens and colons, for example
 `deal_tags` (deal_id, tag), not as a column on `deals`.
 """
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 
@@ -168,7 +168,7 @@ def attach_tags(deals) -> list:
 def _touch_deal(db, deal_id: int) -> None:
     db.execute(
         "UPDATE deals SET updated_at = ? WHERE id = ?",
-        (datetime.utcnow().isoformat(), deal_id),
+        (datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), deal_id),
     )
 
 

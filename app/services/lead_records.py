@@ -1,5 +1,5 @@
 """Lead records: create, update, list, duplicates, merge, convert (ADR 0001 P2)."""
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlsplit, urlunsplit
 
 from app.database import get_db
@@ -48,7 +48,7 @@ LIST_SORTS = ("fit", "created", "updated", "next_action_date", "last_research")
 
 
 def _now():
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
 
 
 def _is_empty(value):

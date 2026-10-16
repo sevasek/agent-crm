@@ -9,7 +9,7 @@ import re
 import secrets as secrets_module
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.database import get_db
 
@@ -238,7 +238,7 @@ def _csrf_binding(session_token: str | None) -> str:
 
 def generate_csrf_token(session_token: str | None = None) -> str:
     return csrf_serializer.dumps({
-        "t": datetime.utcnow().isoformat(),
+        "t": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
         "s": _csrf_binding(session_token),
     })
 

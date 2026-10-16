@@ -31,7 +31,7 @@
                   hx-swap="outerHTML"
                   hx-push-url="false">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <input type="text" name="note" placeholder="Note (optional)"
+                <input type="text" name="note" placeholder="Note (optional)" aria-label="Call note"
                        onkeydown="if(event.key==='Enter'){event.preventDefault();}">
                 {% for key, label, _ in outcomes %}
                 <button type="submit" name="outcome" value="{{ key }}"

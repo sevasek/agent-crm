@@ -8,5 +8,6 @@ module.exports = {
   CLIENT_DEPLOY: "New client instance",
   DEPLOY: "Deploy",
   RELEASE: "Cutting a release",
+  PRIVACY: "Privacy policy",
   "cutover-from-sevasek-crm": "Cutover from sevasek CRM",
 };

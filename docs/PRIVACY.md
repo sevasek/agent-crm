@@ -34,6 +34,24 @@ If you believe this CRM holds information about you and want to see it, correct 
 it deleted, contact the operator of this instance at `ops@example.com`. That is a
 placeholder: each instance operator sets their own contact address here before publishing.
 
+## Small business exemption status
+
+The Australian Privacy Act 1988 exempts a "small business operator" (annual turnover under
+$3,000,000 AUD) from most of the Act's obligations, unless a carve-out applies: trading in
+personal information for a benefit, providing a health service, acting as a contracted
+service provider under a Commonwealth contract, or being related to a business that together
+crosses the turnover threshold.
+
+**Current status:** `<TODO — confirm with the business owner: turnover vs $3M threshold,
+and whether any carve-out above applies>`.
+
+**Revisit this note when:** turnover approaches $3M AUD, the business starts selling or
+trading personal information, takes on a Commonwealth contract, or starts handling health
+information.
+
+Even while exempt, the other items in this repo's compliance backlog (privacy policy, breach
+response notes) are kept up to date as good practice, not because they're currently mandated.
+
 ## Questions
 
 `ops@example.com` — the instance operator's contact address, configured per deployment.

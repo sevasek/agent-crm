@@ -748,6 +748,8 @@ async def edit_deal_page(request: Request, deal_id: int, user=Depends(require_lo
     deal = get_deal(deal_id)
     if not deal:
         return RedirectResponse("/deals", status_code=303)
+    if deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
     partner = get_partner(deal["partner_id"])
     service = get_service(deal["service_id"])
     if not partner or not service:
@@ -769,6 +771,8 @@ async def edit_deal_submit(
     deal = get_deal(deal_id)
     if not deal:
         return RedirectResponse("/deals", status_code=303)
+    if deal.get("type") == "lead":
+        return RedirectResponse(f"/leads/{deal_id}", status_code=303)
     partner = get_partner(deal["partner_id"])
     service = get_service(deal["service_id"])
     if not partner or not service:
@@ -899,7 +903,14 @@ async def change_deal_stage(
 ):
     deal = get_deal(deal_id)
     old_stage = deal["stage"] if deal else None
-    if deal and validate_csrf_token(csrf_token, get_session_cookie(request)):
+    # Mirror the MCP guard: only active opportunities change stage over HTTP.
+    # Leads must be converted first; lost records must be restored first.
+    if (
+        deal
+        and deal.get("type") == "opportunity"
+        and deal.get("active", 1)
+        and validate_csrf_token(csrf_token, get_session_cookie(request))
+    ):
         set_deal_stage(deal_id, stage)
     include_lost = _truthy_query(lost, "lost")
     if _is_htmx(request) and next == "pipeline":
@@ -1809,7 +1820,7 @@ async def new_lost_reason_submit(
     if not (name or "").strip():
         return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
     _created, error = create_lost_reason(
-        name, triggers_nurture=bool(triggers_nurture), active=bool(active) if active != "" else True,
+        name, triggers_nurture=bool(triggers_nurture), active=bool(active),
     )
     if error:
         return _lost_reasons_page(

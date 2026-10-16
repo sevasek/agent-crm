@@ -74,7 +74,7 @@
         <td><a href="/leads/{{ d.id }}">Open</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">{% if q or owner or source_prefix or current_tag or current_due %}No leads match those filters.{% else %}No leads yet.{% endif %}</td></tr>
+    <tr><td colspan="6" class="muted">{% if q or owner or source_prefix or current_tag or current_due or current_lost %}No leads match those filters.{% else %}No leads yet.{% endif %}</td></tr>
     {% endfor %}
 </table>
 {% endblock %}

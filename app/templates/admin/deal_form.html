@@ -125,7 +125,7 @@
 <form method="post" action="/deals/{{ deal.id }}/lost">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
-        <label for="lost_reason_id">Lost reason</label>
+        <label for="lost_reason">Lost reason</label>
         <select id="lost_reason" name="lost_reason" required>
             <option value="">— select —</option>
             {% for r in lost_reasons %}

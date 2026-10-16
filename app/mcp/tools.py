@@ -51,7 +51,9 @@ from app.services.deals import (
     get_deal,
     get_open_deal_for_partner_service,
     list_deals,
+    mark_lost,
     record_call_outcome,
+    restore_deal,
     set_deal_stage,
     update_deal_fields,
     validate_parent_link,
@@ -69,6 +71,7 @@ from app.services.delegated_tasks import (
 )
 from app.services.deals import child_deal_summary
 from app.services.leads import ingest_lead, sanitize_lead_payload
+from app.services.lost_reasons import list_lost_reasons
 from app.services.offers import create_offer, find_offer, get_offer, list_offers, update_offer
 from app.services.partners import (
     SOCIAL_FIELDS,
@@ -94,7 +97,7 @@ _PARTNER_WRITE_FIELDS = (
 _DEAL_WRITE_FIELDS = (
     "source", "value_estimate", "pain_points", "goals",
     "next_action", "next_action_date", "offer_id", "owner_key", "external_ref",
-    "parent_deal_id",
+    "parent_deal_id", "probability", "priority", "expected_close",
 )
 
 
@@ -256,6 +259,14 @@ def _deal_updates(arguments):
                     updates[field] = parsed
         elif field == "owner_key":
             updates[field] = clean_owner_key(as_text(arguments.get(field)))
+        elif field in ("probability", "priority"):
+            raw = arguments.get(field)
+            if raw in (None, ""):
+                updates[field] = None
+            else:
+                parsed = as_int(raw)
+                if parsed is not None:
+                    updates[field] = parsed
         else:
             updates[field] = arguments.get(field)
     if "owner" in arguments and "owner_key" not in updates:
@@ -297,6 +308,12 @@ def get_partner_tool(arguments):
         return error
     parent = get_partner(partner["parent_id"]) if partner.get("parent_id") else None
     deals = [deal_brief(d) for d in list_deals(partner_id=partner_id)]
+    leads = [deal_brief(d) for d in list_deals(partner_id=partner_id, type="lead")]
+    won_keys = pipeline_stages.won_stage_keys()
+    is_customer = any(
+        d.get("stage") in won_keys
+        for d in list_deals(partner_id=partner_id, type="opportunity", include_lost=True)
+    )
     activity_limit = clamp_limit(arguments.get("activity_limit"), default=10, maximum=MAX_ACTIVITIES)
     activities, truncated = paginate(list_activities_for_partner(partner_id), activity_limit)
     return _ok(
@@ -304,6 +321,8 @@ def get_partner_tool(arguments):
         company=partner_brief(parent),
         people=[partner_brief(p) for p in get_children(partner_id)],
         deals=deals,
+        leads=leads,
+        is_customer=is_customer,
         activities=[activity_brief(a) for a in activities],
         activities_truncated=truncated,
     )
@@ -322,6 +341,10 @@ def list_deals_tool(arguments):
     if arguments.get("parent_deal_id") not in (None, "") and (parent_deal_id is None or parent_deal_id < 1):
         return _err("invalid_id", "parent_deal_id must be a positive integer")
     due_only = as_bool(arguments.get("due_only"), default=False)
+    include_lost = as_bool(arguments.get("include_lost"), default=False)
+    record_type = as_text(arguments.get("type")).strip().lower() or "opportunity"
+    if record_type not in ("opportunity", "lead", "all"):
+        return _err("invalid_type", "type must be opportunity, lead, or all")
     tag_filter, error = _tag_filter_arg(arguments)
     if error:
         return error
@@ -329,6 +352,7 @@ def list_deals_tool(arguments):
     if due_only:
         rows = list_due_deals(
             stage=stage, owner_key=owner_key, service_slug=service_slug, tags=tag_filter,
+            type=record_type, include_lost=bool(include_lost),
         )
         if partner_id:
             rows = [d for d in rows if d["partner_id"] == partner_id]
@@ -338,6 +362,7 @@ def list_deals_tool(arguments):
         rows = list_deals(
             stage=stage, partner_id=partner_id, owner_key=owner_key, service_slug=service_slug,
             parent_deal_id=parent_deal_id, tags=tag_filter,
+            type=record_type, include_lost=bool(include_lost),
         )
     sliced, truncated = paginate(rows, limit)
     return _ok(
@@ -418,6 +443,7 @@ def get_call_queue_tool(arguments):
         include_new=bool(include_new),
         owner_key=owner_key,
     )
+    rows = [row for row in rows if row.get("type") != "lead" and row.get("active", 1)]
     calls = []
     for row in rows:
         calls.append({
@@ -447,9 +473,14 @@ def list_due_followups_tool(arguments):
         return _err("invalid_stage", f"Unknown stage {stage!r}. Call list_catalog.")
     owner_key = _owner_arg(arguments)
     service_slug = as_text(arguments.get("service_slug")).strip().lower() or None
+    record_type = as_text(arguments.get("type")).strip().lower() or "all"
+    if record_type not in ("opportunity", "lead", "all"):
+        return _err("invalid_type", "type must be opportunity, lead, or all")
     limit = clamp_limit(arguments.get("limit"))
     rows, truncated = paginate(
-        list_due_deals(stage=stage, owner_key=owner_key, service_slug=service_slug),
+        list_due_deals(
+            stage=stage, owner_key=owner_key, service_slug=service_slug, type=record_type,
+        ),
         limit,
     )
     return _ok(
@@ -476,6 +507,15 @@ def list_catalog_tool(_arguments):
         activity_types=list(_BOT_ACTIVITY_TYPES),
         delegated_task_default_owner=default_owner(),
         delegated_task_statuses=list(TASK_STATUSES),
+        lost_reasons=[
+            {
+                "id": r["id"],
+                "name": r["name"],
+                "triggers_nurture": bool(r.get("triggers_nurture")),
+                "active": bool(r.get("active")),
+            }
+            for r in list_lost_reasons()
+        ],
     )
     # Live sevasek/crm always returns this list. Other clients leave the env
     # unset so the key stays absent and bots are not told a fixed owner enum.
@@ -626,6 +666,9 @@ def create_deal_tool(arguments):
         external_ref=as_text(arguments.get("external_ref")),
         parent_deal_id=parent_deal_id,
         tags=tags,
+        probability=as_int(arguments.get("probability")),
+        priority=as_int(arguments.get("priority")),
+        expected_close=as_text(arguments.get("expected_close")),
     )
     return _ok(status="created", deal=deal_brief(get_deal(deal_id)), partner=partner_brief(partner))
 
@@ -637,6 +680,8 @@ def update_deal_tool(arguments):
     deal, error = _require_deal(deal_id)
     if error:
         return error
+    if "type" in arguments:
+        return _err("not_a_lead", "Use convert_lead to change type. update_deal rejects type.")
     tag_ops, error = _tag_ops_arg(arguments)
     if error:
         return error
@@ -668,6 +713,10 @@ def set_deal_stage_tool(arguments):
     deal, error = _require_deal(deal_id)
     if error:
         return error
+    if deal.get("type") == "lead":
+        return _err("not_an_opportunity", "set_deal_stage only moves opportunities. Convert the lead first.")
+    if not deal.get("active", 1):
+        return _err("deal_lost", "This deal record is lost. Restore it before changing stage.")
     stage = as_text(arguments.get("stage")).strip()
     if not stage:
         return _err("stage_required", "stage is required (a pipeline key from list_catalog)")
@@ -689,6 +738,10 @@ def record_call_outcome_tool(arguments):
     deal, error = _require_deal(deal_id)
     if error:
         return error
+    if deal.get("type") == "lead":
+        return _err("not_an_opportunity", "record_call_outcome only applies to opportunities.")
+    if not deal.get("active", 1):
+        return _err("deal_lost", "This deal record is lost.")
     outcome = as_text(arguments.get("outcome")).strip()
     if outcome not in _CALL_OUTCOME_KEYS:
         return _err(
@@ -702,12 +755,6 @@ def record_call_outcome_tool(arguments):
 
 
 def log_activity_tool(arguments):
-    partner_id, error = _id_arg(arguments, "partner_id")
-    if error:
-        return error
-    partner, error = _require_partner(partner_id)
-    if error:
-        return error
     activity_type = as_text(arguments.get("type")).strip().lower() or "note"
     if activity_type not in _BOT_ACTIVITY_TYPES:
         return _err(
@@ -717,17 +764,39 @@ def log_activity_tool(arguments):
     body = as_text(arguments.get("body")).strip()
     if not body:
         return _err("body_required", "body is required")
-    deal_id = as_int(arguments.get("deal_id"))
-    if arguments.get("deal_id") not in (None, "") and (deal_id is None or deal_id < 1):
-        return _err("invalid_id", "deal_id must be a positive integer")
+    deal_id = None
+    if arguments.get("deal_id") not in (None, ""):
+        deal_id, error = _id_arg(arguments, "deal_id")
+        if error:
+            return error
+    partner_id = None
+    if arguments.get("partner_id") not in (None, ""):
+        partner_id, error = _id_arg(arguments, "partner_id")
+        if error:
+            return error
+    if deal_id is None and partner_id is None:
+        return _err("id_required", "Pass partner_id or deal_id")
+    deal = None
     if deal_id:
         deal = get_deal(deal_id)
         if not deal:
             return _err("not_found", f"No deal with id {deal_id}")
-        if deal["partner_id"] != partner_id:
+        if partner_id and deal.get("partner_id") and int(deal["partner_id"]) != int(partner_id):
             return _err("deal_mismatch", "That deal does not belong to this partner")
-    activity_id = log_activity(partner_id, activity_type, body, deal_id=deal_id)
-    rows = list_activities_for_partner(partner_id)
+        if partner_id is None:
+            partner_id = deal.get("partner_id")
+    elif partner_id:
+        partner, error = _require_partner(partner_id)
+        if error:
+            return error
+    source_url = as_text(arguments.get("source_url")).strip() or None
+    activity_id = log_activity(
+        partner_id, activity_type, body, deal_id=deal_id, source_url=source_url,
+    )
+    if deal_id:
+        rows = list_activities_for_deal(deal_id)
+    else:
+        rows = list_activities_for_partner(partner_id)
     match = next((a for a in rows if a["id"] == activity_id), None)
     return _ok(status="logged", activity=activity_brief(match) or {"id": activity_id})
 
@@ -869,6 +938,8 @@ def set_deal_owner_tool(arguments):
     deal, error = _require_deal(deal_id)
     if error:
         return error
+    if not deal.get("active", 1):
+        return _err("deal_lost", "This deal record is lost.")
     if "owner_key" not in arguments and "owner" not in arguments:
         return _err("owner_required", "Pass owner_key (e.g. alice, bob, sales-agent)")
     owner_key = _owner_arg(arguments)
@@ -919,10 +990,11 @@ def bulk_update_deals_tool(arguments):
         remove_tags, error = _parse_tags_arg(arguments.get("remove_tags"))
         if error:
             return error
-    if not set_stage and next_action is None and next_action_date is None and not add_tags and not remove_tags:
+    lost_reason = as_text(arguments.get("lost_reason")).strip() or None
+    if not set_stage and next_action is None and next_action_date is None and not add_tags and not remove_tags and not lost_reason:
         return _err(
             "no_fields",
-            "Pass set_stage, next_action / next_action_date, and/or add_tags / remove_tags",
+            "Pass set_stage, next_action / next_action_date, add_tags / remove_tags, and/or mark_lost via lost_reason",
         )
 
     rows = list_deals(
@@ -930,6 +1002,7 @@ def bulk_update_deals_tool(arguments):
         owner_key=owner_key,
         service_slug=service_slug,
         deal_ids=deal_ids or None,
+        type="opportunity",
     )
     truncated = len(rows) > MAX_BULK
     rows = rows[:MAX_BULK]
@@ -946,6 +1019,8 @@ def bulk_update_deals_tool(arguments):
             update_deal_fields(deal["id"], **fields)
         if add_tags or remove_tags:
             apply_deal_tags(deal["id"], add=add_tags, remove=remove_tags)
+        if lost_reason:
+            mark_lost(deal["id"], lost_reason=lost_reason)
         updated.append(deal["id"])
     return _ok(
         status="updated",
@@ -1306,6 +1381,15 @@ TOOLS = [
                     ),
                 },
                 "due_only": {"type": "boolean", "description": "Only deals whose next action is due/overdue."},
+                "type": {
+                    "type": "string",
+                    "enum": ["opportunity", "lead", "all"],
+                    "description": "Default opportunity. lead or all are permitted.",
+                },
+                "include_lost": {
+                    "type": "boolean",
+                    "description": "Default false. Lost records are hidden unless true.",
+                },
                 "limit": _LIMIT_PROP,
             },
         },
@@ -1424,7 +1508,10 @@ TOOLS = [
     },
     {
         "name": "list_due_followups",
-        "description": "Open deals whose next_action_date is today or earlier, oldest date first.",
+        "description": (
+            "Open leads and opportunities whose next_action_date is today or earlier, "
+            "oldest date first. Each row has type. type= filters lead/opportunity/all."
+        ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
@@ -1433,6 +1520,7 @@ TOOLS = [
                 "owner": _OWNER_PROP,
                 "owner_key": _OWNER_PROP,
                 "service_slug": {"type": "string"},
+                "type": {"type": "string", "enum": ["opportunity", "lead", "all"]},
                 "limit": _LIMIT_PROP,
             },
         },
@@ -1465,11 +1553,10 @@ TOOLS = [
     {
         "name": "ingest_leads",
         "description": (
-            "Idempotent lead ingest (same rules as POST /api/v1/leads). "
-            "Find-or-create partner (email, else phone+name, else website+name), "
-            "skip a duplicate open deal for the same service, fill empty fields on re-run. "
+            "Idempotent ingest (same rules as POST /api/v1/leads). "
+            "Default type is lead: it creates a lead, not a partner. "
+            "type=opportunity skips qualification and uses the old partner+deal path. "
             "Email is optional — company+phone scraped rows are valid. "
-            "If name equals company_name, the deal is attached to the company partner. "
             "Preferred path for new inbound leads."
         ),
         "inputSchema": {
@@ -1549,6 +1636,7 @@ TOOLS = [
         "name": "create_partner",
         "description": (
             "Create a partner after search_partners found nothing. "
+            "Do not use this for a research candidate. Use create_lead. "
             "If email already exists, returns the existing row instead of duplicating. "
             "For inbound leads prefer ingest_leads."
         ),
@@ -1635,10 +1723,11 @@ TOOLS = [
     {
         "name": "create_deal",
         "description": (
+            "This creates an opportunity. For an unqualified candidate, use create_lead. "
             "Open a deal for an existing partner + service. If an open deal already "
             "exists for that pair, returns it as duplicate_open_deal instead of creating a second. "
             "parent_deal_id links a follow-on (must share partner_id; cycles rejected). "
-            "For brand-new inbound leads prefer ingest_leads. "
+            "For brand-new inbound leads prefer ingest_leads or create_lead. "
             "tags sets the deal's labels. A duplicate open deal is returned as-is "
             "(tags are not merged — use update_deal add_tags, or ingest_leads, which merges). "
             "Do not invent Automation prices — attach an existing offer_id or leave empty."
@@ -1668,6 +1757,9 @@ TOOLS = [
                     "minimum": 1,
                     "description": "Parent deal id (same partner). Used for HC → Automation/Support children.",
                 },
+                "probability": {"type": "integer", "minimum": 0, "maximum": 100},
+                "priority": {"type": "integer", "minimum": 0, "maximum": 3},
+                "expected_close": {"type": "string"},
             },
         },
         "annotations": {
@@ -1722,6 +1814,9 @@ TOOLS = [
                     "type": ["integer", "null"],
                     "description": "Parent deal id, or null to unlink.",
                 },
+                "probability": {"type": "integer", "minimum": 0, "maximum": 100},
+                "priority": {"type": "integer", "minimum": 0, "maximum": 3},
+                "expected_close": {"type": "string"},
             },
         },
         "annotations": {
@@ -1797,12 +1892,13 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
-            "required": ["partner_id", "body"],
+            "required": ["body"],
             "properties": {
                 "partner_id": {"type": "integer", "minimum": 1},
                 "deal_id": {"type": "integer", "minimum": 1},
                 "type": {"type": "string", "enum": list(_BOT_ACTIVITY_TYPES)},
                 "body": {"type": "string"},
+                "source_url": {"type": "string", "description": "http or https URL, max 2000 characters."},
             },
         },
         "annotations": {
@@ -1983,6 +2079,7 @@ TOOLS = [
             "Set stage and/or next_action + next_action_date, and/or add or remove tags, "
             f"on up to {MAX_BULK} deals. Pass deal_ids, or filter by service_slug "
             "(optionally stage and owner). add_tags merges; remove_tags drops. "
+            "Selects opportunities only. lost_reason marks matching opportunities lost. "
             "Uses set_deal_stage so nurture side effects fire. "
             "Example: service_slug=dead-lead-reactivation, stage=new, set_stage=contacted, "
             "next_action_date=today. Or deal_ids plus add_tags=[\"campaign:spring\"]."
@@ -2010,6 +2107,10 @@ TOOLS = [
                 "remove_tags": {
                     **_TAGS_PROP,
                     "description": "Remove these tags from every selected deal. Applied after add_tags.",
+                },
+                "lost_reason": {
+                    "type": "string",
+                    "description": "Mark matching opportunities lost with this reason name.",
                 },
             },
         },
@@ -2294,6 +2395,9 @@ TOOLS = [
     },
 ]
 
+
+from app.mcp.lead_tools import LEAD_TOOLS
+TOOLS.extend(LEAD_TOOLS)
 
 TOOL_BY_NAME = {tool["name"]: tool for tool in TOOLS}
 

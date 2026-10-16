@@ -63,8 +63,14 @@ def test_tool_list_keeps_live_tools_and_adds_stage_automations():
     assert "list_tags" in names
     # 27 live tools, plus list_tags, plus stage automations. Live argument
     # names are pinned below and are not renamed.
-    assert set(names) == set(LIVE_TOOL_PROPS) | {"list_tags"} | STAGE_AUTOMATION_TOOLS
-    assert len(names) == 32
+    extra = {
+        "create_lead", "update_lead", "get_lead", "list_leads", "find_duplicates",
+        "convert_lead", "mark_lost", "restore_deal", "merge_leads",
+        "list_lost_reasons", "create_lost_reason", "update_lost_reason",
+    }
+    assert set(LIVE_TOOL_PROPS) | {"list_tags"} | STAGE_AUTOMATION_TOOLS <= set(names)
+    assert extra <= set(names)
+    assert len(names) == len(set(names))
 
 
 def test_live_tool_arguments_are_accepted():

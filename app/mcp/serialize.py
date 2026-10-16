@@ -16,9 +16,19 @@ _DEAL_FIELDS = (
     "id", "partner_id", "service_id", "stage", "source", "value_estimate",
     "pain_points", "goals", "next_action", "next_action_date", "offer_id",
     "owner_key", "external_ref", "parent_deal_id",
+    "type", "active", "lost_reason_id", "probability", "priority",
+    "expected_close", "date_conversion",
+    "name", "contact_name", "company_name", "email", "phone", "website",
+    "title", "address", "linkedin_url",
     "created_at", "updated_at", "closed_at",
     "partner_name", "service_name", "service_slug",
     "tags",
+)
+
+_LEAD_CONTACT_FIELDS = (
+    "name", "contact_name", "company_name", "email", "phone", "website",
+    "title", "address", "linkedin_url", "x_url", "instagram_url",
+    "facebook_url", "youtube_url", "industry", "team_size", "preferred_channel",
 )
 
 
@@ -49,10 +59,21 @@ def deal_brief(deal):
     if not deal:
         return None
     annotated = annotate_deal(deal)
-    out = _pick(annotated, _DEAL_FIELDS)
+    fields = _DEAL_FIELDS
+    if annotated.get("type") == "lead":
+        fields = _DEAL_FIELDS + _LEAD_CONTACT_FIELDS
+    out = _pick(annotated, fields)
     out["tags"] = list(annotated.get("tags") or [])
     out["due_status"] = annotated.get("due_status")
     out["days_overdue"] = annotated.get("days_overdue")
+    out["active"] = bool(annotated.get("active", 1))
+    if annotated.get("lost_reason"):
+        out["lost_reason"] = annotated["lost_reason"]
+    elif annotated.get("lost_reason_id"):
+        from app.services.lost_reasons import get_lost_reason
+        reason = get_lost_reason(annotated["lost_reason_id"])
+        if reason:
+            out["lost_reason"] = reason.get("name")
     if annotated.get("action_date"):
         out["action_date"] = annotated["action_date"].isoformat()
     return out
@@ -67,6 +88,7 @@ def activity_brief(activity):
         "deal_id": activity.get("deal_id"),
         "type": activity.get("type"),
         "body": activity_display_body(activity.get("body") or ""),
+        "source_url": activity.get("source_url"),
         "occurred_at": activity.get("occurred_at"),
     })
 
@@ -74,7 +96,7 @@ def activity_brief(activity):
 def stage_brief(stage):
     if not stage:
         return None
-    return json_safe({
+    out = {
         "key": stage.get("key"),
         "label": stage.get("label"),
         "position": stage.get("position"),
@@ -83,7 +105,10 @@ def stage_brief(stage):
         "triggers_nurture": bool(stage.get("triggers_nurture")),
         "is_won": bool(stage.get("is_won")),
         "is_lost": bool(stage.get("is_lost")),
-    })
+    }
+    if out["is_lost"]:
+        out["deprecated_fields"] = ["is_lost"]
+    return json_safe(out)
 
 
 def service_brief(service):

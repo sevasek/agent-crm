@@ -13,7 +13,7 @@ from app.services.deals import (
     mark_lost,
 )
 from app.services.icp import build_matchable_row, score_fit
-from app.services.lost_reasons import get_lost_reason
+from app.services.lost_reasons import get_lost_reason, resolve_lost_reason
 from app.services.offers import get_offer
 from app.services.partners import (
     create_partner,
@@ -282,15 +282,8 @@ def update_lead(lead_id: int, *, fill_empty_only=True, tags=None, add_tags=None,
     merged.update(updates)
     if not lead_has_identity(merged):
         return None, "invalid"
-    if updates:
-        updates["updated_at"] = _now()
-        set_clause = ", ".join(f"{k} = ?" for k in updates)
-        with get_db() as db:
-            db.execute(
-                f"UPDATE deals SET {set_clause} WHERE id = ?",
-                list(updates.values()) + [lead_id],
-            )
-            db.commit()
+    # Validate tags before any write: a bad tag list must not leave field
+    # updates committed behind an error return.
     replace, add, remove = None, None, None
     if tags is not None:
         replace, err = parse_tag_list(tags)
@@ -304,6 +297,15 @@ def update_lead(lead_id: int, *, fill_empty_only=True, tags=None, add_tags=None,
         remove, err = parse_tag_list(remove_tags)
         if err:
             return None, "invalid"
+    if updates:
+        updates["updated_at"] = _now()
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        with get_db() as db:
+            db.execute(
+                f"UPDATE deals SET {set_clause} WHERE id = ?",
+                list(updates.values()) + [lead_id],
+            )
+            db.commit()
     if replace is not None or add or remove:
         apply_deal_tags(lead_id, replace=replace, add=add, remove=remove)
     return get_lead(lead_id, include_extras=False), None
@@ -582,14 +584,19 @@ def _resolve_convert_partner(lead, partner_action, partner_id):
     company_name = (lead.get("company_name") or "").strip()
     if action == "create":
         company_id = None
+        company_created = False
         if company_name:
             existing = get_company_by_name(company_name)
-            company_id = existing["id"] if existing else create_partner(
-                company_name, is_company=True,
-                website=lead.get("website") or "",
-                industry=lead.get("industry") or "",
-                team_size=lead.get("team_size"),
-            )
+            if existing:
+                company_id = existing["id"]
+            else:
+                company_id = create_partner(
+                    company_name, is_company=True,
+                    website=lead.get("website") or "",
+                    industry=lead.get("industry") or "",
+                    team_size=lead.get("team_size"),
+                )
+                company_created = True
         if not name and not company_name:
             name = (lead.get("email") or lead.get("website") or lead.get("phone") or "Lead").strip()
         if name:
@@ -611,7 +618,7 @@ def _resolve_convert_partner(lead, partner_action, partner_id):
             )
             return get_partner(person_id), True, None, []
         if company_id:
-            return get_partner(company_id), True, None, []
+            return get_partner(company_id), company_created, None, []
         return None, False, "partner_not_found", []
     matches = find_all_partner_matches(
         email=lead.get("email") or "",
@@ -733,11 +740,15 @@ def merge_leads(target_id: int, source_ids):
     if not target.get("active", 1):
         return None, "invalid_merge"
     sources = []
+    seen = set()
     for raw in source_ids:
         try:
             sid = int(raw)
         except (TypeError, ValueError):
             return None, "not_found"
+        if sid in seen:
+            continue
+        seen.add(sid)
         if sid == target_id:
             return None, "invalid_merge"
         row = get_deal(sid)
@@ -753,6 +764,10 @@ def merge_leads(target_id: int, source_ids):
             return None, "invalid_merge"
     if target.get("type") not in ("lead", "opportunity"):
         return None, "invalid_merge"
+    # Resolve the merge lost reason before any writes: if it was renamed or
+    # deleted, fail up front rather than after children already moved.
+    if not resolve_lost_reason(lost_reason="Duplicate"):
+        return None, "invalid_lost_reason"
     sources.sort(key=lambda r: (r.get("created_at") or "", r["id"]))
     fill_keys = list(LEAD_WRITE_FIELDS) + [
         "team_size", "value_estimate", "probability", "priority",

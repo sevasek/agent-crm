@@ -12,8 +12,18 @@ as `vX.Y.Z` and `latest`. Until the first tag, install from source with
 
 ## [Unreleased]
 
+### Changed
+
+- Admin UI follows `prefers-color-scheme` again. The Phase 1
+  `data-theme="light"` lock is gone; custom colors (`--bg-alt`, pills, nav,
+  cards, errors, call-outcome chips) have light/dark pairs using the same
+  selectors Pico 2.1.1 uses. Filled brand buttons stay `#2c5aa0`. Closes #87.
+
 ### Added
 
+- Searchable partner picker on the new-deal form (vendored Tom Select 2.6.2
+  under `/static/vendor/`). The native `<select name="partner_id">` stays in
+  the form. Other selects are unchanged.
 - Stage automations (schema v7). Named rules, empty until an operator adds
   one in Admin → Automations or via `list`/`create`/`update`/`delete_stage_automation`.
   Entering the chosen stage can create a delegated task and/or child deals

@@ -8,14 +8,19 @@ downloaded once and committed into `app/static/vendor/`. Nothing is loaded
 from a CDN at runtime — see `README.md` / `docs/DEPLOY.md`, this app must work
 fully offline and self-hosted. No `package.json`, no Node, no build step.
 
-**Status (verified on `main`, 2026-10-11):** Phases 1–4 have shipped, and real
+**Status (verified on `main`, 2026-10-16):** Phases 1–4 have shipped, real
 dark mode shipped as [#87](https://github.com/sevasek/agent-crm/issues/87)
-(split out of #47). Do not re-vendor Pico, htmx, or SortableJS, do not redo the
+(split out of #47), and the searchable partner dropdown shipped as
+[#88](https://github.com/sevasek/agent-crm/issues/88) (Tom Select on the
+new-deal form). Do not re-vendor Pico, htmx, or SortableJS, do not redo the
 polish pass, and do not re-implement the pipeline / call-outcome swaps or the
-kanban drag wiring. The phase notes below are history so a future agent can see
-*how* it was done — they are not a backlog. The deferred half of Phase 5
-(Tom Select's select behaviour beyond the partner picker, Alpine.js) is still
-deferred; do not implement it from this file.
+kanban drag wiring. The phase notes below are history so a future agent can
+see *how* it was done — they are not a backlog. Anything left in Phase 5 is
+still deferred; do not implement it from this file.
+
+Phases 4 and 5 were decided on 2026-10-06 — no longer "pending a decision."
+Phase 5 (originally three bundled items) was split into separate issues
+since the three items had different outcomes:
 
 | Phase | What | Status | Tracking |
 |---|---|---|---|
@@ -23,8 +28,9 @@ deferred; do not implement it from this file.
 | 2 | Polish custom CSS on top of Pico | **Shipped** | [#44](https://github.com/sevasek/agent-crm/issues/44), [PR #53](https://github.com/sevasek/agent-crm/pull/53) |
 | 3 | Vendored htmx 2.0.11, pipeline oob swaps, call-outcome swaps | **Shipped** | [#45](https://github.com/sevasek/agent-crm/issues/45), [PR #62](https://github.com/sevasek/agent-crm/pull/62) |
 | 4 | SortableJS drag-and-drop kanban | **Shipped** | [#46](https://github.com/sevasek/agent-crm/issues/46) |
-| 5a | Real dark mode (unlock Pico + pair custom colors) | **Shipped** | [#87](https://github.com/sevasek/agent-crm/issues/87) |
-| 5b | Tom Select select behaviour / Alpine.js | **Deferred** — do not implement | [#47](https://github.com/sevasek/agent-crm/issues/47) |
+| 5a | Real dark mode (unlock + redo `--bg-alt`/`.pill-*` as light/dark pairs) | **Shipped** | [#87](https://github.com/sevasek/agent-crm/issues/87) |
+| 5b | Searchable dropdowns (Tom Select/Choices.js) | **Shipped for the new-deal partner picker** — other selects are still plain; confirm scope before extending | [#88](https://github.com/sevasek/agent-crm/issues/88) |
+| 5c | Alpine.js for client-side UI state | **Decided against** — nothing identified needs it; don't add speculatively | [#47](https://github.com/sevasek/agent-crm/issues/47) (closed) |
 
 Pinned versions live in `app/static/vendor/VENDOR.md` (Pico 2.1.1, htmx
 2.0.11, SortableJS 1.15.7 as of the shipping PRs).

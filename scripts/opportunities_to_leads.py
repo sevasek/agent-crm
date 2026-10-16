@@ -17,11 +17,15 @@ import sys
 
 sys.path.insert(0, ".")
 
-from app.database import get_db, init_db
+from app.database import get_db, get_user_version, init_db
 from app.services.activities import log_activity
 from app.services.deals import get_deal, list_deals
 from app.services.partners import get_partner
 from app.services import pipeline_stages
+
+# migrate_008 introduced the lead columns this script reads; a v8+ database
+# is read-compatible even once SCHEMA_VERSION moves past 8.
+NEEDS_SCHEMA = 8
 
 USAGE = (
     "Usage: python scripts/opportunities_to_leads.py --stage KEY [--stage KEY ...] "
@@ -121,7 +125,21 @@ def main(argv=None) -> int:
         print(USAGE)
         return 1
     apply = bool(args.apply) and not args.dry_run
-    init_db()
+    if apply:
+        init_db()
+    else:
+        # A dry run must be read-only: migrating here would upgrade a live
+        # schema-8 database as a side effect of just looking at it.
+        with get_db() as db:
+            version = get_user_version(db)
+        if version < NEEDS_SCHEMA:
+            print(
+                f"database is schema v{version}, needs v{NEEDS_SCHEMA}+ with "
+                "the lead columns. Run the app once to migrate first "
+                "(dry-run never migrates).",
+                file=sys.stderr,
+            )
+            return 1
     run(args.stages, apply=apply)
     return 0
 

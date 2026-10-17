@@ -3,9 +3,9 @@
        this token, including its own min-width breakpoints up to 131.25%;
        this file loads after pico.min.css so a plain, non-media-queried value
        here beats all of Pico's breakpoints at every viewport width). Was
-       halved to 50% in #132; 75% is the halfway point back to Pico's 100%
-       default, per follow-up feedback that 50% read as too small. */
-    --pico-font-size: 75%;
+       halved to 50% in #132, raised to 75% as a follow-up, then to 89%, then
+       to 92% per further feedback. */
+    --pico-font-size: 92%;
     --border: #ddd;
     --muted: #666;
     --bg-alt: #f7f7f7;

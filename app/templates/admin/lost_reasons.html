@@ -3,11 +3,7 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Lost reasons</h1>
-<p class="muted">
-    Operator configuration for why a lead or opportunity was marked lost.
-    A reason with <strong>Triggers nurture</strong> posts the nurture webhook.
-    Inactive reasons stay on old records but disappear from the lost picker.
-</p>
+<p class="muted">A reason a lead or opportunity can be marked lost.</p>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <table>
     <tr>

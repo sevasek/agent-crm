@@ -331,6 +331,7 @@ def test_admin_redirect_rejects_protocol_relative_target(client):
     assert compat_admin_redirect_target("https://evil.example") == "/contacts/partners"
     assert compat_admin_redirect_target("deals") == "/crm/deals"
     assert compat_admin_redirect_target("deals", "due=1") == "/crm/deals?due=1"
+    assert compat_admin_redirect_target("calls") == "/actions/calls"
 
     resp = client.get("/admin//evil.example", follow_redirects=False)
     assert resp.status_code == 307

@@ -7,10 +7,8 @@
     <div class="grid apps-grid-row">
         {% for app in row %}
         <a class="app-tile" href="{{ app.href }}">
-            <article>
-                <span class="app-tile-icon" aria-hidden="true">{{ app.icon }}</span>
-                <span class="app-tile-label">{{ app.label }}</span>
-            </article>
+            <article class="app-tile-box"></article>
+            <span class="app-tile-label">{{ app.label }}</span>
         </a>
         {% endfor %}
     </div>

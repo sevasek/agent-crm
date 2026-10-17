@@ -195,30 +195,27 @@ summary:focus-visible {
 
 /* Apps launcher: rows of square tiles. Each row is its own Pico .grid so
    that row's tiles divide its width evenly regardless of how many other
-   rows have (admin.py puts any remainder count on the bottom row). */
-.apps-grid-row { margin-bottom: 1.5rem; }
-/* Tiles sit at 25% of their grid cell's width (a 75% size reduction from
-   the original full-cell tile) so each row still divides its width evenly
-   via Pico's .grid, just with smaller squares centred in each cell. */
-.app-tile { text-decoration: none; color: inherit; display: block; max-width: 25%; margin: 0 auto; }
-.app-tile article {
+   rows have (admin.py puts any remainder count on the bottom row). Column
+   gap is halved from Pico's default spacing; the tile itself sits at 50%
+   of its grid cell (centred), with its text label as a separate caption
+   below the square rather than inside it. */
+.apps-grid-row { margin-bottom: 1.5rem; --pico-grid-column-gap: 0.5rem; }
+.app-tile {
+    text-decoration: none; color: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+    max-width: 50%; margin: 0 auto;
+}
+.app-tile-box {
     aspect-ratio: 1 / 1;
+    width: 100%;
     margin-bottom: 0;
-    padding: 0.4rem;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 0.15rem;
-    text-align: center;
     transition: box-shadow 0.15s, transform 0.15s;
 }
-.app-tile:hover article {
+.app-tile:hover .app-tile-box {
     box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
     transform: translateY(-2px);
 }
-.app-tile-icon { font-size: 1.75rem; line-height: 1; }
-.app-tile-label { font-weight: 600; font-size: 0.65rem; }
+.app-tile-label { font-weight: 600; font-size: 0.75rem; text-align: center; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }

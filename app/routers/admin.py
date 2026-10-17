@@ -85,10 +85,10 @@ def _safe_int(value):
 # many tiles are placed in it), with any remainder tile count landing on the
 # bottom row rather than an earlier one.
 APPS_MENU = [
-    {"label": "Contacts", "href": "/partners", "icon": "👥"},
-    {"label": "CRM", "href": "/pipeline", "icon": "📈"},
-    {"label": "Actions", "href": "/deals", "icon": "⚡"},
-    {"label": "Settings", "href": "/settings", "icon": "⚙️"},
+    {"label": "Contacts", "href": "/partners"},
+    {"label": "CRM", "href": "/pipeline"},
+    {"label": "Actions", "href": "/deals"},
+    {"label": "Settings", "href": "/settings"},
 ]
 
 

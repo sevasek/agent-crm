@@ -3,9 +3,9 @@
        this token, including its own min-width breakpoints up to 131.25%;
        this file loads after pico.min.css so a plain, non-media-queried value
        here beats all of Pico's breakpoints at every viewport width). Was
-       halved to 50% in #132; 75% is the halfway point back to Pico's 100%
-       default, per follow-up feedback that 50% read as too small. */
-    --pico-font-size: 75%;
+       halved to 50% in #132, raised to 75% as a follow-up, then to 89%, then
+       to 92% per further feedback. */
+    --pico-font-size: 92%;
     --border: #ddd;
     --muted: #666;
     --bg-alt: #f7f7f7;
@@ -30,6 +30,13 @@
     --success-bg: #f0f7f0;
     --success-border: #cde5cd;
     --outcome-won: #1e7e34;
+    /* Shared height for every button-like control (native <button>, .btn
+       anchors, and the compact per-form variants below) so they line up
+       with each other and with Pico's text inputs/selects in the same
+       row. Mirrors Pico's own padding+line-height+border box model
+       (computed off its vars, not a hardcoded px/rem value) so it tracks
+       Pico's defaults instead of drifting from them. */
+    --control-height: calc(2 * var(--pico-form-element-spacing-vertical, 0.75rem) + 1rem * var(--pico-line-height, 1.5) + 2 * var(--pico-border-width, 0.0625rem));
 }
 
 /* Pico.css primary tokens → existing brand blue. The light selector must
@@ -173,7 +180,10 @@ summary:focus-visible {
 .topnav .right { margin-left: auto; color: var(--muted); }
 .topnav-logout { margin: 0; display: inline; }
 .topnav-logout button {
-    background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+    /* Opts out of the shared --control-height: this sits inline among plain
+       nav links, not next to inputs, so it should size like text, not a
+       button. */
+    height: auto; background: none; border: none; padding: 0; margin: 0; cursor: pointer;
     font: inherit; text-decoration: none; color: var(--fg);
 }
 .topnav-logout button:hover { color: var(--link); }
@@ -182,6 +192,13 @@ summary:focus-visible {
     text-decoration: underline;
     text-underline-offset: 0.3em;
 }
+/* Matches the Contacts tile's blue slot in _PALETTE_SLOTS (app/routers/admin.py) —
+   update both if that palette assignment ever changes. */
+.topnav .nav-app-contacts { font-weight: 700; color: #2a78d6; }
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .topnav .nav-app-contacts { color: #3987e5; }
+}
+[data-theme="dark"] .topnav .nav-app-contacts { color: #3987e5; }
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 /* Table pages (list/data views) need the full window and more breathing
@@ -189,6 +206,55 @@ summary:focus-visible {
    <main> so this beats Pico's .container max-width media queries
    (same-origin, later, and more specific). */
 .container.container-wide { max-width: none; padding: 3rem; }
+
+/* Apps launcher: one flex-wrap row of fixed-size square tiles, not grouped
+   into per-row containers — the browser decides how many fit per line, so
+   this reflows naturally down to a single column on mobile. The wrap
+   centres in the space below the heading; the tiles centre within it. */
+.apps-grid-wrap {
+    min-height: calc(100vh - 12rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.apps-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    gap: 3.75rem;
+}
+.app-tile {
+    text-decoration: none; color: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+}
+/* Pico's default <article> card chrome (background + box-shadow) read as an
+   unwanted frame around a solid-colour tile, so both are reset here; the
+   colour itself comes from the two --tile-bg-* custom properties set inline
+   per tile (light/dark pulled from the house categorical palette), picked
+   by the dark-mode guards below the same way the rest of this file does it. */
+.app-tile-box {
+    width: 10rem;
+    height: 10rem;
+    margin-bottom: 0;
+    padding: 0;
+    background: var(--tile-bg-light);
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .app-tile-box { background: var(--tile-bg-dark); }
+}
+[data-theme="dark"] .app-tile-box { background: var(--tile-bg-dark); }
+.app-tile-icon { width: 50%; height: 50%; }
+.app-tile:hover .app-tile-box {
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25);
+    transform: translateY(-2px);
+}
+.app-tile-label { font-weight: 700; font-size: 1.1rem; text-align: center; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
@@ -202,16 +268,22 @@ td.nowrap { white-space: nowrap; }
 .form-row label { display: block; font-weight: 600; margin-bottom: 0.25rem; font-size: 0.9rem; }
 textarea { min-height: 5rem; }
 
-/* Pico already styles <button>. .btn is for <a> that should look like one;
-   .btn-secondary is also used on its own (deal stage filters). */
+/* Pico already styles <button> (and already gives it --control-height, since
+   that token is computed from the same vars Pico uses for its own box
+   model). .btn is for <a> that should look like one and doesn't inherit any
+   of that, so it needs the height set explicitly to match; .btn-secondary
+   is also used on its own (deal stage filters). */
 button[type=submit] { width: auto; }
+button { height: var(--control-height); box-sizing: border-box; }
 .btn, .btn-secondary {
-    display: inline-block; margin: 0 0.2rem 0.35rem 0; padding: 0.5rem 1rem;
+    display: inline-flex; align-items: center; justify-content: center;
+    height: var(--control-height); box-sizing: border-box;
+    margin: 0 0.2rem 0.35rem 0; padding: 0 1rem;
     border: var(--pico-border-width, 1px) solid var(--pico-primary-border, var(--accent));
     border-radius: var(--pico-border-radius, 0.25rem);
     background: var(--pico-primary-background, var(--accent));
     color: var(--pico-primary-inverse, #fff);
-    cursor: pointer; font-size: 0.95rem; line-height: 1.25;
+    cursor: pointer; line-height: var(--pico-line-height, 1.5);
     text-decoration: none; white-space: nowrap;
 }
 .btn:hover {
@@ -244,7 +316,7 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .next-action-form { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin: 0.5rem 0; }
 .next-action-form input[type=text] { width: auto; flex: 1; min-width: 12rem; }
 .next-action-form input[type=date] { width: auto; }
-.next-action-form button { width: auto; padding: 0.35rem 0.75rem; }
+.next-action-form button { width: auto; }
 .deal-card { border: 1px solid var(--border); border-radius: var(--pico-border-radius, 6px); padding: 0.75rem; margin-bottom: 0.75rem; }
 .pill-due { background: var(--pill-due-bg); color: var(--pill-due-fg); }
 .pill-overdue { background: var(--pill-overdue-bg); color: var(--pill-overdue-fg); }
@@ -279,12 +351,19 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .pipeline-card.sortable-drag { cursor: grabbing; }
 .pipeline-card select { margin-top: 0.4rem; cursor: pointer; }
 .stage-move-form { display: inline; }
-.stage-move-form button { padding: 0.15rem 0.5rem; }
+/* Narrower than a normal .btn-secondary (single-glyph arrows), but the
+   vertical padding is left alone so the height still matches. */
+.stage-move-form button { padding-left: 0.5rem; padding-right: 0.5rem; }
 
 .call-outcome-form { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; min-width: 16rem; }
 .call-outcome-form input[type=text] { width: auto; flex: 1 1 8rem; min-width: 6rem; }
 .call-outcome-form button { width: auto; }
-.btn-outcome { padding: 0.35rem 0.6rem; font-size: 0.85rem; white-space: nowrap; border: var(--pico-border-width, 1px) solid var(--border); }
+.btn-outcome {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: var(--control-height); box-sizing: border-box;
+    padding: 0 0.6rem; font-size: 0.85rem; white-space: nowrap;
+    border: var(--pico-border-width, 1px) solid var(--border);
+}
 .btn-outcome-no_answer { background: var(--surface); color: var(--muted); border-color: var(--border); }
 .btn-outcome-not_interested { background: var(--surface); color: var(--error); border-color: var(--error); }
 .btn-outcome-won { background: var(--outcome-won); color: #fff; border-color: var(--outcome-won); }
@@ -299,6 +378,10 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .call-view-back { margin-bottom: 0; }
 .call-view-dial { margin: 1rem 0; }
 .btn-tel-big {
+    /* Also carries .btn (for the base anchor-as-button reset), but this is
+       a deliberately oversized tap target, not a standard control — opt
+       out of the shared --control-height from that rule. */
+    height: auto;
     display: block; width: 100%; padding: 1rem; font-size: 1.2rem; font-weight: 600;
     text-decoration: none; border-radius: 8px; text-align: center; box-sizing: border-box;
     background: var(--accent); color: #fff; border: 1px solid var(--accent);

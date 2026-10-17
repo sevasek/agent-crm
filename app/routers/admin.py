@@ -1,6 +1,8 @@
 import math
 
-from fastapi import APIRouter, Request, Form, Depends
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Request, Form, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
@@ -12,6 +14,10 @@ from app.services.auth import (
 from app.services.partners import (
     create_partner, get_partner, update_partner, list_partners, list_companies, get_children,
     SOCIAL_PLATFORMS, listed_social_links, primary_social_url,
+)
+from app.services.partner_tags import (
+    apply_partner_tags, attach_tags as attach_partner_tags, parse_tag_list as parse_partner_tag_list,
+    coerce_tag_filter as coerce_partner_tag_filter, tags_for_partner,
 )
 from app.services.catalog import create_service, get_service, update_service, list_services
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
@@ -79,26 +85,144 @@ def _safe_int(value):
     return None
 
 
-@router.get("/partners", response_class=HTMLResponse)
-async def dashboard(request: Request, q: str = "", user=Depends(require_login)):
-    return templates.TemplateResponse(request, "admin/partners.html", {
-        "request": request, "user": user, "partners": list_partners(q), "q": q,
+# ==================== Apps launcher ====================
+# Fixed-size tiles in a single flex-wrap row (see .apps-grid in style.css)
+# so the count per line is left to the browser rather than fixed server
+# side — that's what lets it reflow on narrow/mobile viewports.
+#
+# Background colours are the first four slots of the house categorical
+# palette (dataviz skill's references/palette.md), assigned in the
+# palette's fixed order for maximum hue variety across just four tiles.
+_PALETTE_SLOTS = [
+    {"name": "blue", "light": "#2a78d6", "dark": "#3987e5"},
+    {"name": "orange", "light": "#eb6834", "dark": "#d95926"},
+    {"name": "aqua", "light": "#1baf7a", "dark": "#199e70"},
+    {"name": "yellow", "light": "#eda100", "dark": "#c98500"},
+]
+
+
+def _srgb_channel(value):
+    value /= 255
+    return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def _relative_luminance(hex_color):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.2126 * _srgb_channel(r) + 0.7152 * _srgb_channel(g) + 0.0722 * _srgb_channel(b)
+
+
+def _contrast_ratio(hex_a, hex_b):
+    lum_a, lum_b = _relative_luminance(hex_a), _relative_luminance(hex_b)
+    lighter, darker = max(lum_a, lum_b), min(lum_a, lum_b)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _best_icon_color(bg_hex):
+    """WCAG contrast of white vs. black against bg_hex — never eyeballed."""
+    return "white" if _contrast_ratio(bg_hex, "#ffffff") >= _contrast_ratio(bg_hex, "#000000") else "black"
+
+
+def _apps_menu():
+    specs = [
+        {"label": "Contacts", "href": "/contacts/partners", "icon": "contacts"},
+        {"label": "CRM", "href": "/pipeline", "icon": "crm"},
+        {"label": "Actions", "href": "/deals", "icon": "actions"},
+        {"label": "Settings", "href": "/settings", "icon": "settings"},
+    ]
+    apps = []
+    for spec, slot in zip(specs, _PALETTE_SLOTS):
+        apps.append({
+            **spec,
+            "bg_light": slot["light"],
+            "bg_dark": slot["dark"],
+            # The current four palette slots land on the same icon colour
+            # for both their light- and dark-mode hex, so one computed
+            # choice (checked against the light value) covers both; if a
+            # future slot's modes disagree this would need a per-mode icon.
+            "icon_color": _best_icon_color(slot["light"]),
+        })
+    return apps
+
+
+APPS_MENU = _apps_menu()
+
+
+@router.get("/apps", response_class=HTMLResponse)
+async def apps_launcher(request: Request, user=Depends(require_login)):
+    return templates.TemplateResponse(request, "admin/apps.html", {
+        "request": request, "user": user, "apps": APPS_MENU,
     })
 
 
-def _partner_form_context(request, user, partner, csrf_token, error=None):
+_PARTNER_SORT_COLUMNS = ("name", "type", "email", "phone", "tags")
+
+
+def _partners_url(q="", tags=(), sort="name", direction="asc"):
+    params = []
+    if q:
+        params.append(("q", q))
+    for t in tags:
+        params.append(("tag", t))
+    if sort and sort != "name":
+        params.append(("sort", sort))
+    if direction and direction != "asc":
+        params.append(("dir", direction))
+    qs = urlencode(params)
+    return f"/contacts/partners?{qs}" if qs else "/contacts/partners"
+
+
+def _partner_sort_links(q, tags, sort, direction):
+    links = {}
+    for col in _PARTNER_SORT_COLUMNS:
+        active = col == sort
+        next_dir = ("desc" if direction == "asc" else "asc") if active else "asc"
+        links[col] = {
+            "href": _partners_url(q, tags, sort=col, direction=next_dir),
+            "dir": direction if active else None,
+        }
+    return links
+
+
+@router.get("/contacts/partners", response_class=HTMLResponse)
+async def dashboard(
+    request: Request, q: str = "", tag: list[str] = Query(default=[]),
+    sort: str = "name", dir: str = "asc", user=Depends(require_login),
+):
+    sort = sort if sort in _PARTNER_SORT_COLUMNS else "name"
+    direction = "desc" if dir == "desc" else "asc"
+    wanted_tags, impossible = coerce_partner_tag_filter(tag)
+    partners = [] if impossible else list_partners(q, tags=wanted_tags, sort=sort, direction=direction)
+    attach_partner_tags(partners)
+    return templates.TemplateResponse(request, "admin/partners.html", {
+        "request": request, "user": user, "partners": partners, "q": q,
+        "current_tags": wanted_tags,
+        "sort_links": _partner_sort_links(q, wanted_tags, sort, direction),
+        "remove_tag_links": {
+            t: _partners_url(q, [o for o in wanted_tags if o != t], sort=sort, direction=direction)
+            for t in wanted_tags
+        },
+        "add_tag_link": lambda t: _partners_url(q, (*wanted_tags, t), sort=sort, direction=direction),
+    })
+
+
+def _partner_form_context(request, user, partner, csrf_token, error=None, form_tags=None):
     return {
         "request": request, "user": user, "companies": list_companies(),
         "partner": partner, "csrf_token": csrf_token,
         "social_fields": [(field, label) for field, label, _hosts in SOCIAL_PLATFORMS],
         "error": error,
+        "form_tags": form_tags,
     }
 
 
-def _partner_form_response(request, user, partner, error, status_code=400):
+def _partner_form_response(request, user, partner, error, status_code=400, form_tags=None):
     return templates.TemplateResponse(
         request, "admin/partner_form.html",
-        _partner_form_context(request, user, partner, generate_csrf_token(get_session_cookie(request)), error=error),
+        _partner_form_context(
+            request, user, partner, generate_csrf_token(get_session_cookie(request)),
+            error=error, form_tags=form_tags,
+        ),
         status_code=status_code,
     )
 
@@ -132,15 +256,15 @@ def _partner_fields_from_form(
     }
 
 
-# ==================== Partners ====================
-@router.get("/partners/new", response_class=HTMLResponse)
+# ==================== Partners (Contacts app) ====================
+@router.get("/contacts/partners/new", response_class=HTMLResponse)
 async def new_partner_page(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/partner_form.html", _partner_form_context(
         request, user, None, generate_csrf_token(get_session_cookie(request)),
     ))
 
 
-@router.post("/partners/new")
+@router.post("/contacts/partners/new")
 async def new_partner_submit(
     request: Request,
     name: str = Form(""), is_company: str = Form(""), parent_id: str = Form(""),
@@ -149,13 +273,16 @@ async def new_partner_submit(
     industry: str = Form(""), team_size: str = Form(""),
     linkedin_url: str = Form(""), x_url: str = Form(""), instagram_url: str = Form(""),
     facebook_url: str = Form(""), youtube_url: str = Form(""),
-    owner_key: str = Form(""),
+    owner_key: str = Form(""), tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/partners/new", status_code=303)
+        return RedirectResponse("/contacts/partners/new", status_code=303)
     if not (name or "").strip():
-        return _partner_form_response(request, user, None, "Name is required.")
+        return _partner_form_response(request, user, None, "Name is required.", form_tags=tags)
+    parsed_tags, tag_error = parse_partner_tag_list(tags)
+    if tag_error:
+        return _partner_form_response(request, user, None, tag_error, form_tags=tags)
     partner_id = create_partner(**_partner_fields_from_form(
         name=name, is_company=is_company, parent_id=parent_id, email=email,
         phone=phone, website=website, title=title, address=address,
@@ -163,14 +290,16 @@ async def new_partner_submit(
         linkedin_url=linkedin_url, x_url=x_url, instagram_url=instagram_url,
         facebook_url=facebook_url, youtube_url=youtube_url, owner_key=owner_key,
     ))
-    return RedirectResponse(f"/partners/{partner_id}", status_code=303)
+    if parsed_tags:
+        apply_partner_tags(partner_id, replace=parsed_tags)
+    return RedirectResponse(f"/contacts/partners/{partner_id}", status_code=303)
 
 
-@router.get("/partners/{partner_id}", response_class=HTMLResponse)
+@router.get("/contacts/partners/{partner_id}", response_class=HTMLResponse)
 async def partner_detail(request: Request, partner_id: int, user=Depends(require_login)):
     partner = get_partner(partner_id)
     if not partner:
-        return RedirectResponse("/partners", status_code=303)
+        return RedirectResponse("/contacts/partners", status_code=303)
     activities = list_activities_for_partner(partner_id)
     for item in activities:
         item["display_body"] = activity_display_body(item.get("body") or "")
@@ -186,17 +315,18 @@ async def partner_detail(request: Request, partner_id: int, user=Depends(require
     })
 
 
-@router.get("/partners/{partner_id}/edit", response_class=HTMLResponse)
+@router.get("/contacts/partners/{partner_id}/edit", response_class=HTMLResponse)
 async def edit_partner_page(request: Request, partner_id: int, user=Depends(require_login)):
     partner = get_partner(partner_id)
     if not partner:
-        return RedirectResponse("/partners", status_code=303)
+        return RedirectResponse("/contacts/partners", status_code=303)
     return templates.TemplateResponse(request, "admin/partner_form.html", _partner_form_context(
         request, user, partner, generate_csrf_token(get_session_cookie(request)),
+        form_tags=", ".join(tags_for_partner(partner_id)),
     ))
 
 
-@router.post("/partners/{partner_id}/edit")
+@router.post("/contacts/partners/{partner_id}/edit")
 async def edit_partner_submit(
     request: Request, partner_id: int,
     name: str = Form(""), is_company: str = Form(""), parent_id: str = Form(""),
@@ -205,14 +335,19 @@ async def edit_partner_submit(
     industry: str = Form(""), team_size: str = Form(""),
     linkedin_url: str = Form(""), x_url: str = Form(""), instagram_url: str = Form(""),
     facebook_url: str = Form(""), youtube_url: str = Form(""),
-    owner_key: str = Form(""),
+    owner_key: str = Form(""), tags: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse(f"/partners/{partner_id}/edit", status_code=303)
+        return RedirectResponse(f"/contacts/partners/{partner_id}/edit", status_code=303)
     if not (name or "").strip():
         return _partner_form_response(
-            request, user, get_partner(partner_id), "Name is required.",
+            request, user, get_partner(partner_id), "Name is required.", form_tags=tags,
+        )
+    parsed_tags, tag_error = parse_partner_tag_list(tags)
+    if tag_error:
+        return _partner_form_response(
+            request, user, get_partner(partner_id), tag_error, form_tags=tags,
         )
     fields = _partner_fields_from_form(
         name=name, is_company=is_company, parent_id=parent_id, email=email,
@@ -223,10 +358,11 @@ async def edit_partner_submit(
     )
     fields["is_company"] = 1 if fields["is_company"] else 0
     update_partner(partner_id, **fields)
-    return RedirectResponse(f"/partners/{partner_id}", status_code=303)
+    apply_partner_tags(partner_id, replace=parsed_tags or [])
+    return RedirectResponse(f"/contacts/partners/{partner_id}", status_code=303)
 
 
-@router.post("/partners/{partner_id}/activities")
+@router.post("/contacts/partners/{partner_id}/activities")
 async def add_activity(
     request: Request, partner_id: int,
     type: str = Form("note"), body: str = Form(""),
@@ -234,7 +370,7 @@ async def add_activity(
 ):
     if validate_csrf_token(csrf_token, get_session_cookie(request)) and body.strip():
         log_activity(partner_id, type, body)
-    return RedirectResponse(f"/partners/{partner_id}", status_code=303)
+    return RedirectResponse(f"/contacts/partners/{partner_id}", status_code=303)
 
 
 # ==================== Services (catalog) ====================
@@ -485,7 +621,7 @@ async def deal_call_tel(
     return Response(status_code=204)
 
 
-@router.post("/partners/{partner_id}/call-tel")
+@router.post("/contacts/partners/{partner_id}/call-tel")
 async def partner_call_tel(
     request: Request, partner_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),
@@ -741,7 +877,7 @@ async def new_deal_submit(
         parent_deal_id=cleaned_parent,
         tags=parsed_tags or None,
     )
-    return RedirectResponse(f"/partners/{parsed_partner_id}", status_code=303)
+    return RedirectResponse(f"/contacts/partners/{parsed_partner_id}", status_code=303)
 
 
 @router.get("/deals/{deal_id}/edit", response_class=HTMLResponse)
@@ -816,7 +952,7 @@ async def edit_deal_submit(
         parent_deal_id=cleaned_parent,
     )
     apply_deal_tags(deal_id, replace=parsed_tags or [])
-    return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
+    return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)
 
 
 _LOST_FORM_ERRORS = {
@@ -890,7 +1026,7 @@ async def save_deal_next_action(
             next_action_date=parsed.isoformat() if parsed else None,
         )
     if deal:
-        return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
+        return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)
     return RedirectResponse("/deals", status_code=303)
 
 
@@ -932,7 +1068,7 @@ async def change_deal_stage(
         query = ("?" + "&".join(suffix)) if suffix else ""
         return RedirectResponse(f"/pipeline{query}", status_code=303)
     if deal:
-        return RedirectResponse(f"/partners/{deal['partner_id']}", status_code=303)
+        return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)
     return RedirectResponse("/deals", status_code=303)
 
 

@@ -57,7 +57,7 @@ def test_edit_deal_saves_and_returns_to_partner(logged_in_client, db):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/partners/{pid}"
+    assert resp.headers["location"] == f"/contacts/partners/{pid}"
 
     deal = get_deal(deal_id)
     assert deal["source"] == "website"
@@ -213,7 +213,7 @@ def test_edit_deal_orphan_partner_redirects(logged_in_client, db):
 
 def test_partner_and_deals_list_link_to_edit(logged_in_client, db):
     pid, _, deal_id = _deal(db)
-    partner_page = logged_in_client.get(f"/partners/{pid}")
+    partner_page = logged_in_client.get(f"/contacts/partners/{pid}")
     assert f"/deals/{deal_id}/edit" in partner_page.text
     deals_page = logged_in_client.get("/deals")
     assert f"/deals/{deal_id}/edit" in deals_page.text
@@ -315,7 +315,7 @@ def test_edit_deal_sets_parent(logged_in_client, db):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/partners/{pid}"
+    assert resp.headers["location"] == f"/contacts/partners/{pid}"
     assert get_deal(child_id)["parent_deal_id"] == parent_id
 
 
@@ -379,7 +379,7 @@ def test_new_deal_sets_parent(logged_in_client, db):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/partners/{pid}"
+    assert resp.headers["location"] == f"/contacts/partners/{pid}"
     follow_ons = [d for d in list_deals(partner_id=pid) if d.get("parent_deal_id") == parent_id]
     assert follow_ons
     assert follow_ons[0]["source"] == "repeat"

@@ -7,7 +7,7 @@
     {% if partner.email %}{{ partner.email }} · {% endif %}
     {% if partner.phone is dialable %}
     <a href="{{ partner.phone|tel_href }}" class="btn-tel"
-       onclick="logCallTap('/partners/{{ partner.id }}/call-tel', '{{ csrf_token }}')">{{ partner.phone }}</a>
+       onclick="logCallTap('/contacts/partners/{{ partner.id }}/call-tel', '{{ csrf_token }}')">{{ partner.phone }}</a>
     ·
     {% endif %}
     {% if partner.title %}{{ partner.title }}{% endif %}
@@ -21,7 +21,7 @@
     <a href="{{ url }}" target="_blank" rel="noopener">{{ label }}</a>{% if not loop.last %} · {% endif %}
     {% endfor %}
 </p>
-<a class="btn btn-secondary" href="/partners/{{ partner.id }}/edit">Edit</a>
+<a class="btn btn-secondary" href="/contacts/partners/{{ partner.id }}/edit">Edit</a>
 <a class="btn" href="/deals/new?partner_id={{ partner.id }}">+ New deal</a>
 
 {% if partner.is_company and children %}
@@ -29,7 +29,7 @@
 <table>
     <tr><th>Name</th><th>Title</th><th>Email</th></tr>
     {% for c in children %}
-    <tr><td><a href="/partners/{{ c.id }}">{{ c.name }}</a></td><td>{{ c.title or "" }}</td><td>{{ c.email or "" }}</td></tr>
+    <tr><td><a href="/contacts/partners/{{ c.id }}">{{ c.name }}</a></td><td>{{ c.title or "" }}</td><td>{{ c.email or "" }}</td></tr>
     {% endfor %}
 </table>
 {% endif %}
@@ -74,7 +74,7 @@
 {% endfor %}
 
 <h2>Activity</h2>
-<form method="post" action="/partners/{{ partner.id }}/activities" style="margin-bottom:1rem;">
+<form method="post" action="/contacts/partners/{{ partner.id }}/activities" style="margin-bottom:1rem;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <select name="type" style="width:auto;" aria-label="Activity type">

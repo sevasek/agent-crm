@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 
 class SchemaVersionError(RuntimeError):
@@ -900,6 +900,20 @@ def migrate_009(db) -> None:
 
 
 def migrate_010(db) -> None:
+    """Add partner_tags — labels on a partner (contacts app), independent of deal_tags."""
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS partner_tags (
+            partner_id INTEGER NOT NULL REFERENCES partners(id),
+            tag TEXT NOT NULL,
+            PRIMARY KEY (partner_id, tag)
+        )
+        """
+    )
+    db.execute("CREATE INDEX IF NOT EXISTS idx_partner_tags_tag ON partner_tags(tag)")
+
+
+def migrate_011(db) -> None:
     """Add users.currency, the account's regional display currency.
 
     Defaults existing rows to 'USD' to match the offers table's
@@ -922,6 +936,7 @@ MIGRATIONS = {
     8: migrate_008,
     9: migrate_009,
     10: migrate_010,
+    11: migrate_011,
 }
 
 

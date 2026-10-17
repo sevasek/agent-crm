@@ -3,11 +3,7 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Offers</h1>
-<p class="muted">
-    Priced packages (USD) attached to a service. A new deal starts on whichever offer is marked
-    <strong>Default</strong>; the call view can switch a deal to a different offer, or create a new
-    one on the spot. Bots use <code>create_offer</code> / <code>list_catalog</code> / <code>update_deal(offer_id)</code>.
-</p>
+<p class="muted">A priced package attached to a service.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <div class="table-scroll">
 <table class="wide-form-table">

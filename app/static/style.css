@@ -1,4 +1,9 @@
 :root {
+    /* Halves every rem-based size app-wide (Pico sets the root font-size from
+       this token, including its own min-width breakpoints up to 131.25%;
+       this file loads after pico.min.css so a plain, non-media-queried value
+       here beats all of Pico's breakpoints at every viewport width). */
+    --pico-font-size: 50%;
     --border: #ddd;
     --muted: #666;
     --bg-alt: #f7f7f7;
@@ -257,8 +262,8 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .pipeline-column {
     display: flex;
     flex-direction: column;
-    flex: 1 1 12rem;
-    min-width: 10rem;
+    flex: 1 1 21rem; /* 12rem +75% */
+    min-width: 17.5rem; /* 10rem +75% */
     background: var(--bg-alt);
     border-radius: 6px;
     padding: 0.75rem;

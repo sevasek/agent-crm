@@ -15,7 +15,7 @@
     <tr>
         <td>{{ d.rank }}</td>
         <td><a href="/contacts/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
-        <td>
+        <td class="nowrap">
             <a href="{{ d.partner_phone|tel_href }}" class="btn-tel"
                onclick="logCallTap('/crm/deals/{{ d.id }}/call-tel', '{{ csrf_token }}')">{{ d.partner_phone }}</a>
         </td>

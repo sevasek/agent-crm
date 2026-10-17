@@ -38,10 +38,10 @@ logger = logging.getLogger(__name__)
 #                      logged activity says so — fails loud, not silently.
 CALL_OUTCOMES = [
     ("no_answer", "No answer", None),
-    ("interested", "Interested (warm lead)", {"role": "triggers_nurture"}),
-    ("meeting_scheduled", "Meeting scheduled", {"key": "proposal"}),
-    ("won", "Won — new customer", {"role": "is_won"}),
-    ("not_interested", "Not interested", {"role": "is_lost"}),
+    ("interested", "Warm", {"role": "triggers_nurture"}),
+    ("meeting_scheduled", "Meeting Scheduled", {"key": "proposal"}),
+    ("won", "Won", {"role": "is_won"}),
+    ("not_interested", "Lost", {"role": "is_lost"}),
 ]
 _CALL_OUTCOME_MAP = {key: (label, target) for key, label, target in CALL_OUTCOMES}
 

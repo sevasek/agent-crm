@@ -119,4 +119,4 @@ def test_calls_page_renders_outcome_buttons(logged_in_client, db):
     assert resp.status_code == 200
     assert f"/crm/deals/{deal_id}/call-outcome" in resp.text
     assert "No answer" in resp.text
-    assert "Not interested" in resp.text
+    assert "Lost" in resp.text

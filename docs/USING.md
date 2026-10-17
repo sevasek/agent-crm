@@ -38,6 +38,14 @@ A deal can have a next step and a date. When that date is today or earlier, the 
 
 Calls are ordered by a score out of 100. The points come from the deal value, where the contact came from, how complete the contact details are, and how recently the stage changed. The formula does not change on its own, and it does not decide who you should pursue.
 
+Each call has a one-tap outcome button:
+
+- **No answer** — leaves the deal where it is, so it comes back up in today's call list for a same-day retry.
+- **Warm** — the contact is interested but not ready yet. Moves the deal into nurture.
+- **Meeting Scheduled** — you have a meeting booked. Moves the deal to the Proposal stage.
+- **Won** — the contact became a customer. Moves the deal to the Won stage.
+- **Lost** — the contact is not interested. Moves the deal to the Lost stage.
+
 ## What an agent can do
 
 If you connect an AI agent, it can search contacts, work the call list, log calls, update leads, and move deals. It cannot delete records, send email, or decide who is allowed to log in.

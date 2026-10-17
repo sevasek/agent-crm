@@ -147,7 +147,7 @@ body {
     z-index: 100;
     padding: 0.5rem 0.75rem;
     background: var(--accent);
-    color: #fff;
+    color: var(--pico-primary-inverse, #fff);
     border-radius: 4px;
     text-decoration: none;
     transform: translateY(-200%);
@@ -155,7 +155,7 @@ body {
 .skip-link:focus,
 .skip-link:focus-visible {
     transform: none;
-    color: #fff;
+    color: var(--pico-primary-inverse, #fff);
 }
 
 a:focus-visible,
@@ -210,20 +210,52 @@ summary:focus-visible {
 
 /* /crm/* pages (Calls/Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/
    Lost-reasons/Services) use the CRM tile's orange instead of the brand
-   blue for buttons — --accent drives .btn, .btn-secondary's border and the
-   pico-primary-* tokens, all already var(--accent)-based above, so
-   redefining it here on body is enough; it's the same orange as the CRM
-   tile's light/dark pair. */
+   blue for buttons. Redefining --accent alone isn't enough: the :root/
+   dark-mode blocks above set --pico-primary-background etc. to
+   `var(--accent)`, but that substitution resolves once where it's
+   declared (against :root's own --accent) and inherits down as an
+   already-baked blue — a later --accent override on a descendant body
+   doesn't reach back and re-resolve it. So every pico-primary-* token
+   needs setting directly here, same as :root/dark do. Black button text
+   (not white) because the contrast calculator this app already uses for
+   the CRM tile's icon (_best_icon_color in app/routers/admin.py) picks
+   black over white for both the light and dark orange — verified: white
+   is 3.2:1 / 3.88:1 (fails WCAG AA's 4.5:1), black is 6.56:1 / 5.41:1. */
 body.crm-theme {
     --accent: #eb6834;
+    --pico-primary: #eb6834;
+    --pico-primary-background: #eb6834;
+    --pico-primary-border: #eb6834;
+    --pico-primary-hover: #d95926;
     --pico-primary-hover-background: #d95926;
     --pico-primary-hover-border: #d95926;
+    --pico-primary-hover-underline: #d95926;
+    --pico-primary-underline: #eb6834;
     --pico-primary-focus: rgba(235, 104, 52, 0.25);
+    --pico-primary-inverse: #000;
 }
 @media only screen and (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) body.crm-theme { --accent: #d95926; }
+    :root:not([data-theme="light"]) body.crm-theme {
+        --accent: #d95926;
+        --pico-primary: #d95926;
+        --pico-primary-background: #d95926;
+        --pico-primary-border: #d95926;
+        --pico-primary-underline: #d95926;
+        --pico-primary-hover-background: #eb6834;
+        --pico-primary-hover-border: #eb6834;
+        --pico-primary-hover-underline: #eb6834;
+    }
 }
-[data-theme="dark"] body.crm-theme { --accent: #d95926; }
+[data-theme="dark"] body.crm-theme {
+    --accent: #d95926;
+    --pico-primary: #d95926;
+    --pico-primary-background: #d95926;
+    --pico-primary-border: #d95926;
+    --pico-primary-underline: #d95926;
+    --pico-primary-hover-background: #eb6834;
+    --pico-primary-hover-border: #eb6834;
+    --pico-primary-hover-underline: #eb6834;
+}
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 /* Table pages (list/data views) need the full window and more breathing
@@ -314,7 +346,7 @@ button { height: var(--control-height); box-sizing: border-box; }
 .btn:hover {
     background: var(--pico-primary-hover-background, #234a85);
     border-color: var(--pico-primary-hover-border, #234a85);
-    color: #fff; text-decoration: none;
+    color: var(--pico-primary-inverse, #fff); text-decoration: none;
 }
 .btn-secondary { background: var(--surface); color: var(--link); border-color: var(--accent); }
 .btn-secondary:hover { background: var(--chip-hover); color: var(--link); text-decoration: none; }
@@ -409,7 +441,7 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
     height: auto;
     display: block; width: 100%; padding: 1rem; font-size: 1.2rem; font-weight: 600;
     text-decoration: none; border-radius: 8px; text-align: center; box-sizing: border-box;
-    background: var(--accent); color: #fff; border: 1px solid var(--accent);
+    background: var(--accent); color: var(--pico-primary-inverse, #fff); border: 1px solid var(--accent);
 }
 .btn-tel-big:focus-visible {
     outline: 3px solid #fff;

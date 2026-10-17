@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from app.routers.auth import get_session_cookie, require_login, set_session_cookie
 from app.services.auth import (
     bump_session_version, change_password, generate_csrf_token, is_valid_slug,
-    validate_csrf_token,
+    set_user_currency, validate_csrf_token,
 )
 from app.services.partners import (
     create_partner, get_partner, update_partner, list_partners, list_companies, get_children,
@@ -1414,6 +1414,7 @@ async def account_settings(request: Request, user=Depends(require_login)):
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "currency_choices": offers_service.CURRENCY_CHOICES,
     })
 
 
@@ -1432,6 +1433,7 @@ async def create_api_key_submit(
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "currency_choices": offers_service.CURRENCY_CHOICES,
         "new_key": new_key,
     })
 
@@ -1460,12 +1462,14 @@ async def change_password_submit(
             "request": request, "user": user,
             "api_keys": api_keys_service.list_api_keys(user["id"]),
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
+            "currency_choices": offers_service.CURRENCY_CHOICES,
             "password_error": error,
         }, status_code=400)
     response = templates.TemplateResponse(request, "admin/settings.html", {
         "request": request, "user": user,
         "api_keys": api_keys_service.list_api_keys(user["id"]),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "currency_choices": offers_service.CURRENCY_CHOICES,
         "password_changed": True,
     })
     # Every other outstanding session cookie is now invalid (session_version
@@ -1485,6 +1489,18 @@ async def logout_everywhere_submit(
     response = RedirectResponse("/settings", status_code=303)
     set_session_cookie(response, user["id"], new_version)
     return response
+
+
+@router.post("/settings/regional")
+async def regional_settings_submit(
+    request: Request,
+    currency: str = Form(...), csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/settings", status_code=303)
+    if currency in dict(offers_service.CURRENCY_CHOICES):
+        set_user_currency(user["id"], currency)
+    return RedirectResponse("/settings", status_code=303)
 
 
 _AUTOMATION_ERROR_MESSAGES = {

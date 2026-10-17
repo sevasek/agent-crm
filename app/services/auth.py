@@ -68,6 +68,14 @@ def bump_session_version(user_id: int) -> int:
         ).fetchone()["session_version"]
 
 
+def set_user_currency(user_id: int, currency: str) -> None:
+    with get_db() as db:
+        db.execute(
+            "UPDATE users SET currency = ? WHERE id = ?", (currency, user_id)
+        )
+        db.commit()
+
+
 def change_password(user_id: int, current_password: str, new_password: str):
     """Verify current_password, set new_password, and bump session_version so
     every other outstanding session cookie is invalidated. Returns (ok, error)

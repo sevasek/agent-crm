@@ -9,6 +9,19 @@ from app.services.auth import sanitize_text
 
 CURRENCY_DEFAULT = "USD"
 
+# Offered as a dropdown in Settings > Regional settings (users.currency).
+# Free-text elsewhere (e.g. per-offer currency) isn't limited to this list.
+CURRENCY_CHOICES = (
+    ("USD", "USD — US Dollar"),
+    ("EUR", "EUR — Euro"),
+    ("GBP", "GBP — British Pound"),
+    ("AUD", "AUD — Australian Dollar"),
+    ("NZD", "NZD — New Zealand Dollar"),
+    ("CAD", "CAD — Canadian Dollar"),
+    ("JPY", "JPY — Japanese Yen"),
+    ("SGD", "SGD — Singapore Dollar"),
+)
+
 # Seeded once when the offers table is empty AND the matching service exists
 # (see scripts/seed_services.py). Prices are placeholders; edit via MCP / admin.
 STARTER_OFFERS = (

@@ -4,6 +4,20 @@
 {% block content %}
 <h1>Account settings</h1>
 
+<h2>Regional settings</h2>
+<form method="post" action="/settings/regional">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="currency">Currency</label>
+        <select id="currency" name="currency">
+            {% for code, label in currency_choices %}
+            <option value="{{ code }}" {% if (user.currency or "USD") == code %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <button type="submit">Save</button>
+</form>
+
 <h2>Password</h2>
 {% if password_error %}<p class="error">{{ password_error }}</p>{% endif %}
 {% if password_changed %}<p>Password changed. Other devices' sessions are now logged out.</p>{% endif %}

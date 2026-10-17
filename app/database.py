@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 
 class SchemaVersionError(RuntimeError):
@@ -899,6 +899,17 @@ def migrate_009(db) -> None:
     )
 
 
+def migrate_010(db) -> None:
+    """Add users.currency, the account's regional display currency.
+
+    Defaults existing rows to 'USD' to match the offers table's
+    CURRENCY_DEFAULT (app/services/offers.py).
+    """
+    _add_column_if_missing(
+        db, "users", "currency", "currency TEXT NOT NULL DEFAULT 'USD'"
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
@@ -910,6 +921,7 @@ MIGRATIONS = {
     7: migrate_007,
     8: migrate_008,
     9: migrate_009,
+    10: migrate_010,
 }
 
 

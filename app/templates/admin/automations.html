@@ -34,7 +34,7 @@
 <article>
     <h2>{{ a.name }}{% if not a.enabled %} <span class="muted">(disabled)</span>{% endif %}</h2>
     {% for warning in a.warnings %}<p class="error">{{ warning }}</p>{% endfor %}
-    <form method="post" action="/crm/automations/{{ a.id }}/edit">
+    <form method="post" action="/definitions/automations/{{ a.id }}/edit">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <div class="form-row">
             <label for="name-{{ a.id }}">Name</label>
@@ -102,12 +102,12 @@
         </fieldset>
         <button type="submit">Save</button>
     </form>
-    <form method="post" action="/crm/automations/{{ a.id }}/enabled">
+    <form method="post" action="/definitions/automations/{{ a.id }}/enabled">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="enabled" value="{{ '0' if a.enabled else '1' }}">
         <button type="submit" class="btn-secondary">{{ 'Disable' if a.enabled else 'Enable' }}</button>
     </form>
-    <form method="post" action="/crm/automations/{{ a.id }}/delete">
+    <form method="post" action="/definitions/automations/{{ a.id }}/delete">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button type="submit" class="btn-secondary" onclick="return confirm('Delete this automation?')">Delete</button>
     </form>
@@ -115,7 +115,7 @@
 {% endfor %}
 
 <h2>New automation</h2>
-<form method="post" action="/crm/automations/new">
+<form method="post" action="/definitions/automations/new">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="name">Name</label>

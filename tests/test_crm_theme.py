@@ -1,8 +1,8 @@
-"""Each section theme (/crm orange, /actions aqua) must use the house
-palette's actual slot (app/routers/admin.py's _PALETTE_SLOTS) and nothing
-invented. Any hex literal added to style.css for these themes should be
-one of that slot's two values — if a future edit picks a color by hand,
-this test catches it.
+"""Each section theme (/crm orange, /actions aqua, /definitions magenta)
+must use the house palette's actual slot (app/routers/admin.py's
+_PALETTE_SLOTS) and nothing invented. Any hex literal added to style.css
+for these themes should be one of that slot's two values — if a future
+edit picks a color by hand, this test catches it.
 """
 import re
 from pathlib import Path
@@ -17,6 +17,7 @@ _SLOTS = {slot["name"]: slot for slot in _PALETTE_SLOTS}
 THEMES = [
     pytest.param("orange", ".topnav .nav-app-crm", "body.crm-theme", id="crm"),
     pytest.param("aqua", ".topnav .nav-app-actions", "body.actions-theme", id="actions"),
+    pytest.param("magenta", ".topnav .nav-app-definitions", "body.definitions-theme", id="definitions"),
 ]
 
 
@@ -40,6 +41,7 @@ def test_palette_has_not_drifted():
     the matching color literals throughout style.css in the same change."""
     assert _SLOTS["orange"]["light"] == "#eb6834" and _SLOTS["orange"]["dark"] == "#d95926"
     assert _SLOTS["aqua"]["light"] == "#1baf7a" and _SLOTS["aqua"]["dark"] == "#199e70"
+    assert _SLOTS["magenta"]["light"] == "#e87ba4" and _SLOTS["magenta"]["dark"] == "#d55181"
 
 
 @pytest.mark.parametrize("slot_name, nav_selector, theme_selector", THEMES)

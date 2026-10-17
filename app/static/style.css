@@ -216,9 +216,17 @@ summary:focus-visible {
 }
 [data-theme="dark"] .topnav .nav-app-actions { color: #199e70; }
 
-/* /crm/* pages (Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/
-   Lost-reasons/Services) use the CRM tile's orange instead of the brand
-   blue for buttons. Redefining --accent alone isn't enough: the :root/
+/* Matches the Definitions tile's magenta slot in _PALETTE_SLOTS (app/routers/admin.py) —
+   update both if that palette assignment ever changes. */
+.topnav .nav-app-definitions { font-weight: 700; color: #e87ba4; }
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .topnav .nav-app-definitions { color: #d55181; }
+}
+[data-theme="dark"] .topnav .nav-app-definitions { color: #d55181; }
+
+/* /crm/* pages (Deals/Pipeline/Leads) use the CRM tile's orange
+   instead of the brand blue for buttons. Redefining --accent alone isn't
+   enough: the :root/
    dark-mode blocks above set --pico-primary-background etc. to
    `var(--accent)`, but that substitution resolves once where it's
    declared (against :root's own --accent) and inherits down as an
@@ -315,6 +323,55 @@ body.actions-theme {
     --pico-primary-hover-background: #1baf7a;
     --pico-primary-hover-border: #1baf7a;
     --pico-primary-hover-underline: #1baf7a;
+}
+
+/* /definitions/* pages (Services/Stages/Automations/Lost-reasons/Offers/
+   ICP) use the Definitions tile's magenta instead of the brand blue for
+   buttons, same mechanism as body.crm-theme above — including --link,
+   which .btn-secondary's text (and tag-chip/tel-link/topnav-hover) read
+   instead of --accent (see #145, which fixed the same gap for crm-theme).
+   Black button text (not white) because the contrast calculator this app
+   already uses for the Definitions tile's icon (_best_icon_color in
+   app/routers/admin.py) picks black over white for both the light and
+   dark magenta — verified: white is 2.69:1 / 3.94:1 (fails WCAG AA's
+   4.5:1), black is 7.8:1 / 5.32:1. */
+body.definitions-theme {
+    --accent: #e87ba4;
+    --link: #e87ba4;
+    --pico-primary: #e87ba4;
+    --pico-primary-background: #e87ba4;
+    --pico-primary-border: #e87ba4;
+    --pico-primary-hover: #d55181;
+    --pico-primary-hover-background: #d55181;
+    --pico-primary-hover-border: #d55181;
+    --pico-primary-hover-underline: #d55181;
+    --pico-primary-underline: #e87ba4;
+    --pico-primary-focus: rgba(232, 123, 164, 0.25);
+    --pico-primary-inverse: #000;
+}
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body.definitions-theme {
+        --accent: #d55181;
+        --link: #d55181;
+        --pico-primary: #d55181;
+        --pico-primary-background: #d55181;
+        --pico-primary-border: #d55181;
+        --pico-primary-underline: #d55181;
+        --pico-primary-hover-background: #e87ba4;
+        --pico-primary-hover-border: #e87ba4;
+        --pico-primary-hover-underline: #e87ba4;
+    }
+}
+[data-theme="dark"] body.definitions-theme {
+    --accent: #d55181;
+    --link: #d55181;
+    --pico-primary: #d55181;
+    --pico-primary-background: #d55181;
+    --pico-primary-border: #d55181;
+    --pico-primary-underline: #d55181;
+    --pico-primary-hover-background: #e87ba4;
+    --pico-primary-hover-border: #e87ba4;
+    --pico-primary-hover-underline: #e87ba4;
 }
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }

@@ -14,7 +14,7 @@
         <th>Name</th><th>Triggers nurture</th><th>Active</th><th></th>
     </tr>
     {% for r in reasons %}
-    <form id="reason-edit-{{ r.id }}" method="post" action="/crm/lost-reasons/{{ r.id }}/edit"></form>
+    <form id="reason-edit-{{ r.id }}" method="post" action="/definitions/lost-reasons/{{ r.id }}/edit"></form>
     <tr>
         <td><input type="text" name="name" value="{{ r.name }}" form="reason-edit-{{ r.id }}" aria-label="Name"></td>
         <td><input type="checkbox" name="triggers_nurture" form="reason-edit-{{ r.id }}" aria-label="Triggers nurture" {% if r.triggers_nurture %}checked{% endif %}></td>
@@ -30,7 +30,7 @@
 </table>
 
 <h2>Add a lost reason</h2>
-<form method="post" action="/crm/lost-reasons/new">
+<form method="post" action="/definitions/lost-reasons/new">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="name">Name</label>

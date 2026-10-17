@@ -130,14 +130,14 @@ def test_edit_deal_page_redirects_leads_to_lead_form(logged_in_client, db):
 
 
 def test_lost_reason_create_honors_unchecked_active(logged_in_client, db):
-    resp = logged_in_client.post("/crm/lost-reasons/new", data={
+    resp = logged_in_client.post("/definitions/lost-reasons/new", data={
         "csrf_token": _csrf(logged_in_client),
         "name": "Needs a nudge",
     }, follow_redirects=False)
     assert resp.status_code == 303
     row = next(r for r in list_lost_reasons() if r["name"] == "Needs a nudge")
     assert row["active"] == 0
-    resp = logged_in_client.post("/crm/lost-reasons/new", data={
+    resp = logged_in_client.post("/definitions/lost-reasons/new", data={
         "csrf_token": _csrf(logged_in_client),
         "name": "Stays active",
         "active": "on",
@@ -251,11 +251,11 @@ def test_merged_lead_has_no_restore(logged_in_client, db):
 
 
 def test_lost_reasons_page_unique_and_inactive_picker(logged_in_client, db):
-    page = logged_in_client.get("/crm/lost-reasons")
+    page = logged_in_client.get("/definitions/lost-reasons")
     assert page.status_code == 200
     assert "Not a fit" in page.text
-    assert 'href="/crm/lost-reasons" aria-current="page">Lost reasons</a>' in page.text
-    dup = logged_in_client.post("/crm/lost-reasons/new", data={
+    assert 'href="/definitions/lost-reasons" aria-current="page">Lost reasons</a>' in page.text
+    dup = logged_in_client.post("/definitions/lost-reasons/new", data={
         "csrf_token": _csrf(logged_in_client),
         "name": "Not a fit",
         "active": "1",
@@ -271,11 +271,11 @@ def test_lost_reasons_page_unique_and_inactive_picker(logged_in_client, db):
     assert "Seasonal pause" not in form.text
     compat = logged_in_client.get("/admin/lost-reasons", follow_redirects=False)
     assert compat.status_code in (301, 302, 303, 307, 308)
-    assert "/crm/lost-reasons" in compat.headers.get("location", "")
+    assert "/definitions/lost-reasons" in compat.headers.get("location", "")
 
 
 def test_lost_reason_empty_name_is_html_error(logged_in_client, db):
-    resp = logged_in_client.post("/crm/lost-reasons/new", data={
+    resp = logged_in_client.post("/definitions/lost-reasons/new", data={
         "csrf_token": _csrf(logged_in_client),
         "name": "",
     })
@@ -286,13 +286,13 @@ def test_lost_reason_empty_name_is_html_error(logged_in_client, db):
 def test_lead_and_lost_reason_forms_require_csrf(logged_in_client, db):
     resp = logged_in_client.post("/crm/leads/new", data={"company_name": "No CSRF"})
     assert resp.status_code == 422
-    resp = logged_in_client.post("/crm/lost-reasons/new", data={"name": "No CSRF"})
+    resp = logged_in_client.post("/definitions/lost-reasons/new", data={"name": "No CSRF"})
     assert resp.status_code == 422
 
 
 def test_seeded_lost_stage_label_still_editable(logged_in_client, db):
     from app.services import pipeline_stages
-    resp = logged_in_client.post("/crm/stages/lost/edit", data={
+    resp = logged_in_client.post("/definitions/stages/lost/edit", data={
         "csrf_token": _csrf(logged_in_client),
         "label": "Closed lost",
         "is_lost": "1",

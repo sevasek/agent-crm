@@ -18,7 +18,7 @@
         <th>Label</th><th>Field</th><th>Operator</th><th>Value</th><th>Weight</th><th>Active</th><th></th>
     </tr>
     {% for c in criteria %}
-    <form id="icp-edit-{{ c.id }}" method="post" action="/crm/icp/{{ c.id }}/edit"></form>
+    <form id="icp-edit-{{ c.id }}" method="post" action="/definitions/icp/{{ c.id }}/edit"></form>
     <tr>
         <td><input type="text" name="label" value="{{ c.label or '' }}" form="icp-edit-{{ c.id }}" aria-label="Label" placeholder="e.g. Enterprise-sized"></td>
         <td>
@@ -50,7 +50,7 @@
 </div>
 
 <h2>Add a criterion</h2>
-<form method="post" action="/crm/icp/new">
+<form method="post" action="/definitions/icp/new">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="label">Label</label>
@@ -88,7 +88,7 @@
 
 <h2>Delete a criterion</h2>
 {% for c in criteria %}
-<form method="post" action="/crm/icp/{{ c.id }}/delete" style="display:inline;">
+<form method="post" action="/definitions/icp/{{ c.id }}/delete" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn-secondary" onclick="return confirm('Delete this criterion?')">Delete: {{ c.label or c.field }} ({{ c.operator }})</button>
 </form>

@@ -378,7 +378,7 @@ def test_seed_refuses_to_invent_catalog_rows(db):
 def test_admin_create_rename_disable_delete(logged_in_client, db):
     services, _offer, _other = _catalog()
     token = generate_csrf_token(logged_in_client.cookies.get("session"))
-    created = logged_in_client.post("/crm/automations/new", data={
+    created = logged_in_client.post("/definitions/automations/new", data={
         "name": "Kickoff",
         "stage_key": "audit_paid",
         "service_id": str(services["website-audit"]),
@@ -389,13 +389,13 @@ def test_admin_create_rename_disable_delete(logged_in_client, db):
         "csrf_token": token,
     }, follow_redirects=False)
     assert created.status_code == 303
-    page = logged_in_client.get("/crm/automations")
+    page = logged_in_client.get("/definitions/automations")
     assert page.status_code == 200
     assert "Kickoff" in page.text
     assert "Send audit kickoff" in page.text
     automation = list_automations()[0]
 
-    renamed = logged_in_client.post(f"/crm/automations/{automation['id']}/edit", data={
+    renamed = logged_in_client.post(f"/definitions/automations/{automation['id']}/edit", data={
         "name": "Kickoff renamed",
         "stage_key": "audit_paid",
         "service_id": str(services["website-audit"]),
@@ -408,14 +408,14 @@ def test_admin_create_rename_disable_delete(logged_in_client, db):
     assert renamed.status_code == 303
     assert get_automation(automation["id"])["name"] == "Kickoff renamed"
 
-    disabled = logged_in_client.post(f"/crm/automations/{automation['id']}/enabled", data={
+    disabled = logged_in_client.post(f"/definitions/automations/{automation['id']}/enabled", data={
         "enabled": "0",
         "csrf_token": token,
     }, follow_redirects=False)
     assert disabled.status_code == 303
     assert get_automation(automation["id"])["enabled"] is False
 
-    missing = logged_in_client.post("/crm/automations/new", data={
+    missing = logged_in_client.post("/definitions/automations/new", data={
         "name": "",
         "stage_key": "audit_paid",
         "task_title": "Nope",
@@ -425,12 +425,12 @@ def test_admin_create_rename_disable_delete(logged_in_client, db):
     assert missing.status_code == 400
     assert "Name is required." in missing.text
 
-    logged_in_client.post(f"/crm/automations/{automation['id']}/delete", data={"csrf_token": token})
+    logged_in_client.post(f"/definitions/automations/{automation['id']}/delete", data={"csrf_token": token})
     assert list_automations() == []
 
 
 def test_automations_page_requires_login(client, db):
-    resp = client.get("/crm/automations", follow_redirects=False)
+    resp = client.get("/definitions/automations", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 

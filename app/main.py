@@ -96,11 +96,11 @@ def _check_secret_key():
     )
 
 
-_CRM_SECTIONS = (
-    "deals", "pipeline", "stages", "offers", "icp",
-    "automations", "leads", "lost-reasons", "services",
-)
+_CRM_SECTIONS = ("deals", "pipeline", "leads")
 _ACTIONS_SECTIONS = ("calls",)
+_DEFINITIONS_SECTIONS = (
+    "services", "stages", "automations", "lost-reasons", "offers", "icp",
+)
 
 
 def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
@@ -110,8 +110,9 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
     `/{rest_of_path}` would turn `/admin//evil.example` into
     `Location: //evil.example`. Only a single relative path is allowed;
     query string is forwarded so `/admin/deals?due=1` keeps the Due filter.
-    Sections that now live under `/crm` or `/actions` (see app/routers/
-    admin.py's crm_router/actions_router) get that prefix added back in.
+    Sections that now live under `/crm`, `/actions`, or `/definitions`
+    (see app/routers/admin.py's crm_router/actions_router) get that
+    prefix added back in.
     """
     if (
         not rest_of_path
@@ -127,6 +128,8 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
         prefix = "/actions"
     elif first_segment in _CRM_SECTIONS:
         prefix = "/crm"
+    elif first_segment in _DEFINITIONS_SECTIONS:
+        prefix = "/definitions"
     else:
         prefix = ""
     target = f"{prefix}/{rest_of_path}"

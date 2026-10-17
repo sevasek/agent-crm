@@ -47,7 +47,7 @@ def test_partner_missing_csrf_still_422(logged_in_client, db):
 
 
 def test_new_service_empty_name_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/services/new", data={
+    resp = logged_in_client.post("/definitions/services/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
         "slug": "consulting",
@@ -59,7 +59,7 @@ def test_new_service_empty_name_is_html_error_not_422(logged_in_client, db):
 
 
 def test_new_service_empty_slug_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/services/new", data={
+    resp = logged_in_client.post("/definitions/services/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "Consulting",
         "slug": "",
@@ -72,7 +72,7 @@ def test_new_service_empty_slug_is_html_error_not_422(logged_in_client, db):
 
 def test_edit_service_empty_name_is_html_error_not_422(logged_in_client, db):
     sid = create_service("Consulting", "consulting")
-    resp = logged_in_client.post(f"/crm/services/{sid}/edit", data={
+    resp = logged_in_client.post(f"/definitions/services/{sid}/edit", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
         "description": "",
@@ -84,7 +84,7 @@ def test_edit_service_empty_name_is_html_error_not_422(logged_in_client, db):
 
 
 def test_create_stage_empty_key_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/new", data={
+    resp = logged_in_client.post("/definitions/stages/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "key": "",
         "label": "Demo scheduled",
@@ -94,7 +94,7 @@ def test_create_stage_empty_key_is_html_error_not_422(logged_in_client, db):
 
 
 def test_create_stage_empty_label_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/new", data={
+    resp = logged_in_client.post("/definitions/stages/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "key": "demo-scheduled",
         "label": "",
@@ -105,7 +105,7 @@ def test_create_stage_empty_label_is_html_error_not_422(logged_in_client, db):
 
 
 def test_edit_stage_empty_label_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/proposal/edit", data={
+    resp = logged_in_client.post("/definitions/stages/proposal/edit", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "label": "",
     })
@@ -115,7 +115,7 @@ def test_edit_stage_empty_label_is_html_error_not_422(logged_in_client, db):
 
 
 def test_create_icp_empty_field_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/icp/new", data={
+    resp = logged_in_client.post("/definitions/icp/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "label": "",
         "field": "",
@@ -129,7 +129,7 @@ def test_create_icp_empty_field_is_html_error_not_422(logged_in_client, db):
 
 
 def test_create_icp_empty_operator_is_html_error_not_422(logged_in_client, db):
-    resp = logged_in_client.post("/crm/icp/new", data={
+    resp = logged_in_client.post("/definitions/icp/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "label": "",
         "field": "team_size",
@@ -159,7 +159,7 @@ def test_new_lost_reason_empty_name_is_html_error_not_422(logged_in_client, db):
     from app.services.lost_reasons import list_lost_reasons
 
     before = {r["name"] for r in list_lost_reasons()}
-    resp = logged_in_client.post("/crm/lost-reasons/new", data={
+    resp = logged_in_client.post("/definitions/lost-reasons/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
     })

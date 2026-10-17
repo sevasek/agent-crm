@@ -3,6 +3,7 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Partners</h1>
+<p class="muted">A partner is a person or a company you've confirmed is real. <a href="{{ help_url('partners') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <form method="get" action="/contacts/partners" style="margin-bottom: 1rem;">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name or email" aria-label="Search partners" style="max-width: 24rem;">
 </form>

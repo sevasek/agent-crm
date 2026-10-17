@@ -56,6 +56,20 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["tel_href"] = to_tel_href
 templates.env.tests["dialable"] = has_callable_phone
 
+# Plain-language help for people with no CRM/technical background — one
+# shared doc (docs/WELCOME.md), one section per object, linked by anchor.
+# Not served by this app (see docs/ package.json: doc-build-time only), so
+# this points at the upstream repo, same as docs/_includes/base.njk already
+# does for its own GitHub link.
+HELP_DOC_URL = "https://github.com/sevasek/agent-crm/blob/main/docs/WELCOME.md"
+
+
+def help_url(anchor=None):
+    return HELP_DOC_URL if not anchor else f"{HELP_DOC_URL}#{anchor}"
+
+
+templates.env.globals["help_url"] = help_url
+
 # SQLite INTEGER is signed 64-bit; Python's int is unbounded, so an
 # out-of-range value would raise OverflowError on bind rather than fail
 # validation here. Same bounds/shape as api.py's _safe_int for /api/v1/stages.
@@ -108,6 +122,7 @@ _PALETTE_SLOTS = [
     {"name": "aqua", "light": "#1baf7a", "dark": "#199e70"},
     {"name": "yellow", "light": "#eda100", "dark": "#c98500"},
     {"name": "magenta", "light": "#e87ba4", "dark": "#d55181"},
+    {"name": "green", "light": "#008300", "dark": "#008300"},
 ]
 
 
@@ -134,26 +149,34 @@ def _best_icon_color(bg_hex):
 
 
 def _apps_menu():
+    # Order here is the palette-assignment order, not necessarily the
+    # display order — CRM/Actions/Definitions' tile colors are load-bearing:
+    # they match that section's own theme color (test_crm_theme.py), so
+    # existing entries keep their original slot. Help is appended on its
+    # own new slot, then spliced into the display order below.
     specs = [
         {"label": "Contacts", "href": "/contacts/partners", "icon": "contacts"},
         {"label": "CRM", "href": "/crm/pipeline", "icon": "crm"},
         {"label": "Actions", "href": "/actions/calls", "icon": "actions"},
         {"label": "Settings", "href": "/settings", "icon": "settings"},
         {"label": "Definitions", "href": "/definitions/services", "icon": "definitions"},
+        {"label": "Help", "href": help_url(), "icon": "help", "external": True},
     ]
-    apps = []
+    apps = {}
     for spec, slot in zip(specs, _PALETTE_SLOTS):
-        apps.append({
+        apps[spec["label"]] = {
             **spec,
             "bg_light": slot["light"],
             "bg_dark": slot["dark"],
-            # The current five palette slots land on the same icon colour
+            # The current six palette slots land on the same icon colour
             # for both their light- and dark-mode hex, so one computed
             # choice (checked against the light value) covers both; if a
             # future slot's modes disagree this would need a per-mode icon.
             "icon_color": _best_icon_color(slot["light"]),
-        })
-    return apps
+        }
+    # Display order: Help sits just before Settings.
+    return [apps[label] for label in
+            ("Contacts", "CRM", "Actions", "Help", "Settings", "Definitions")]
 
 
 APPS_MENU = _apps_menu()

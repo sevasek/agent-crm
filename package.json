@@ -3,8 +3,8 @@
   "private": true,
   "description": "Doc-build-time only. Not part of the app: the running app stays Node-free and build-step-free. This just turns docs/*.md into a static manual site, styled with the app's own Pico.css + style.css.",
   "scripts": {
-    "docs:build": "eleventy",
-    "docs:serve": "eleventy --serve",
+    "docs:build": "node generate-help-index.js && eleventy",
+    "docs:serve": "node generate-help-index.js && eleventy --serve",
     "docs:test": "npm run docs:build && node check-docs.js"
   },
   "devDependencies": {

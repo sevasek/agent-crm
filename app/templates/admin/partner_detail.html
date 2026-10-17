@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ partner.name }} — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>{{ partner.name }} <span class="pill">{{ "company" if partner.is_company else "person" }}</span></h1>
 <p class="muted">

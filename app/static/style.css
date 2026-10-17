@@ -183,9 +183,12 @@ summary:focus-visible {
     text-underline-offset: 0.3em;
 }
 
-/* Full-width, double-padding layout (originally the Partners page's look)
-   is now the default for every page. */
-.container { max-width: none; margin: 0 auto; padding: 3rem; }
+.container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+/* Table pages (list/data views) need the full window and more breathing
+   room than the 900px form-page default. Both classes are on these pages'
+   <main> so this beats Pico's .container max-width media queries
+   (same-origin, later, and more specific). */
+.container.container-wide { max-width: none; padding: 3rem; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }

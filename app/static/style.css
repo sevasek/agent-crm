@@ -228,9 +228,14 @@ summary:focus-visible {
    (not white) because the contrast calculator this app already uses for
    the CRM tile's icon (_best_icon_color in app/routers/admin.py) picks
    black over white for both the light and dark orange — verified: white
-   is 3.2:1 / 3.88:1 (fails WCAG AA's 4.5:1), black is 6.56:1 / 5.41:1. */
+   is 3.2:1 / 3.88:1 (fails WCAG AA's 4.5:1), black is 6.56:1 / 5.41:1.
+   --link also needs overriding here: .btn-secondary's text color (and
+   the tag-chip/tel-link/topnav-hover states) read --link, not --accent,
+   so without this a "secondary" button got an orange border but stayed
+   blue text. */
 body.crm-theme {
     --accent: #eb6834;
+    --link: #eb6834;
     --pico-primary: #eb6834;
     --pico-primary-background: #eb6834;
     --pico-primary-border: #eb6834;
@@ -245,6 +250,7 @@ body.crm-theme {
 @media only screen and (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) body.crm-theme {
         --accent: #d95926;
+        --link: #d95926;
         --pico-primary: #d95926;
         --pico-primary-background: #d95926;
         --pico-primary-border: #d95926;
@@ -256,6 +262,7 @@ body.crm-theme {
 }
 [data-theme="dark"] body.crm-theme {
     --accent: #d95926;
+    --link: #d95926;
     --pico-primary: #d95926;
     --pico-primary-background: #d95926;
     --pico-primary-border: #d95926;

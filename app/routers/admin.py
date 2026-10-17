@@ -43,10 +43,13 @@ from app.services import stage_automations
 from app.services import api_keys as api_keys_service
 
 router = APIRouter(prefix="", tags=["admin"])
-# Calls/Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/Lost-reasons/Services
+# Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/Lost-reasons/Services
 # live under /crm (each route's own path literal already includes it);
 # Apps, Contacts and Settings stay unprefixed.
 crm_router = APIRouter(prefix="", tags=["admin"])
+# Calls (today's call queue + the per-deal call view/outcome/offer actions
+# reached from it) live under /actions.
+actions_router = APIRouter(prefix="", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["tel_href"] = to_tel_href
 templates.env.tests["dialable"] = has_callable_phone
@@ -131,7 +134,7 @@ def _apps_menu():
     specs = [
         {"label": "Contacts", "href": "/contacts/partners", "icon": "contacts"},
         {"label": "CRM", "href": "/crm/pipeline", "icon": "crm"},
-        {"label": "Actions", "href": "/crm/deals", "icon": "actions"},
+        {"label": "Actions", "href": "/actions/calls", "icon": "actions"},
         {"label": "Settings", "href": "/settings", "icon": "settings"},
     ]
     apps = []
@@ -460,7 +463,7 @@ async def edit_service_submit(
 
 
 # ==================== Today's calls ====================
-@crm_router.get("/crm/calls", response_class=HTMLResponse)
+@actions_router.get("/actions/calls", response_class=HTMLResponse)
 async def todays_calls(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/calls.html", {
         "request": request, "user": user,
@@ -472,7 +475,7 @@ async def todays_calls(request: Request, user=Depends(require_login)):
     })
 
 
-@crm_router.post("/crm/deals/{deal_id}/call-outcome")
+@actions_router.post("/actions/deals/{deal_id}/call-outcome")
 async def log_call_outcome(
     request: Request, deal_id: int,
     outcome: str = Form(""), note: str = Form(""), next: str = Form("calls"),
@@ -485,7 +488,7 @@ async def log_call_outcome(
             ctx = _call_view_context(request, user, deal_id)
             if not ctx:
                 response = HTMLResponse("")
-                response.headers["HX-Redirect"] = "/crm/calls"
+                response.headers["HX-Redirect"] = "/actions/calls"
                 return response
             return HTMLResponse(_render_partial("admin/_call_view_body.html", **ctx))
         return HTMLResponse(_render_partial(
@@ -498,8 +501,8 @@ async def log_call_outcome(
             csrf_token=generate_csrf_token(get_session_cookie(request)),
         ))
     if next == "call_view":
-        return RedirectResponse(f"/crm/deals/{deal_id}/call", status_code=303)
-    return RedirectResponse("/crm/calls", status_code=303)
+        return RedirectResponse(f"/actions/deals/{deal_id}/call", status_code=303)
+    return RedirectResponse("/actions/calls", status_code=303)
 
 
 def _call_view_context(request, user, deal_id):
@@ -547,18 +550,18 @@ def _call_view_context(request, user, deal_id):
     }
 
 
-@crm_router.get("/crm/deals/{deal_id}/call", response_class=HTMLResponse)
+@actions_router.get("/actions/deals/{deal_id}/call", response_class=HTMLResponse)
 async def deal_call_view(request: Request, deal_id: int, user=Depends(require_login)):
     """The phone-in-hand view: just what a rep needs mid-call — the number,
     the talk track (pain points/goals/next action), recent history, and the
     outcome buttons. Everything else on the full partner page is noise here."""
     ctx = _call_view_context(request, user, deal_id)
     if not ctx:
-        return RedirectResponse("/crm/calls", status_code=303)
+        return RedirectResponse("/actions/calls", status_code=303)
     return templates.TemplateResponse(request, "admin/call_view.html", ctx)
 
 
-@crm_router.post("/crm/deals/{deal_id}/offer")
+@actions_router.post("/actions/deals/{deal_id}/offer")
 async def set_deal_offer(
     request: Request, deal_id: int,
     offer_id: str = Form(""), csrf_token: str = Form(...), user=Depends(require_login),
@@ -576,11 +579,11 @@ async def set_deal_offer(
             # emits "" or a valid id) — leave the existing offer as-is
             # rather than wiping it on garbage input.
     if deal:
-        return RedirectResponse(f"/crm/deals/{deal_id}/call", status_code=303)
-    return RedirectResponse("/crm/calls", status_code=303)
+        return RedirectResponse(f"/actions/deals/{deal_id}/call", status_code=303)
+    return RedirectResponse("/actions/calls", status_code=303)
 
 
-@crm_router.post("/crm/deals/{deal_id}/offer/new")
+@actions_router.post("/actions/deals/{deal_id}/offer/new")
 async def create_offer_for_deal(
     request: Request, deal_id: int,
     name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
@@ -590,16 +593,16 @@ async def create_offer_for_deal(
     /offers when you think of a better pitch mid-prep."""
     deal = get_deal(deal_id)
     if not deal or not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse(f"/crm/deals/{deal_id}/call", status_code=303)
+        return RedirectResponse(f"/actions/deals/{deal_id}/call", status_code=303)
     offer, error = offers_service.create_offer(
         name, pitch=pitch, proof_point=proof_point, price_anchor=price_anchor,
     )
     if offer:
         update_deal_fields(deal_id, offer_id=offer["id"])
-    return RedirectResponse(f"/crm/deals/{deal_id}/call", status_code=303)
+    return RedirectResponse(f"/actions/deals/{deal_id}/call", status_code=303)
 
 
-@crm_router.post("/crm/deals/{deal_id}/call-tel")
+@actions_router.post("/actions/deals/{deal_id}/call-tel")
 async def deal_call_tel(
     request: Request, deal_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),

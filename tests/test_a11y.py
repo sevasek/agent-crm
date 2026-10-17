@@ -21,7 +21,7 @@ def test_partners_has_skip_link_and_main(logged_in_client):
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
     assert 'href="/contacts/partners" aria-current="page">Partners</a>' in resp.text
-    assert 'href="/crm/calls" aria-current="page"' not in resp.text
+    assert 'href="/actions/calls" aria-current="page"' not in resp.text
 
 
 def test_pipeline_nav_marks_current_page(logged_in_client):
@@ -65,8 +65,8 @@ def test_call_view_marks_calls_nav_current(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example", phone="0400 111 222")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
-    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/actions/deals/{deal_id}/call")
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
-    assert 'href="/crm/calls" aria-current="page">Calls</a>' in resp.text
+    assert 'href="/actions/calls" aria-current="page">Calls</a>' in resp.text
     assert 'href="/crm/deals" aria-current="page"' not in resp.text

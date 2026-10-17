@@ -79,6 +79,76 @@ def _safe_int(value):
     return None
 
 
+# ==================== Apps launcher ====================
+# Fixed-size tiles in a single flex-wrap row (see .apps-grid in style.css)
+# so the count per line is left to the browser rather than fixed server
+# side — that's what lets it reflow on narrow/mobile viewports.
+#
+# Background colours are the first four slots of the house categorical
+# palette (dataviz skill's references/palette.md), assigned in the
+# palette's fixed order for maximum hue variety across just four tiles.
+_PALETTE_SLOTS = [
+    {"name": "blue", "light": "#2a78d6", "dark": "#3987e5"},
+    {"name": "orange", "light": "#eb6834", "dark": "#d95926"},
+    {"name": "aqua", "light": "#1baf7a", "dark": "#199e70"},
+    {"name": "yellow", "light": "#eda100", "dark": "#c98500"},
+]
+
+
+def _srgb_channel(value):
+    value /= 255
+    return value / 12.92 if value <= 0.03928 else ((value + 0.055) / 1.055) ** 2.4
+
+
+def _relative_luminance(hex_color):
+    hex_color = hex_color.lstrip("#")
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (0, 2, 4))
+    return 0.2126 * _srgb_channel(r) + 0.7152 * _srgb_channel(g) + 0.0722 * _srgb_channel(b)
+
+
+def _contrast_ratio(hex_a, hex_b):
+    lum_a, lum_b = _relative_luminance(hex_a), _relative_luminance(hex_b)
+    lighter, darker = max(lum_a, lum_b), min(lum_a, lum_b)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _best_icon_color(bg_hex):
+    """WCAG contrast of white vs. black against bg_hex — never eyeballed."""
+    return "white" if _contrast_ratio(bg_hex, "#ffffff") >= _contrast_ratio(bg_hex, "#000000") else "black"
+
+
+def _apps_menu():
+    specs = [
+        {"label": "Contacts", "href": "/partners", "icon": "contacts"},
+        {"label": "CRM", "href": "/pipeline", "icon": "crm"},
+        {"label": "Actions", "href": "/deals", "icon": "actions"},
+        {"label": "Settings", "href": "/settings", "icon": "settings"},
+    ]
+    apps = []
+    for spec, slot in zip(specs, _PALETTE_SLOTS):
+        apps.append({
+            **spec,
+            "bg_light": slot["light"],
+            "bg_dark": slot["dark"],
+            # The current four palette slots land on the same icon colour
+            # for both their light- and dark-mode hex, so one computed
+            # choice (checked against the light value) covers both; if a
+            # future slot's modes disagree this would need a per-mode icon.
+            "icon_color": _best_icon_color(slot["light"]),
+        })
+    return apps
+
+
+APPS_MENU = _apps_menu()
+
+
+@router.get("/apps", response_class=HTMLResponse)
+async def apps_launcher(request: Request, user=Depends(require_login)):
+    return templates.TemplateResponse(request, "admin/apps.html", {
+        "request": request, "user": user, "apps": APPS_MENU,
+    })
+
+
 @router.get("/partners", response_class=HTMLResponse)
 async def dashboard(request: Request, q: str = "", user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/partners.html", {

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Apps — agent-crm{% endblock %}
+{% block content %}
+<h1>Apps</h1>
+<div class="apps-grid-wrap">
+    <div class="apps-grid">
+        {% for app in apps %}
+        <a class="app-tile" href="{{ app.href }}">
+            <article class="app-tile-box" style="--tile-bg-light: {{ app.bg_light }}; --tile-bg-dark: {{ app.bg_dark }};">
+                <img class="app-tile-icon" src="/static/icons/{{ app.icon }}-{{ app.icon_color }}.svg" alt="">
+            </article>
+            <span class="app-tile-label">{{ app.label }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

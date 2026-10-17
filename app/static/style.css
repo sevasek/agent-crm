@@ -190,6 +190,55 @@ summary:focus-visible {
    (same-origin, later, and more specific). */
 .container.container-wide { max-width: none; padding: 3rem; }
 
+/* Apps launcher: one flex-wrap row of fixed-size square tiles, not grouped
+   into per-row containers — the browser decides how many fit per line, so
+   this reflows naturally down to a single column on mobile. The wrap
+   centres in the space below the heading; the tiles centre within it. */
+.apps-grid-wrap {
+    min-height: calc(100vh - 12rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.apps-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    gap: 3.75rem;
+}
+.app-tile {
+    text-decoration: none; color: inherit;
+    display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
+}
+/* Pico's default <article> card chrome (background + box-shadow) read as an
+   unwanted frame around a solid-colour tile, so both are reset here; the
+   colour itself comes from the two --tile-bg-* custom properties set inline
+   per tile (light/dark pulled from the house categorical palette), picked
+   by the dark-mode guards below the same way the rest of this file does it. */
+.app-tile-box {
+    width: 10rem;
+    height: 10rem;
+    margin-bottom: 0;
+    padding: 0;
+    background: var(--tile-bg-light);
+    box-shadow: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .app-tile-box { background: var(--tile-bg-dark); }
+}
+[data-theme="dark"] .app-tile-box { background: var(--tile-bg-dark); }
+.app-tile-icon { width: 50%; height: 50%; }
+.app-tile:hover .app-tile-box {
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.25);
+    transform: translateY(-2px);
+}
+.app-tile-label { font-weight: 700; font-size: 1.1rem; text-align: center; }
+
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
 

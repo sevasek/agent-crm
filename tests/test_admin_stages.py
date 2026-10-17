@@ -23,7 +23,7 @@ def test_pipeline_board_shows_columns_and_cards(logged_in_client, db):
 
 
 def test_stages_settings_page_lists_stages(logged_in_client, db):
-    resp = logged_in_client.get("/crm/stages")
+    resp = logged_in_client.get("/definitions/stages")
     assert resp.status_code == 200
     for label in ["New", "Contacted", "Qualified", "Nurture", "Proposal", "Won", "Lost"]:
         assert label in resp.text
@@ -31,7 +31,7 @@ def test_stages_settings_page_lists_stages(logged_in_client, db):
 
 
 def test_create_stage_via_admin_form(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/new", data={
+    resp = logged_in_client.post("/definitions/stages/new", data={
         "key": "demo-scheduled", "label": "Demo scheduled",
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
@@ -40,7 +40,7 @@ def test_create_stage_via_admin_form(logged_in_client, db):
 
 
 def test_create_stage_duplicate_shows_error(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/new", data={
+    resp = logged_in_client.post("/definitions/stages/new", data={
         "key": "new", "label": "Duplicate", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
@@ -48,7 +48,7 @@ def test_create_stage_duplicate_shows_error(logged_in_client, db):
 
 
 def test_edit_stage_label_and_roles(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/proposal/edit", data={
+    resp = logged_in_client.post("/definitions/stages/proposal/edit", data={
         "label": "Demo booked", "is_qualified_pool": "on",
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
@@ -59,7 +59,7 @@ def test_edit_stage_label_and_roles(logged_in_client, db):
 
 
 def test_edit_lost_stage_label_resends_is_lost(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/lost/edit", data={
+    resp = logged_in_client.post("/definitions/stages/lost/edit", data={
         "label": "Closed lost", "is_lost": "on",
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
@@ -70,7 +70,7 @@ def test_edit_lost_stage_label_resends_is_lost(logged_in_client, db):
 
 
 def test_edit_stage_cannot_add_is_lost(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/proposal/edit", data={
+    resp = logged_in_client.post("/definitions/stages/proposal/edit", data={
         "label": "Proposal", "is_lost": "on",
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
@@ -79,7 +79,7 @@ def test_edit_stage_cannot_add_is_lost(logged_in_client, db):
 
 
 def test_edit_stage_unchecking_role_clears_it(logged_in_client, db):
-    logged_in_client.post("/crm/stages/qualified/edit", data={
+    logged_in_client.post("/definitions/stages/qualified/edit", data={
         "label": "Qualified", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         # is_qualified_pool omitted == unchecked
     })
@@ -87,7 +87,7 @@ def test_edit_stage_unchecking_role_clears_it(logged_in_client, db):
 
 
 def test_move_stage_up(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/contacted/move", data={
+    resp = logged_in_client.post("/definitions/stages/contacted/move", data={
         "direction": "up", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -99,7 +99,7 @@ def test_delete_stage_in_use_shows_error(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@x.example")
     sid = create_service("Consulting", "consulting")
     create_deal(pid, sid)
-    resp = logged_in_client.post("/crm/stages/new/delete", data={
+    resp = logged_in_client.post("/definitions/stages/new/delete", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
@@ -108,7 +108,7 @@ def test_delete_stage_in_use_shows_error(logged_in_client, db):
 
 
 def test_delete_unused_stage(logged_in_client, db):
-    resp = logged_in_client.post("/crm/stages/proposal/delete", data={
+    resp = logged_in_client.post("/definitions/stages/proposal/delete", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303

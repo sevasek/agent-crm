@@ -3,7 +3,7 @@
 {% block content %}
 <h1>{{ "Edit service" if service else "New service" }}</h1>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<form method="post" action="{{ '/crm/services/' ~ service.id ~ '/edit' if service else '/crm/services/new' }}">
+<form method="post" action="{{ '/definitions/services/' ~ service.id ~ '/edit' if service else '/definitions/services/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="name">Name</label>

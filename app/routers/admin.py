@@ -43,9 +43,11 @@ from app.services import stage_automations
 from app.services import api_keys as api_keys_service
 
 router = APIRouter(prefix="", tags=["admin"])
-# Calls/Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/Lost-reasons/Services
-# live under /crm (each route's own path literal already includes it);
-# Apps, Contacts and Settings stay unprefixed.
+# Calls/Deals/Pipeline/Leads live under /crm; Services/Stages/Automations/
+# Lost-reasons/Offers/ICP live under /definitions (each route's own path
+# literal already includes its prefix) — both share this same router
+# object since it carries no prefix of its own. Apps, Contacts and
+# Settings' account page stay unprefixed.
 crm_router = APIRouter(prefix="", tags=["admin"])
 templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["tel_href"] = to_tel_href
@@ -132,7 +134,7 @@ def _apps_menu():
         {"label": "Contacts", "href": "/contacts/partners", "icon": "contacts"},
         {"label": "CRM", "href": "/crm/pipeline", "icon": "crm"},
         {"label": "Actions", "href": "/crm/deals", "icon": "actions"},
-        {"label": "Settings", "href": "/settings", "icon": "settings"},
+        {"label": "Definitions", "href": "/settings", "icon": "settings"},
     ]
     apps = []
     for spec, slot in zip(specs, _PALETTE_SLOTS):
@@ -378,7 +380,7 @@ async def add_activity(
 
 
 # ==================== Services (catalog) ====================
-@crm_router.get("/crm/services", response_class=HTMLResponse)
+@crm_router.get("/definitions/services", response_class=HTMLResponse)
 async def services_list(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/services.html", {
         "request": request, "user": user, "services": list_services(),
@@ -386,14 +388,14 @@ async def services_list(request: Request, user=Depends(require_login)):
     })
 
 
-@crm_router.get("/crm/services/new", response_class=HTMLResponse)
+@crm_router.get("/definitions/services/new", response_class=HTMLResponse)
 async def new_service_page(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/service_form.html", {
         "request": request, "user": user, "service": None, "csrf_token": generate_csrf_token(get_session_cookie(request)),
     })
 
 
-@crm_router.post("/crm/services/new")
+@crm_router.post("/definitions/services/new")
 async def new_service_submit(
     request: Request,
     name: str = Form(""), slug: str = Form(""), description: str = Form(""),
@@ -418,20 +420,20 @@ async def new_service_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
         }, status_code=400)
     create_service(name, slug, description, nurture_list_slug)
-    return RedirectResponse("/crm/services", status_code=303)
+    return RedirectResponse("/definitions/services", status_code=303)
 
 
-@crm_router.get("/crm/services/{service_id}/edit", response_class=HTMLResponse)
+@crm_router.get("/definitions/services/{service_id}/edit", response_class=HTMLResponse)
 async def edit_service_page(request: Request, service_id: int, user=Depends(require_login)):
     service = get_service(service_id)
     if not service:
-        return RedirectResponse("/crm/services", status_code=303)
+        return RedirectResponse("/definitions/services", status_code=303)
     return templates.TemplateResponse(request, "admin/service_form.html", {
         "request": request, "user": user, "service": service, "csrf_token": generate_csrf_token(get_session_cookie(request)),
     })
 
 
-@crm_router.post("/crm/services/{service_id}/edit")
+@crm_router.post("/definitions/services/{service_id}/edit")
 async def edit_service_submit(
     request: Request, service_id: int,
     name: str = Form(""), description: str = Form(""),
@@ -439,7 +441,7 @@ async def edit_service_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/services", status_code=303)
+        return RedirectResponse("/definitions/services", status_code=303)
     if not (name or "").strip():
         return templates.TemplateResponse(request, "admin/service_form.html", {
             "request": request, "user": user, "service": get_service(service_id),
@@ -456,7 +458,7 @@ async def edit_service_submit(
         service_id, name=name, description=description,
         nurture_list_slug=nurture_list_slug, active=1 if active else 0,
     )
-    return RedirectResponse("/crm/services", status_code=303)
+    return RedirectResponse("/definitions/services", status_code=303)
 
 
 # ==================== Today's calls ====================
@@ -1109,7 +1111,7 @@ _STAGE_ERROR_MESSAGES = {
 }
 
 
-@crm_router.get("/crm/stages", response_class=HTMLResponse)
+@crm_router.get("/definitions/stages", response_class=HTMLResponse)
 async def stages_settings(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/stages.html", {
         "request": request, "user": user,
@@ -1118,7 +1120,7 @@ async def stages_settings(request: Request, user=Depends(require_login)):
     })
 
 
-@crm_router.post("/crm/stages/new")
+@crm_router.post("/definitions/stages/new")
 async def create_stage_submit(
     request: Request,
     key: str = Form(""), label: str = Form(""),
@@ -1127,7 +1129,7 @@ async def create_stage_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/stages", status_code=303)
+        return RedirectResponse("/definitions/stages", status_code=303)
     _, error = pipeline_stages.create_stage(
         key, label,
         is_default=bool(is_default), is_qualified_pool=bool(is_qualified_pool),
@@ -1140,10 +1142,10 @@ async def create_stage_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _STAGE_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/stages", status_code=303)
+    return RedirectResponse("/definitions/stages", status_code=303)
 
 
-@crm_router.post("/crm/stages/{key}/edit")
+@crm_router.post("/definitions/stages/{key}/edit")
 async def edit_stage_submit(
     request: Request, key: str,
     label: str = Form(""),
@@ -1152,7 +1154,7 @@ async def edit_stage_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/stages", status_code=303)
+        return RedirectResponse("/definitions/stages", status_code=303)
     _, error = pipeline_stages.update_stage(
         key, label=label,
         is_default=bool(is_default), is_qualified_pool=bool(is_qualified_pool),
@@ -1165,26 +1167,26 @@ async def edit_stage_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _STAGE_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/stages", status_code=303)
+    return RedirectResponse("/definitions/stages", status_code=303)
 
 
-@crm_router.post("/crm/stages/{key}/move")
+@crm_router.post("/definitions/stages/{key}/move")
 async def move_stage_submit(
     request: Request, key: str,
     direction: str = Form(...), csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if validate_csrf_token(csrf_token, get_session_cookie(request)) and direction in ("up", "down"):
         pipeline_stages.move_stage(key, direction)
-    return RedirectResponse("/crm/stages", status_code=303)
+    return RedirectResponse("/definitions/stages", status_code=303)
 
 
-@crm_router.post("/crm/stages/{key}/delete")
+@crm_router.post("/definitions/stages/{key}/delete")
 async def delete_stage_submit(
     request: Request, key: str,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/stages", status_code=303)
+        return RedirectResponse("/definitions/stages", status_code=303)
     _, error = pipeline_stages.delete_stage(key)
     if error:
         return templates.TemplateResponse(request, "admin/stages.html", {
@@ -1193,7 +1195,7 @@ async def delete_stage_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _STAGE_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/stages", status_code=303)
+    return RedirectResponse("/definitions/stages", status_code=303)
 
 
 # ==================== Offers ====================
@@ -1222,7 +1224,7 @@ def _offer_form_price(price: str):
         return None
 
 
-@crm_router.get("/crm/offers", response_class=HTMLResponse)
+@crm_router.get("/definitions/offers", response_class=HTMLResponse)
 async def offers_settings(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/offers.html", {
         "request": request, "user": user,
@@ -1232,7 +1234,7 @@ async def offers_settings(request: Request, user=Depends(require_login)):
     })
 
 
-@crm_router.post("/crm/offers/new")
+@crm_router.post("/definitions/offers/new")
 async def create_offer_submit(
     request: Request,
     name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
@@ -1242,7 +1244,7 @@ async def create_offer_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/offers", status_code=303)
+        return RedirectResponse("/definitions/offers", status_code=303)
     _, error = offers_service.create_offer(
         name, pitch=pitch, proof_point=proof_point, price_anchor=price_anchor,
         is_default=bool(is_default), active=bool(active),
@@ -1259,10 +1261,10 @@ async def create_offer_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/offers", status_code=303)
+    return RedirectResponse("/definitions/offers", status_code=303)
 
 
-@crm_router.post("/crm/offers/{offer_id}/edit")
+@crm_router.post("/definitions/offers/{offer_id}/edit")
 async def edit_offer_submit(
     request: Request, offer_id: int,
     name: str = Form(""), pitch: str = Form(""), proof_point: str = Form(""),
@@ -1272,7 +1274,7 @@ async def edit_offer_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/offers", status_code=303)
+        return RedirectResponse("/definitions/offers", status_code=303)
     _, error = offers_service.update_offer(
         offer_id, name=name, pitch=pitch, proof_point=proof_point, price_anchor=price_anchor,
         is_default=bool(is_default), active=bool(active),
@@ -1289,16 +1291,16 @@ async def edit_offer_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/offers", status_code=303)
+    return RedirectResponse("/definitions/offers", status_code=303)
 
 
-@crm_router.post("/crm/offers/{offer_id}/delete")
+@crm_router.post("/definitions/offers/{offer_id}/delete")
 async def delete_offer_submit(
     request: Request, offer_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/offers", status_code=303)
+        return RedirectResponse("/definitions/offers", status_code=303)
     _, error = offers_service.delete_offer(offer_id)
     if error:
         return templates.TemplateResponse(request, "admin/offers.html", {
@@ -1308,7 +1310,7 @@ async def delete_offer_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/offers", status_code=303)
+    return RedirectResponse("/definitions/offers", status_code=303)
 
 
 # ==================== ICP fit criteria ====================
@@ -1321,7 +1323,7 @@ _ICP_ERROR_MESSAGES = {
 }
 
 
-@crm_router.get("/crm/icp", response_class=HTMLResponse)
+@crm_router.get("/definitions/icp", response_class=HTMLResponse)
 async def icp_settings(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/icp.html", {
         "request": request, "user": user,
@@ -1332,7 +1334,7 @@ async def icp_settings(request: Request, user=Depends(require_login)):
     })
 
 
-@crm_router.post("/crm/icp/new")
+@crm_router.post("/definitions/icp/new")
 async def create_icp_criterion_submit(
     request: Request,
     label: str = Form(""), field: str = Form(""), operator: str = Form(""),
@@ -1340,7 +1342,7 @@ async def create_icp_criterion_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/icp", status_code=303)
+        return RedirectResponse("/definitions/icp", status_code=303)
     weight_int = _safe_int(weight)
     if weight_int is None:
         return templates.TemplateResponse(request, "admin/icp.html", {
@@ -1363,10 +1365,10 @@ async def create_icp_criterion_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _ICP_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/icp", status_code=303)
+    return RedirectResponse("/definitions/icp", status_code=303)
 
 
-@crm_router.post("/crm/icp/{criterion_id}/edit")
+@crm_router.post("/definitions/icp/{criterion_id}/edit")
 async def edit_icp_criterion_submit(
     request: Request, criterion_id: int,
     label: str = Form(""), field: str = Form(""), operator: str = Form(""),
@@ -1374,7 +1376,7 @@ async def edit_icp_criterion_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/icp", status_code=303)
+        return RedirectResponse("/definitions/icp", status_code=303)
     weight_int = _safe_int(weight)
     if weight_int is None:
         return templates.TemplateResponse(request, "admin/icp.html", {
@@ -1398,17 +1400,17 @@ async def edit_icp_criterion_submit(
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _ICP_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
-    return RedirectResponse("/crm/icp", status_code=303)
+    return RedirectResponse("/definitions/icp", status_code=303)
 
 
-@crm_router.post("/crm/icp/{criterion_id}/delete")
+@crm_router.post("/definitions/icp/{criterion_id}/delete")
 async def delete_icp_criterion_submit(
     request: Request, criterion_id: int,
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if validate_csrf_token(csrf_token, get_session_cookie(request)):
         icp_service.delete_criterion(criterion_id)
-    return RedirectResponse("/crm/icp", status_code=303)
+    return RedirectResponse("/definitions/icp", status_code=303)
 
 
 # ==================== Account settings / API keys ====================
@@ -1571,16 +1573,16 @@ def _scope_id(form, field):
     return None if text == "" else text
 
 
-@crm_router.get("/crm/automations", response_class=HTMLResponse)
+@crm_router.get("/definitions/automations", response_class=HTMLResponse)
 async def automations_settings(request: Request, user=Depends(require_login)):
     return _automation_page(request, user)
 
 
-@crm_router.post("/crm/automations/new")
+@crm_router.post("/definitions/automations/new")
 async def create_automation_submit(request: Request, user=Depends(require_login)):
     form = await request.form()
     if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
-        return RedirectResponse("/crm/automations", status_code=303)
+        return RedirectResponse("/definitions/automations", status_code=303)
     automation, error = stage_automations.create_automation(
         form.get("name") or "",
         form.get("stage_key") or "",
@@ -1593,16 +1595,16 @@ async def create_automation_submit(request: Request, user=Depends(require_login)
         return _automation_page(
             request, user, error=_automation_error_message(error), status_code=400,
         )
-    return RedirectResponse("/crm/automations", status_code=303)
+    return RedirectResponse("/definitions/automations", status_code=303)
 
 
-@crm_router.post("/crm/automations/{automation_id}/edit")
+@crm_router.post("/definitions/automations/{automation_id}/edit")
 async def edit_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
     if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
         return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
     form = await request.form()
     if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
-        return RedirectResponse("/crm/automations", status_code=303)
+        return RedirectResponse("/definitions/automations", status_code=303)
     automation, error = stage_automations.update_automation(
         automation_id,
         name=form.get("name") or "",
@@ -1616,38 +1618,38 @@ async def edit_automation_submit(automation_id: int, request: Request, user=Depe
         return _automation_page(
             request, user, error=_automation_error_message(error), status_code=400,
         )
-    return RedirectResponse("/crm/automations", status_code=303)
+    return RedirectResponse("/definitions/automations", status_code=303)
 
 
-@crm_router.post("/crm/automations/{automation_id}/enabled")
+@crm_router.post("/definitions/automations/{automation_id}/enabled")
 async def toggle_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
     if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
         return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
     form = await request.form()
     if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
-        return RedirectResponse("/crm/automations", status_code=303)
+        return RedirectResponse("/definitions/automations", status_code=303)
     enabled = str(form.get("enabled") or "").strip() in {"1", "true", "on", "yes"}
     _automation, error = stage_automations.update_automation(automation_id, enabled=enabled)
     if error:
         return _automation_page(
             request, user, error=_automation_error_message(error), status_code=400,
         )
-    return RedirectResponse("/crm/automations", status_code=303)
+    return RedirectResponse("/definitions/automations", status_code=303)
 
 
-@crm_router.post("/crm/automations/{automation_id}/delete")
+@crm_router.post("/definitions/automations/{automation_id}/delete")
 async def delete_automation_submit(automation_id: int, request: Request, user=Depends(require_login)):
     if automation_id < 1 or automation_id > _SQLITE_INT_MAX:
         return _automation_page(request, user, error="That automation no longer exists.", status_code=400)
     form = await request.form()
     if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
-        return RedirectResponse("/crm/automations", status_code=303)
+        return RedirectResponse("/definitions/automations", status_code=303)
     _deleted, error = stage_automations.delete_automation(automation_id)
     if error:
         return _automation_page(
             request, user, error=_automation_error_message(error), status_code=400,
         )
-    return RedirectResponse("/crm/automations", status_code=303)
+    return RedirectResponse("/definitions/automations", status_code=303)
 
 
 # ==================== Leads ====================
@@ -1963,19 +1965,19 @@ def _lost_reasons_page(request, user, error=None, status_code=200):
     }, status_code=status_code)
 
 
-@crm_router.get("/crm/lost-reasons", response_class=HTMLResponse)
+@crm_router.get("/definitions/lost-reasons", response_class=HTMLResponse)
 async def lost_reasons_list(request: Request, user=Depends(require_login)):
     return _lost_reasons_page(request, user)
 
 
-@crm_router.post("/crm/lost-reasons/new")
+@crm_router.post("/definitions/lost-reasons/new")
 async def new_lost_reason_submit(
     request: Request,
     name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/lost-reasons", status_code=303)
+        return RedirectResponse("/definitions/lost-reasons", status_code=303)
     if not (name or "").strip():
         return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
     _created, error = create_lost_reason(
@@ -1985,17 +1987,17 @@ async def new_lost_reason_submit(
         return _lost_reasons_page(
             request, user, error=_LOST_REASON_ERRORS.get(error, error), status_code=400,
         )
-    return RedirectResponse("/crm/lost-reasons", status_code=303)
+    return RedirectResponse("/definitions/lost-reasons", status_code=303)
 
 
-@crm_router.post("/crm/lost-reasons/{reason_id}/edit")
+@crm_router.post("/definitions/lost-reasons/{reason_id}/edit")
 async def edit_lost_reason_submit(
     request: Request, reason_id: int,
     name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/crm/lost-reasons", status_code=303)
+        return RedirectResponse("/definitions/lost-reasons", status_code=303)
     if not (name or "").strip():
         return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
     _updated, error = update_lost_reason(
@@ -2005,5 +2007,5 @@ async def edit_lost_reason_submit(
         return _lost_reasons_page(
             request, user, error=_LOST_REASON_ERRORS.get(error, error), status_code=400,
         )
-    return RedirectResponse("/crm/lost-reasons", status_code=303)
+    return RedirectResponse("/definitions/lost-reasons", status_code=303)
 

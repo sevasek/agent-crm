@@ -26,13 +26,23 @@ def test_apps_launcher_contacts_tile_links_to_new_path(logged_in_client):
     assert "<h1>Apps</h1>" not in resp.text
 
 
+def test_apps_launcher_has_separate_settings_and_definitions_tiles(logged_in_client):
+    resp = logged_in_client.get("/apps")
+    assert resp.status_code == 200
+    assert '">Settings</span>' in resp.text
+    assert '">Definitions</span>' in resp.text
+    assert 'href="/settings"' in resp.text
+    assert 'href="/definitions/services"' in resp.text
+
+
 def test_nav_on_apps_page_is_minimal(logged_in_client):
     nav = _nav(logged_in_client.get("/apps").text)
     assert ">Apps<" in nav
+    assert ">Settings<" in nav
     assert ">Logout<" in nav
     for label in ("Pipeline", "Deals", "Leads", "Services", "Stages",
                   "Automations", "Lost reasons", "Offers", "ICP", "Contacts", "Partners",
-                  "Definitions", "Account"):
+                  "Definitions"):
         assert f">{label}<" not in nav
 
 
@@ -41,9 +51,10 @@ def test_nav_on_contacts_page_shows_only_contacts_and_partners(logged_in_client)
     assert ">Apps<" in nav
     assert ">Contacts<" in nav
     assert ">Partners<" in nav
+    assert ">Settings<" in nav
     assert ">Logout<" in nav
     for label in ("Pipeline", "Deals", "Leads", "Services", "Stages",
-                  "Automations", "Lost reasons", "Offers", "ICP", "Definitions", "Account"):
+                  "Automations", "Lost reasons", "Offers", "ICP", "Definitions"):
         assert f">{label}<" not in nav
 
 

@@ -96,14 +96,15 @@ def _safe_int(value):
 # so the count per line is left to the browser rather than fixed server
 # side — that's what lets it reflow on narrow/mobile viewports.
 #
-# Background colours are the first four slots of the house categorical
+# Background colours are the first five slots of the house categorical
 # palette (dataviz skill's references/palette.md), assigned in the
-# palette's fixed order for maximum hue variety across just four tiles.
+# palette's fixed order for maximum hue variety across these tiles.
 _PALETTE_SLOTS = [
     {"name": "blue", "light": "#2a78d6", "dark": "#3987e5"},
     {"name": "orange", "light": "#eb6834", "dark": "#d95926"},
     {"name": "aqua", "light": "#1baf7a", "dark": "#199e70"},
     {"name": "yellow", "light": "#eda100", "dark": "#c98500"},
+    {"name": "magenta", "light": "#e87ba4", "dark": "#d55181"},
 ]
 
 
@@ -134,7 +135,8 @@ def _apps_menu():
         {"label": "Contacts", "href": "/contacts/partners", "icon": "contacts"},
         {"label": "CRM", "href": "/crm/pipeline", "icon": "crm"},
         {"label": "Actions", "href": "/crm/deals", "icon": "actions"},
-        {"label": "Definitions", "href": "/settings", "icon": "settings"},
+        {"label": "Settings", "href": "/settings", "icon": "settings"},
+        {"label": "Definitions", "href": "/definitions/services", "icon": "definitions"},
     ]
     apps = []
     for spec, slot in zip(specs, _PALETTE_SLOTS):
@@ -142,7 +144,7 @@ def _apps_menu():
             **spec,
             "bg_light": slot["light"],
             "bg_dark": slot["dark"],
-            # The current four palette slots land on the same icon colour
+            # The current five palette slots land on the same icon colour
             # for both their light- and dark-mode hex, so one computed
             # choice (checked against the light value) covers both; if a
             # future slot's modes disagree this would need a per-mode icon.

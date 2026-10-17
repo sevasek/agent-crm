@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/vendor/tom-select.min.css">
     <link rel="stylesheet" href="/static/style.css">
 </head>
-<body{% if request.url.path.startswith("/crm") %} class="crm-theme"{% elif request.url.path.startswith("/settings") or request.url.path.startswith("/definitions") %} class="definitions-theme"{% endif %}>
+<body{% if request.url.path.startswith("/crm") %} class="crm-theme"{% elif request.url.path.startswith("/definitions") %} class="definitions-theme"{% endif %}>
     <a class="skip-link" href="#main">Skip to main content</a>
     {% set path = request.url.path %}
     {% if user %}
@@ -17,9 +17,8 @@
         {% if path.startswith("/contacts") %}
         <a class="nav-app-contacts" href="/contacts/partners">Contacts</a>
         <a href="/contacts/partners"{% if path == "/contacts/partners" or path.startswith("/contacts/partners/") %} aria-current="page"{% endif %}>Partners</a>
-        {% elif path.startswith("/settings") or path.startswith("/definitions") %}
-        <a class="nav-app-definitions" href="/settings">Definitions</a>
-        <a href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Account</a>
+        {% elif path.startswith("/definitions") %}
+        <a class="nav-app-definitions" href="/definitions/services">Definitions</a>
         <a href="/definitions/services"{% if path == "/definitions/services" or path.startswith("/definitions/services/") %} aria-current="page"{% endif %}>Services</a>
         <a href="/definitions/stages"{% if path == "/definitions/stages" or path.startswith("/definitions/stages/") %} aria-current="page"{% endif %}>Stages</a>
         <a href="/definitions/automations"{% if path == "/definitions/automations" or path.startswith("/definitions/automations/") %} aria-current="page"{% endif %}>Automations</a>
@@ -33,6 +32,7 @@
         <a href="/crm/deals"{% if path == "/crm/deals" or (path.startswith("/crm/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>
         <a href="/crm/leads"{% if path == "/crm/leads" or path.startswith("/crm/leads/") %} aria-current="page"{% endif %}>Leads</a>
         {% endif %}
+        <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>
         <form class="topnav-logout" method="post" action="/auth/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token | default(request.state.csrf_token) }}"><button type="submit">Logout</button></form>
     </nav>
     {% endif %}
@@ -42,7 +42,7 @@
             {% if request.state.secret_key_is_default and request.state.cookies_insecure %}SECRET_KEY is still the placeholder value, and SECURE_COOKIES is not enabled. See docs/DEPLOY.md for how to fix both.
             {% elif request.state.secret_key_is_default %}SECRET_KEY is still the placeholder value. See docs/DEPLOY.md for how to fix it.
             {% else %}SECURE_COOKIES is not enabled. See docs/DEPLOY.md for how to fix it.
-            {% endif %}Sessions and CSRF tokens are weaker until this is done.<br>New here? Visit <a href="/settings">Definitions</a> to change your password and set up API keys.</p>
+            {% endif %}Sessions and CSRF tokens are weaker until this is done.<br>New here? Visit <a href="/settings">Settings</a> to change your password and set up API keys.</p>
         {% endif %}
         {% block content %}{% endblock %}
     </main>

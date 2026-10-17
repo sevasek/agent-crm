@@ -30,7 +30,7 @@ def test_banner_shows_with_default_env(client, monkeypatch):
     assert "SECRET_KEY is still the placeholder value" in resp.text
     assert "SECURE_COOKIES is not enabled" in resp.text
     assert "See docs/DEPLOY.md for how to fix both." in resp.text
-    assert 'New here? Visit <a href="/settings">Definitions</a>' in resp.text
+    assert 'New here? Visit <a href="/settings">Settings</a>' in resp.text
 
 
 def test_banner_hidden_when_env_is_fixed(client, monkeypatch):

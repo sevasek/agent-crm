@@ -2,16 +2,14 @@
 {% block title %}Apps — agent-crm{% endblock %}
 {% block content %}
 <h1>Apps</h1>
-<div class="apps-grid">
-    {% for row in app_rows %}
-    <div class="grid apps-grid-row">
-        {% for app in row %}
+<div class="apps-grid-wrap">
+    <div class="apps-grid">
+        {% for app in apps %}
         <a class="app-tile" href="{{ app.href }}">
             <article class="app-tile-box"></article>
             <span class="app-tile-label">{{ app.label }}</span>
         </a>
         {% endfor %}
     </div>
-    {% endfor %}
 </div>
 {% endblock %}

@@ -193,21 +193,30 @@ summary:focus-visible {
 /* Partners page requested double the default container padding. */
 .container.partners-page { padding: 3rem; }
 
-/* Apps launcher: rows of square tiles. Each row is its own Pico .grid so
-   that row's tiles divide its width evenly regardless of how many other
-   rows have (admin.py puts any remainder count on the bottom row). Column
-   gap is halved from Pico's default spacing; the tile itself sits at 50%
-   of its grid cell (centred), with its text label as a separate caption
-   below the square rather than inside it. */
-.apps-grid-row { margin-bottom: 1.5rem; --pico-grid-column-gap: 0.5rem; }
+/* Apps launcher: one flex-wrap row of fixed-size square tiles, not grouped
+   into per-row containers — the browser decides how many fit per line, so
+   this reflows naturally down to a single column on mobile. The wrap
+   centres in the space below the heading; the tiles centre within it. */
+.apps-grid-wrap {
+    min-height: calc(100vh - 12rem);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.apps-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    gap: 3rem;
+}
 .app-tile {
     text-decoration: none; color: inherit;
-    display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
-    max-width: 50%; margin: 0 auto;
+    display: flex; flex-direction: column; align-items: center; gap: 0.75rem;
 }
 .app-tile-box {
-    aspect-ratio: 1 / 1;
-    width: 100%;
+    width: 8rem;
+    height: 8rem;
     margin-bottom: 0;
     transition: box-shadow 0.15s, transform 0.15s;
 }
@@ -215,7 +224,7 @@ summary:focus-visible {
     box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
     transform: translateY(-2px);
 }
-.app-tile-label { font-weight: 600; font-size: 0.75rem; text-align: center; }
+.app-tile-label { font-weight: 700; font-size: 1.1rem; text-align: center; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }

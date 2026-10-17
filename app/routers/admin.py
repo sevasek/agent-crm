@@ -80,10 +80,9 @@ def _safe_int(value):
 
 
 # ==================== Apps launcher ====================
-# Odoo-style grid: tiles grouped into roughly sqrt(n) rows, each row spread
-# evenly across its own width (a Pico `.grid` auto-sizes columns to however
-# many tiles are placed in it), with any remainder tile count landing on the
-# bottom row rather than an earlier one.
+# Fixed-size tiles in a single flex-wrap row (see .apps-grid in style.css)
+# so the count per line is left to the browser rather than fixed server
+# side — that's what lets it reflow on narrow/mobile viewports.
 APPS_MENU = [
     {"label": "Contacts", "href": "/partners"},
     {"label": "CRM", "href": "/pipeline"},
@@ -92,24 +91,10 @@ APPS_MENU = [
 ]
 
 
-def _apps_grid_rows(apps):
-    n = len(apps)
-    if n == 0:
-        return []
-    row_count = max(1, round(math.sqrt(n)))
-    per_row, remainder = divmod(n, row_count)
-    rows, start = [], 0
-    for i in range(row_count):
-        size = per_row + (remainder if i == row_count - 1 else 0)
-        rows.append(apps[start:start + size])
-        start += size
-    return rows
-
-
 @router.get("/apps", response_class=HTMLResponse)
 async def apps_launcher(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/apps.html", {
-        "request": request, "user": user, "app_rows": _apps_grid_rows(APPS_MENU),
+        "request": request, "user": user, "apps": APPS_MENU,
     })
 
 

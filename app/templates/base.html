@@ -28,7 +28,7 @@
         <a href="/definitions/lost-reasons"{% if path == "/definitions/lost-reasons" or path.startswith("/definitions/lost-reasons/") %} aria-current="page"{% endif %}>Lost reasons</a>
         <a href="/definitions/offers"{% if path == "/definitions/offers" or path.startswith("/definitions/offers/") %} aria-current="page"{% endif %}>Offers</a>
         <a href="/definitions/icp"{% if path == "/definitions/icp" or path.startswith("/definitions/icp/") %} aria-current="page"{% endif %}>ICP</a>
-        {% elif path != "/apps" %}
+        {% elif path.startswith("/crm") %}
         <a class="nav-app-crm" href="/crm/pipeline">CRM</a>
         <a href="/crm/pipeline"{% if path == "/crm/pipeline" or path.startswith("/crm/pipeline/") %} aria-current="page"{% endif %}>Pipeline</a>
         <a href="/crm/deals"{% if path == "/crm/deals" or (path.startswith("/crm/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>

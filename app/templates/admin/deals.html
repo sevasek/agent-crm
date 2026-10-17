@@ -28,7 +28,7 @@
     <tr><th>Partner</th><th>Service</th><th>Type</th><th>Stage</th><th>Tags</th><th>Value</th><th>Next action</th><th></th></tr>
     {% for d in deals %}
     <tr>
-        <td>{% if d.partner_id %}<a href="/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td>{% if d.partner_id %}<a href="/contacts/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">—</span>{% endif %}</td>
         <td>{{ d.service_name }}{% if d.parent_deal_id %}<div class="muted">follow-on of #{{ d.parent_deal_id }}</div>{% endif %}</td>
         <td>{% set record = d %}{% include "admin/_record_badges.html" %}</td>
         <td><span class="pill">{{ d.stage }}</span></td>

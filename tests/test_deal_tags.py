@@ -292,7 +292,7 @@ def test_deals_page_shows_tags_and_filters(logged_in_client, db):
     assert "Jane Doe" in both.text
     assert "Other" in both.text
 
-    partner = logged_in_client.get(f"/partners/{pid}")
+    partner = logged_in_client.get(f"/contacts/partners/{pid}")
     assert "clinic" in partner.text
     assert f"/deals?tag=clinic" in partner.text
 

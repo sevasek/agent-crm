@@ -271,18 +271,53 @@ def update_partner(partner_id: int, **fields):
         return cursor.rowcount > 0
 
 
-def list_partners(search: str = ""):
+# Column -> ORDER BY expression, for the /contacts/partners sortable headers.
+# `tags` sorts by each partner's tags joined alphabetically (NULL/empty last
+# within a direction, which SQLite's default NULLS handling already does).
+_SORT_COLUMNS = {
+    "name": "p.name COLLATE NOCASE",
+    "type": "p.is_company",
+    "email": "p.email COLLATE NOCASE",
+    "phone": "p.phone COLLATE NOCASE",
+    "tags": (
+        "(SELECT GROUP_CONCAT(tag, ', ') FROM "
+        "(SELECT tag FROM partner_tags WHERE partner_id = p.id ORDER BY tag)) COLLATE NOCASE"
+    ),
+}
+
+
+def list_partners(search: str = "", tags=None, sort: str = "name", direction: str = "asc"):
+    """`tags` is an AND filter: a partner must carry every listed tag."""
+    sort_col = _SORT_COLUMNS.get(sort, _SORT_COLUMNS["name"])
+    order_dir = "DESC" if direction == "desc" else "ASC"
+    where_clauses = []
+    params = []
+    if search:
+        like = f"%{search.strip()}%"
+        where_clauses.append(
+            "(p.name LIKE ? OR p.email LIKE ? OR IFNULL(p.phone, '') LIKE ? OR IFNULL(p.website, '') LIKE ?)"
+        )
+        params.extend([like, like, like, like])
+    wanted_tags = [t for t in (tags or []) if t]
+    if wanted_tags:
+        placeholders = ",".join("?" * len(wanted_tags))
+        where_clauses.append(f"""
+            p.id IN (
+                SELECT partner_id FROM partner_tags
+                WHERE tag IN ({placeholders})
+                GROUP BY partner_id
+                HAVING COUNT(DISTINCT tag) = ?
+            )
+        """)
+        params.extend(wanted_tags)
+        params.append(len(wanted_tags))
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     with get_db() as db:
-        if search:
-            like = f"%{search.strip()}%"
-            rows = db.execute("""
-                SELECT * FROM partners
-                WHERE name LIKE ? OR email LIKE ? OR IFNULL(phone, '') LIKE ?
-                   OR IFNULL(website, '') LIKE ?
-                ORDER BY name COLLATE NOCASE ASC
-            """, (like, like, like, like)).fetchall()
-        else:
-            rows = db.execute("SELECT * FROM partners ORDER BY name COLLATE NOCASE ASC").fetchall()
+        rows = db.execute(f"""
+            SELECT p.* FROM partners p
+            {where_sql}
+            ORDER BY {sort_col} {order_dir}, p.name COLLATE NOCASE ASC
+        """, params).fetchall()
         return [dict(r) for r in rows]
 
 

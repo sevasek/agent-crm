@@ -255,7 +255,7 @@ def test_calls_page_shows_ranked_row(logged_in_client):
     assert f"/deals/{deal_id}/call" in resp.text
     assert "Consulting" in resp.text
     assert "Call Jane" in resp.text
-    assert f"/partners/{pid}" in resp.text
+    assert f"/contacts/partners/{pid}" in resp.text
     assert "/100" in resp.text
     assert "How the score is calculated" not in resp.text
     assert "Value estimate" not in resp.text

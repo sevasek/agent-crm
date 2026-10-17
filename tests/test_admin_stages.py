@@ -126,5 +126,5 @@ def test_partner_detail_stage_dropdown_uses_dynamic_stages(logged_in_client, db)
     pid = create_partner("Jane Doe", email="jane@x.example")
     sid = create_service("Consulting", "consulting")
     create_deal(pid, sid)
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert "Drip campaign" in resp.text

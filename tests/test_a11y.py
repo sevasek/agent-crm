@@ -17,10 +17,10 @@ def test_login_has_skip_link_and_main(client):
 
 
 def test_partners_has_skip_link_and_main(logged_in_client):
-    resp = logged_in_client.get("/partners")
+    resp = logged_in_client.get("/contacts/partners")
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
-    assert 'href="/partners" aria-current="page">Partners</a>' in resp.text
+    assert 'href="/contacts/partners" aria-current="page">Partners</a>' in resp.text
     assert 'href="/calls" aria-current="page"' not in resp.text
 
 
@@ -29,7 +29,7 @@ def test_pipeline_nav_marks_current_page(logged_in_client):
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
     assert 'href="/pipeline" aria-current="page">Pipeline</a>' in resp.text
-    assert 'href="/partners" aria-current="page"' not in resp.text
+    assert 'href="/contacts/partners" aria-current="page"' not in resp.text
 
 
 def test_leads_nav_marks_current_page(logged_in_client):

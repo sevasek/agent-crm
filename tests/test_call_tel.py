@@ -84,7 +84,7 @@ def test_deal_call_tel_unparseable_phone_does_not_log(logged_in_client, db):
 def test_partner_call_tel_logs_without_deal(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@x.example", phone="0400 111 222")
     resp = logged_in_client.post(
-        f"/partners/{pid}/call-tel",
+        f"/contacts/partners/{pid}/call-tel",
         data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
@@ -93,7 +93,7 @@ def test_partner_call_tel_logs_without_deal(logged_in_client, db):
 
 
 def test_partner_call_tel_requires_login(client, db):
-    resp = client.post("/partners/1/call-tel", data={"csrf_token": "x"}, follow_redirects=False)
+    resp = client.post("/contacts/partners/1/call-tel", data={"csrf_token": "x"}, follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
@@ -192,6 +192,6 @@ def test_call_outcome_from_call_view_redirects_back_to_call_view(logged_in_clien
 
 def test_partner_detail_phone_uses_tel_link(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@x.example", phone="0400 111 222")
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert 'href="tel:0400111222"' in resp.text
-    assert f"logCallTap('/partners/{pid}/call-tel'" in resp.text
+    assert f"logCallTap('/contacts/partners/{pid}/call-tel'" in resp.text

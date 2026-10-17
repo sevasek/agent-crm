@@ -152,7 +152,7 @@ async def login_submit(
 
     user = authenticate_user(email, password)
     if user:
-        response = RedirectResponse("/partners", status_code=303)
+        response = RedirectResponse("/contacts/partners", status_code=303)
         clear_session_cookie(response)
         set_session_cookie(response, user["id"], user["session_version"])
         return response
@@ -179,7 +179,7 @@ async def logout(request: Request, csrf_token: str = Form("")):
     # not reject requests that omit both headers, so this also requires the
     # session-bound CSRF token from the nav form.
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
-        return RedirectResponse("/partners", status_code=303)
+        return RedirectResponse("/contacts/partners", status_code=303)
     response = RedirectResponse("/auth/login", status_code=303)
     clear_session_cookie(response)
     return response

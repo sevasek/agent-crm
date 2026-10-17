@@ -206,7 +206,7 @@ def test_due_filter_keeps_stage(logged_in_client):
 
 def test_partner_detail_shows_overdue_pill(logged_in_client):
     pid, _ = _setup("2000-01-01", name="Jane Doe")
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "pill-overdue" in resp.text
     assert 'action="/deals/' in resp.text
@@ -216,7 +216,7 @@ def test_partner_detail_shows_overdue_pill(logged_in_client):
 def test_partner_timeline_hides_due_gate_marker(logged_in_client):
     pid, _ = _setup("2000-01-01", name="Jane Doe")
     run_staleness_gate(today=TODAY)
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "due-gate:" not in resp.text
     assert "Follow-up overdue" in resp.text
@@ -242,7 +242,7 @@ def test_gate_logs_due_then_overdue_as_separate_activities(db):
 def test_partner_detail_can_snooze_next_action(logged_in_client):
     import re
     pid, deal_id = _setup("2000-01-01", next_action="Call Jane")
-    page = logged_in_client.get(f"/partners/{pid}")
+    page = logged_in_client.get(f"/contacts/partners/{pid}")
     token = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
     resp = logged_in_client.post(
         f"/deals/{deal_id}/next-action",
@@ -261,7 +261,7 @@ def test_partner_detail_can_snooze_next_action(logged_in_client):
 
 def test_date_picker_uses_yyyy_mm_dd_even_if_stored_iso_datetime(logged_in_client):
     pid, _ = _setup("2026-08-30T09:00:00")
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert 'value="2026-08-30"' in resp.text
     assert "2026-08-30T09:00:00" not in resp.text

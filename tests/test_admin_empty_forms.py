@@ -19,7 +19,7 @@ def _html_client_error(resp, status=400):
 
 def test_new_partner_empty_name_is_html_error_not_422(logged_in_client, db):
     before = {p["id"] for p in list_partners()}
-    resp = logged_in_client.post("/partners/new", data={
+    resp = logged_in_client.post("/contacts/partners/new", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
     })
@@ -31,7 +31,7 @@ def test_new_partner_empty_name_is_html_error_not_422(logged_in_client, db):
 
 def test_edit_partner_empty_name_is_html_error_not_422(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example")
-    resp = logged_in_client.post(f"/partners/{pid}/edit", data={
+    resp = logged_in_client.post(f"/contacts/partners/{pid}/edit", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         "name": "",
     })
@@ -41,7 +41,7 @@ def test_edit_partner_empty_name_is_html_error_not_422(logged_in_client, db):
 
 
 def test_partner_missing_csrf_still_422(logged_in_client, db):
-    resp = logged_in_client.post("/partners/new", data={"name": "Acme"})
+    resp = logged_in_client.post("/contacts/partners/new", data={"name": "Acme"})
     assert resp.status_code == 422
     assert "application/json" in resp.headers.get("content-type", "")
 

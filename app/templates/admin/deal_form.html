@@ -115,7 +115,7 @@
     </div>
     <button type="submit">{{ "Save" if deal else "Create opportunity" }}</button>
     {% if deal and deal.partner_id %}
-    <a class="btn btn-secondary" href="/partners/{{ deal.partner_id }}">Cancel</a>
+    <a class="btn btn-secondary" href="/contacts/partners/{{ deal.partner_id }}">Cancel</a>
     {% elif deal %}
     <a class="btn btn-secondary" href="/deals">Cancel</a>
     {% endif %}

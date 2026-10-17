@@ -306,15 +306,15 @@ def test_leads_route_still_works_when_docs_disabled(client, monkeypatch):
 
 
 def test_admin_bookmark_redirects_to_flat_path(client):
-    resp = client.get("/admin/partners", follow_redirects=False)
+    resp = client.get("/admin/contacts/partners", follow_redirects=False)
     assert resp.status_code == 307
-    assert resp.headers["location"] == "/partners"
+    assert resp.headers["location"] == "/contacts/partners"
 
 
 def test_admin_root_redirects_to_partners(client):
     resp = client.get("/admin", follow_redirects=False)
     assert resp.status_code == 307
-    assert resp.headers["location"] == "/partners"
+    assert resp.headers["location"] == "/contacts/partners"
 
 
 def test_admin_redirect_keeps_query_string(client):
@@ -326,13 +326,13 @@ def test_admin_redirect_keeps_query_string(client):
 def test_admin_redirect_rejects_protocol_relative_target(client):
     from app.main import compat_admin_redirect_target
 
-    assert compat_admin_redirect_target("/evil.example") == "/partners"
-    assert compat_admin_redirect_target("//evil.example") == "/partners"
-    assert compat_admin_redirect_target("https://evil.example") == "/partners"
+    assert compat_admin_redirect_target("/evil.example") == "/contacts/partners"
+    assert compat_admin_redirect_target("//evil.example") == "/contacts/partners"
+    assert compat_admin_redirect_target("https://evil.example") == "/contacts/partners"
     assert compat_admin_redirect_target("deals") == "/deals"
     assert compat_admin_redirect_target("deals", "due=1") == "/deals?due=1"
 
     resp = client.get("/admin//evil.example", follow_redirects=False)
     assert resp.status_code == 307
-    assert resp.headers["location"] == "/partners"
+    assert resp.headers["location"] == "/contacts/partners"
     assert not resp.headers["location"].startswith("//")

@@ -188,6 +188,9 @@ summary:focus-visible {
    max-width media queries (same-origin, later, and more specific). */
 .container.container-wide { max-width: none; }
 
+/* Partners page requested double the default container padding. */
+.container.partners-page { padding: 3rem; }
+
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
 

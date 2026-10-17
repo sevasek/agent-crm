@@ -97,9 +97,10 @@ def _check_secret_key():
 
 
 _CRM_SECTIONS = (
-    "calls", "deals", "pipeline", "stages", "offers", "icp",
+    "deals", "pipeline", "stages", "offers", "icp",
     "automations", "leads", "lost-reasons", "services",
 )
+_ACTIONS_SECTIONS = ("calls",)
 
 
 def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
@@ -109,8 +110,8 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
     `/{rest_of_path}` would turn `/admin//evil.example` into
     `Location: //evil.example`. Only a single relative path is allowed;
     query string is forwarded so `/admin/deals?due=1` keeps the Due filter.
-    Sections that now live under `/crm` (see app/routers/admin.py's
-    crm_router) get that prefix added back in.
+    Sections that now live under `/crm` or `/actions` (see app/routers/
+    admin.py's crm_router/actions_router) get that prefix added back in.
     """
     if (
         not rest_of_path
@@ -122,7 +123,12 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
     ):
         return "/contacts/partners"
     first_segment = rest_of_path.split("/", 1)[0]
-    prefix = "/crm" if first_segment in _CRM_SECTIONS else ""
+    if first_segment in _ACTIONS_SECTIONS:
+        prefix = "/actions"
+    elif first_segment in _CRM_SECTIONS:
+        prefix = "/crm"
+    else:
+        prefix = ""
     target = f"{prefix}/{rest_of_path}"
     if query:
         target = f"{target}?{query}"
@@ -196,6 +202,7 @@ def create_app() -> FastAPI:
     application.include_router(auth.router)
     application.include_router(admin.router)
     application.include_router(admin.crm_router)
+    application.include_router(admin.actions_router)
     application.include_router(api.router)
     application.include_router(mcp.router)
     application.include_router(oauth.router)

@@ -208,7 +208,15 @@ summary:focus-visible {
 }
 [data-theme="dark"] .topnav .nav-app-crm { color: #d95926; }
 
-/* /crm/* pages (Calls/Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/
+/* Matches the Actions tile's aqua slot in _PALETTE_SLOTS (app/routers/admin.py) —
+   update both if that palette assignment ever changes. */
+.topnav .nav-app-actions { font-weight: 700; color: #1baf7a; }
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .topnav .nav-app-actions { color: #199e70; }
+}
+[data-theme="dark"] .topnav .nav-app-actions { color: #199e70; }
+
+/* /crm/* pages (Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/
    Lost-reasons/Services) use the CRM tile's orange instead of the brand
    blue for buttons. Redefining --accent alone isn't enough: the :root/
    dark-mode blocks above set --pico-primary-background etc. to
@@ -262,6 +270,51 @@ body.crm-theme {
     --pico-primary-hover-background: #eb6834;
     --pico-primary-hover-border: #eb6834;
     --pico-primary-hover-underline: #eb6834;
+}
+
+/* /actions/* pages (Calls, the per-deal call view/outcome/offer actions)
+   use the Actions tile's aqua instead of the brand blue, same mechanism and
+   black-text reasoning as .crm-theme above — verified contrast: white is
+   2.82:1 / 3.41:1 (fails WCAG AA), black is 7.46:1 / 6.17:1. Also carries
+   --link, same reason as .crm-theme: .btn-secondary's text color reads
+   --link, not --accent. */
+body.actions-theme {
+    --accent: #1baf7a;
+    --link: #1baf7a;
+    --pico-primary: #1baf7a;
+    --pico-primary-background: #1baf7a;
+    --pico-primary-border: #1baf7a;
+    --pico-primary-hover: #199e70;
+    --pico-primary-hover-background: #199e70;
+    --pico-primary-hover-border: #199e70;
+    --pico-primary-hover-underline: #199e70;
+    --pico-primary-underline: #1baf7a;
+    --pico-primary-focus: rgba(27, 175, 122, 0.25);
+    --pico-primary-inverse: #000;
+}
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body.actions-theme {
+        --accent: #199e70;
+        --link: #199e70;
+        --pico-primary: #199e70;
+        --pico-primary-background: #199e70;
+        --pico-primary-border: #199e70;
+        --pico-primary-underline: #199e70;
+        --pico-primary-hover-background: #1baf7a;
+        --pico-primary-hover-border: #1baf7a;
+        --pico-primary-hover-underline: #1baf7a;
+    }
+}
+[data-theme="dark"] body.actions-theme {
+    --accent: #199e70;
+    --link: #199e70;
+    --pico-primary: #199e70;
+    --pico-primary-background: #199e70;
+    --pico-primary-border: #199e70;
+    --pico-primary-underline: #199e70;
+    --pico-primary-hover-background: #1baf7a;
+    --pico-primary-hover-border: #1baf7a;
+    --pico-primary-hover-underline: #1baf7a;
 }
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }

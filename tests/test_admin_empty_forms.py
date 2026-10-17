@@ -212,7 +212,7 @@ def test_call_outcome_empty_does_not_422(logged_in_client, db):
     set_deal_stage(deal_id, "contacted")
     set_deal_stage(deal_id, "qualified")
     resp = logged_in_client.post(
-        f"/crm/deals/{deal_id}/call-outcome",
+        f"/actions/deals/{deal_id}/call-outcome",
         data={"outcome": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
@@ -226,7 +226,7 @@ def test_call_view_empty_offer_name_does_not_422(logged_in_client, db):
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
     resp = logged_in_client.post(
-        f"/crm/deals/{deal_id}/offer/new",
+        f"/actions/deals/{deal_id}/offer/new",
         data={"name": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )

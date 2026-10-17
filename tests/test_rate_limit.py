@@ -245,7 +245,7 @@ def test_login_succeeds_after_failed_attempts(client):
         follow_redirects=False,
     )
     assert ok.status_code == 303
-    assert ok.headers["location"] == "/partners"
+    assert ok.headers["location"] == "/contacts/partners"
 
 
 def test_sixth_failed_login_is_429(client):

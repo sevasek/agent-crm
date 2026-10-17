@@ -112,7 +112,7 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
         or "\\" in rest_of_path
         or "//" in rest_of_path
     ):
-        return "/partners"
+        return "/contacts/partners"
     target = f"/{rest_of_path}"
     if query:
         target = f"{target}?{query}"
@@ -224,7 +224,7 @@ def create_app() -> FastAPI:
     @application.get("/", response_class=HTMLResponse)
     async def root(request: Request, user=Depends(get_current_user)):
         if user:
-            return RedirectResponse("/partners")
+            return RedirectResponse("/contacts/partners")
         return RedirectResponse("/auth/login")
 
     @application.get("/health")
@@ -258,7 +258,7 @@ def create_app() -> FastAPI:
     # /admin prefix was dropped from every route.
     @application.get("/admin", include_in_schema=False)
     async def admin_root_redirect():
-        return RedirectResponse("/partners", status_code=307)
+        return RedirectResponse("/contacts/partners", status_code=307)
 
     @application.get("/admin/{rest_of_path:path}", include_in_schema=False)
     async def admin_redirect(request: Request, rest_of_path: str):

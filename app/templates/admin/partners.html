@@ -3,21 +3,41 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Partners</h1>
-<form method="get" action="/partners" style="margin-bottom: 1rem;">
+<form method="get" action="/contacts/partners" style="margin-bottom: 1rem;">
     <input type="text" name="q" value="{{ q }}" placeholder="Search name or email" aria-label="Search partners" style="max-width: 24rem;">
 </form>
-<a class="btn" href="/partners/new">+ New partner</a>
+<a class="btn" href="/contacts/partners/new">+ New partner</a>
+{% if current_tags %}
+<div class="tag-filters">
+    Filtering by:
+    {% for t in current_tags %}
+    <a class="pill pill-tag pill-tag-on" href="{{ remove_tag_links[t] }}">{{ t }} &times;</a>
+    {% endfor %}
+</div>
+{% endif %}
 <table>
-    <tr><th>Name</th><th>Type</th><th>Email</th><th>Phone</th></tr>
+    <tr>
+        <th><a href="{{ sort_links.name.href }}">Name{% if sort_links.name.dir %} {{ "↑" if sort_links.name.dir == "asc" else "↓" }}{% endif %}</a></th>
+        <th><a href="{{ sort_links.type.href }}">Type{% if sort_links.type.dir %} {{ "↑" if sort_links.type.dir == "asc" else "↓" }}{% endif %}</a></th>
+        <th><a href="{{ sort_links.email.href }}">Email{% if sort_links.email.dir %} {{ "↑" if sort_links.email.dir == "asc" else "↓" }}{% endif %}</a></th>
+        <th><a href="{{ sort_links.phone.href }}">Phone{% if sort_links.phone.dir %} {{ "↑" if sort_links.phone.dir == "asc" else "↓" }}{% endif %}</a></th>
+        <th><a href="{{ sort_links.tags.href }}">Tags{% if sort_links.tags.dir %} {{ "↑" if sort_links.tags.dir == "asc" else "↓" }}{% endif %}</a></th>
+    </tr>
     {% for p in partners %}
     <tr>
-        <td><a href="/partners/{{ p.id }}">{{ p.name }}</a></td>
+        <td><a href="/contacts/partners/{{ p.id }}">{{ p.name }}</a></td>
         <td>{{ "Company" if p.is_company else "Person" }}</td>
-        <td>{{ p.email or "" }}</td>
+        <td>{% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% endif %}</td>
         <td class="nowrap">{{ p.phone or "" }}</td>
+        <td>
+            {% for t in p.tags[:3] %}
+            <a class="pill pill-tag{% if t in current_tags %} pill-tag-on{% endif %}" href="{{ add_tag_link(t) }}">{{ t }}</a>
+            {% endfor %}
+            {% if p.tags|length > 3 %}<span class="muted">+{{ p.tags|length - 3 }} more</span>{% endif %}
+        </td>
     </tr>
     {% else %}
-    <tr><td colspan="4" class="muted">No partners yet.</td></tr>
+    <tr><td colspan="5" class="muted">No partners yet.</td></tr>
     {% endfor %}
 </table>
 {% endblock %}

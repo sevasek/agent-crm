@@ -15,10 +15,10 @@ def test_bumping_session_version_invalidates_an_outstanding_cookie(client, db):
     user_id = create_user("test@example.com", "Test", "password123")
     token = cookie_signer.dumps({"user_id": user_id, "sv": 0})
     client.cookies.set("session", token)
-    assert client.get("/partners").status_code == 200
+    assert client.get("/contacts/partners").status_code == 200
 
     bump_session_version(user_id)
-    resp = client.get("/partners", follow_redirects=False)
+    resp = client.get("/contacts/partners", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
@@ -52,7 +52,7 @@ def test_password_change_via_settings_keeps_current_session_but_logs_out_others(
 
     other = TestClient(client.app)
     other.cookies.set("session", cookie_signer.dumps({"user_id": user_id, "sv": 0}))
-    assert other.get("/partners").status_code == 200
+    assert other.get("/contacts/partners").status_code == 200
 
     page = client.get("/settings")
     csrf = _csrf_from(page.text)
@@ -63,8 +63,8 @@ def test_password_change_via_settings_keeps_current_session_but_logs_out_others(
     assert resp.status_code == 200
     assert "Password changed" in resp.text
 
-    assert client.get("/partners").status_code == 200
-    other_resp = other.get("/partners", follow_redirects=False)
+    assert client.get("/contacts/partners").status_code == 200
+    other_resp = other.get("/contacts/partners", follow_redirects=False)
     assert other_resp.status_code == 303
     assert other_resp.headers["location"] == "/auth/login"
 
@@ -78,7 +78,7 @@ def test_password_change_wrong_current_password_shows_error(logged_in_client):
     })
     assert resp.status_code == 400
     assert "incorrect" in resp.text
-    assert logged_in_client.get("/partners").status_code == 200  # still logged in
+    assert logged_in_client.get("/contacts/partners").status_code == 200  # still logged in
 
 
 def test_logout_everywhere_logs_out_other_sessions_but_not_current(client, db):
@@ -87,7 +87,7 @@ def test_logout_everywhere_logs_out_other_sessions_but_not_current(client, db):
 
     other = TestClient(client.app)
     other.cookies.set("session", cookie_signer.dumps({"user_id": user_id, "sv": 0}))
-    assert other.get("/partners").status_code == 200
+    assert other.get("/contacts/partners").status_code == 200
 
     page = client.get("/settings")
     csrf = _csrf_from(page.text)
@@ -96,7 +96,7 @@ def test_logout_everywhere_logs_out_other_sessions_but_not_current(client, db):
     )
     assert resp.status_code == 303
 
-    assert client.get("/partners").status_code == 200
-    other_resp = other.get("/partners", follow_redirects=False)
+    assert client.get("/contacts/partners").status_code == 200
+    other_resp = other.get("/contacts/partners", follow_redirects=False)
     assert other_resp.status_code == 303
     assert other_resp.headers["location"] == "/auth/login"

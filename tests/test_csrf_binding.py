@@ -13,11 +13,11 @@ def test_token_minted_logged_out_is_rejected_against_a_logged_in_session(client)
     user_id = create_user("victim@example.com", "Victim", "password123")
     client.cookies.set("session", cookie_signer.dumps({"user_id": user_id, "sv": 0}))
 
-    resp = client.post("/partners/new", data={
+    resp = client.post("/contacts/partners/new", data={
         "name": "Forged Partner", "csrf_token": logged_out_token,
     }, follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/partners/new"  # re-shown, not saved
+    assert resp.headers["location"] == "/contacts/partners/new"  # re-shown, not saved
 
 
 def test_token_minted_for_one_session_is_rejected_for_another(client):
@@ -30,17 +30,17 @@ def test_token_minted_for_one_session_is_rejected_for_another(client):
 
 def test_token_bound_to_current_session_is_accepted(logged_in_client):
     token = generate_csrf_token(logged_in_client.cookies.get("session"))
-    resp = logged_in_client.post("/partners/new", data={
+    resp = logged_in_client.post("/contacts/partners/new", data={
         "name": "Real Partner", "csrf_token": token,
     }, follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] != "/partners/new"
+    assert resp.headers["location"] != "/contacts/partners/new"
 
 
 def test_cross_origin_post_with_session_cookie_is_blocked(logged_in_client):
     token = generate_csrf_token(logged_in_client.cookies.get("session"))
     resp = logged_in_client.post(
-        "/partners/new",
+        "/contacts/partners/new",
         data={"name": "Evil Partner", "csrf_token": token},
         headers={"Origin": "https://evil.example"},
     )
@@ -50,7 +50,7 @@ def test_cross_origin_post_with_session_cookie_is_blocked(logged_in_client):
 def test_same_origin_post_with_session_cookie_is_allowed(logged_in_client):
     token = generate_csrf_token(logged_in_client.cookies.get("session"))
     resp = logged_in_client.post(
-        "/partners/new",
+        "/contacts/partners/new",
         data={"name": "Fine Partner", "csrf_token": token},
         headers={"Origin": f"http://{logged_in_client.base_url.host}"},
         follow_redirects=False,
@@ -78,17 +78,17 @@ def test_logout_is_post_only(logged_in_client):
     assert logged_in_client.get("/auth/logout", follow_redirects=False).status_code == 405
     missing = logged_in_client.post("/auth/logout", follow_redirects=False)
     assert missing.status_code == 303
-    assert missing.headers["location"] == "/partners"
-    assert logged_in_client.get("/partners").status_code == 200
+    assert missing.headers["location"] == "/contacts/partners"
+    assert logged_in_client.get("/contacts/partners").status_code == 200
 
     forged = logged_in_client.post(
         "/auth/logout", data={"csrf_token": "not-a-token"}, follow_redirects=False,
     )
     assert forged.status_code == 303
-    assert forged.headers["location"] == "/partners"
-    assert logged_in_client.get("/partners").status_code == 200
+    assert forged.headers["location"] == "/contacts/partners"
+    assert logged_in_client.get("/contacts/partners").status_code == 200
 
-    page = logged_in_client.get("/partners")
+    page = logged_in_client.get("/contacts/partners")
     assert 'action="/auth/logout"' in page.text
     token = _logout_csrf(page.text)
     assert token
@@ -115,12 +115,12 @@ def test_login_then_logout_clears_client_cookie(client):
         "email": "roundtrip@example.com", "password": "password123", "csrf_token": csrf,
     }, follow_redirects=False)
     assert login.status_code == 303
-    assert client.get("/partners").status_code == 200
-    token = _logout_csrf(client.get("/partners").text)
+    assert client.get("/contacts/partners").status_code == 200
+    token = _logout_csrf(client.get("/contacts/partners").text)
     resp = client.post("/auth/logout", data={"csrf_token": token}, follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
-    assert client.get("/partners", follow_redirects=False).status_code == 303
+    assert client.get("/contacts/partners", follow_redirects=False).status_code == 303
 
 
 def test_logged_out_binding_is_consistent_with_explicit_none():

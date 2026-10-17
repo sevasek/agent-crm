@@ -12,13 +12,13 @@ def test_edit_form_does_not_render_blank_fields_as_literal_none(logged_in_client
     back as data, and blocks submission on the email field's type=email
     validation."""
     pid = create_partner("Acme Removal Co")
-    resp = logged_in_client.get(f"/partners/{pid}/edit")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}/edit")
     assert resp.status_code == 200
     assert 'value="None"' not in resp.text
 
 
 def test_new_partner_form_hides_company_only_fields(logged_in_client):
-    resp = logged_in_client.get("/partners/new")
+    resp = logged_in_client.get("/contacts/partners/new")
     assert resp.status_code == 200
     html = resp.text
     assert "This is a company" in html
@@ -48,7 +48,7 @@ def test_new_partner_form_hides_company_only_fields(logged_in_client):
 
 def test_company_edit_form_hides_person_only_fields(logged_in_client):
     pid = create_partner("Acme Retail", is_company=True, team_size=12)
-    resp = logged_in_client.get(f"/partners/{pid}/edit")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}/edit")
     assert resp.status_code == 200
     html = resp.text
     assert 'js-person-only" hidden' in html
@@ -59,7 +59,7 @@ def test_company_edit_form_hides_person_only_fields(logged_in_client):
 
 def test_person_edit_form_hides_team_size(logged_in_client):
     pid = create_partner("Jane Doe", title="Director")
-    resp = logged_in_client.get(f"/partners/{pid}/edit")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}/edit")
     assert resp.status_code == 200
     html = resp.text
     assert 'js-company-only" hidden' in html
@@ -68,7 +68,7 @@ def test_person_edit_form_hides_team_size(logged_in_client):
 
 def test_edit_form_preserves_team_size_zero(logged_in_client):
     pid = create_partner("Zero Headcount", is_company=True, team_size=0)
-    resp = logged_in_client.get(f"/partners/{pid}/edit")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}/edit")
     assert resp.status_code == 200
     assert 'id="team_size"' in resp.text
     assert 'value="0"' in resp.text
@@ -77,14 +77,14 @@ def test_edit_form_preserves_team_size_zero(logged_in_client):
 
 def test_partner_detail_shows_team_size_zero(logged_in_client):
     pid = create_partner("Zero Headcount", is_company=True, team_size=0)
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "0 people" in resp.text
 
 
 def test_partner_detail_omits_team_size_for_person(logged_in_client):
     pid = create_partner("Jane Doe", team_size=12)
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "12 people" not in resp.text
     assert "people ·" not in resp.text
@@ -92,7 +92,7 @@ def test_partner_detail_omits_team_size_for_person(logged_in_client):
 
 def test_partner_detail_omits_missing_team_size(logged_in_client):
     pid = create_partner("Unknown Size", is_company=True)
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "people ·" not in resp.text
     assert "None people" not in resp.text
@@ -101,7 +101,7 @@ def test_partner_detail_omits_missing_team_size(logged_in_client):
 def test_create_company_via_form_drops_person_fields(logged_in_client, db):
     company_id = create_partner("Parent Co", is_company=True)
     resp = logged_in_client.post(
-        "/partners/new",
+        "/contacts/partners/new",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "name": "Acme Retail",
@@ -128,7 +128,7 @@ def test_create_company_via_form_drops_person_fields(logged_in_client, db):
 def test_create_person_via_form_drops_team_size(logged_in_client, db):
     company_id = create_partner("Acme Retail", is_company=True)
     resp = logged_in_client.post(
-        "/partners/new",
+        "/contacts/partners/new",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "name": "Jane Doe",
@@ -154,7 +154,7 @@ def test_partner_detail_lists_social_platforms(logged_in_client):
         linkedin_url="https://linkedin.com/in/jane",
         youtube_url="https://youtube.com/@jane",
     )
-    resp = logged_in_client.get(f"/partners/{pid}")
+    resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "LinkedIn" in resp.text
     assert "YouTube" in resp.text

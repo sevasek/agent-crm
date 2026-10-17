@@ -23,9 +23,9 @@ def test_banner_shows_with_default_env(client, monkeypatch):
     monkeypatch.setenv("BASE_URL", "http://localhost:8000")
     _log_in(client)
 
-    resp = client.get("/partners")
+    resp = client.get("/contacts/partners")
     assert resp.status_code == 200
-    assert 'href="/partners" aria-current="page">Partners</a>' in resp.text
+    assert 'href="/contacts/partners" aria-current="page">Partners</a>' in resp.text
     assert BANNER in resp.text
     assert "SECRET_KEY is still the placeholder value" in resp.text
     assert "SECURE_COOKIES is not enabled" in resp.text
@@ -38,9 +38,9 @@ def test_banner_hidden_when_env_is_fixed(client, monkeypatch):
     monkeypatch.setenv("SECURE_COOKIES", "true")
     _log_in(client)
 
-    resp = client.get("/partners")
+    resp = client.get("/contacts/partners")
     assert resp.status_code == 200
-    assert 'href="/partners" aria-current="page">Partners</a>' in resp.text
+    assert 'href="/contacts/partners" aria-current="page">Partners</a>' in resp.text
     assert BANNER not in resp.text
     assert "New here?" not in resp.text
 
@@ -60,9 +60,9 @@ def test_banner_names_only_the_setting_that_is_wrong(client, monkeypatch):
     monkeypatch.setenv("SECURE_COOKIES", "true")
     _log_in(client)
 
-    resp = client.get("/partners")
+    resp = client.get("/contacts/partners")
     assert resp.status_code == 200
-    assert 'href="/partners" aria-current="page">Partners</a>' in resp.text
+    assert 'href="/contacts/partners" aria-current="page">Partners</a>' in resp.text
     assert BANNER in resp.text
     assert "SECRET_KEY is still the placeholder value" in resp.text
     assert "SECURE_COOKIES is not enabled" not in resp.text

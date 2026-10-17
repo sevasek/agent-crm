@@ -3,6 +3,7 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Pipeline stages</h1>
+<p class="muted">A stage is one column on the pipeline board, marking where a deal is in your process. <a href="{{ help_url('stages') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <p class="muted">The ordered stages a deal moves through, top to bottom, until a Won or Lost stage closes it.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <table>

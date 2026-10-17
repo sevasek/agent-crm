@@ -3,6 +3,7 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Today's calls</h1>
+<p class="muted">The call list is today's queue of deals worth phoning, ranked by a score. <a href="{{ help_url('calls') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 {% if campaign_error %}<p class="error" role="alert">{{ campaign_error }}</p>{% endif %}
 {% if campaign %}
 <p class="muted">

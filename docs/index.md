@@ -1,8 +1,11 @@
 # agent-crm manual
 
-If you use the CRM, start with **[Using the CRM](/using/)**.
-The other pages are for installing it, connecting an agent, or looking up a field.
+New to the CRM? Start with **[Welcome](/welcome/)** — a one-sentence
+explanation of every object in the software. The other pages are for the
+fuller day-to-day guide, installing it, connecting an agent, or looking up
+a field.
 
+- **[Welcome](/welcome/)** — what each thing in the CRM is, in one sentence.
 - **[Using the CRM](/using/)** — the screens, and the words on them.
 - **[Scope](/scope/)** — what is included, and what is left out.
 - **[Privacy policy](/privacy/)** — what an instance stores, and how someone asks about their record.

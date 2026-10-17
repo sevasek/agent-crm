@@ -2,6 +2,7 @@
 // listed here still gets a page — title just falls back to the filename.
 module.exports = {
   "": "Manual", // index.md's fileSlug is "" (Eleventy convention for index files)
+  WELCOME: "Welcome",
   SCOPE: "Scope",
   MCP: "MCP: the agent interface",
   DATA_MODEL: "Data model",

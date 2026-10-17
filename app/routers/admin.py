@@ -79,6 +79,40 @@ def _safe_int(value):
     return None
 
 
+# ==================== Apps launcher ====================
+# Odoo-style grid: tiles grouped into roughly sqrt(n) rows, each row spread
+# evenly across its own width (a Pico `.grid` auto-sizes columns to however
+# many tiles are placed in it), with any remainder tile count landing on the
+# bottom row rather than an earlier one.
+APPS_MENU = [
+    {"label": "Contacts", "href": "/partners", "icon": "👥"},
+    {"label": "CRM", "href": "/pipeline", "icon": "📈"},
+    {"label": "Actions", "href": "/deals", "icon": "⚡"},
+    {"label": "Settings", "href": "/settings", "icon": "⚙️"},
+]
+
+
+def _apps_grid_rows(apps):
+    n = len(apps)
+    if n == 0:
+        return []
+    row_count = max(1, round(math.sqrt(n)))
+    per_row, remainder = divmod(n, row_count)
+    rows, start = [], 0
+    for i in range(row_count):
+        size = per_row + (remainder if i == row_count - 1 else 0)
+        rows.append(apps[start:start + size])
+        start += size
+    return rows
+
+
+@router.get("/apps", response_class=HTMLResponse)
+async def apps_launcher(request: Request, user=Depends(require_login)):
+    return templates.TemplateResponse(request, "admin/apps.html", {
+        "request": request, "user": user, "app_rows": _apps_grid_rows(APPS_MENU),
+    })
+
+
 @router.get("/partners", response_class=HTMLResponse)
 async def dashboard(request: Request, q: str = "", user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/partners.html", {

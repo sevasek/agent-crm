@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Apps — agent-crm{% endblock %}
+{% block content %}
+<h1>Apps</h1>
+<div class="apps-grid">
+    {% for row in app_rows %}
+    <div class="grid apps-grid-row">
+        {% for app in row %}
+        <a class="app-tile" href="{{ app.href }}">
+            <article>
+                <span class="app-tile-icon" aria-hidden="true">{{ app.icon }}</span>
+                <span class="app-tile-label">{{ app.label }}</span>
+            </article>
+        </a>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

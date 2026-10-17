@@ -193,6 +193,29 @@ summary:focus-visible {
 /* Partners page requested double the default container padding. */
 .container.partners-page { padding: 3rem; }
 
+/* Apps launcher: rows of square tiles. Each row is its own Pico .grid so
+   that row's tiles divide its width evenly regardless of how many other
+   rows have (admin.py puts any remainder count on the bottom row). */
+.apps-grid-row { margin-bottom: 1.5rem; }
+.app-tile { text-decoration: none; color: inherit; display: block; }
+.app-tile article {
+    aspect-ratio: 1 / 1;
+    margin-bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-align: center;
+    transition: box-shadow 0.15s, transform 0.15s;
+}
+.app-tile:hover article {
+    box-shadow: 0 0.25rem 0.75rem rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+}
+.app-tile-icon { font-size: 2.5rem; line-height: 1; }
+.app-tile-label { font-weight: 600; }
+
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }
 

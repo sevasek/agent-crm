@@ -27,7 +27,7 @@ def test_stages_settings_page_lists_stages(logged_in_client, db):
     assert resp.status_code == 200
     for label in ["New", "Contacted", "Qualified", "Nurture", "Proposal", "Won", "Lost"]:
         assert label in resp.text
-    assert 'class="container container-wide"' not in resp.text
+    assert 'class="container container-wide"' in resp.text
 
 
 def test_create_stage_via_admin_form(logged_in_client, db):

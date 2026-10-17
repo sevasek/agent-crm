@@ -184,14 +184,11 @@ summary:focus-visible {
 }
 
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
-/* Kanban needs the full window. The default 900px centre column is a form-page
-   width; seven stage columns cannot be read at a glance inside it.
-   Both classes are on the pipeline <main> so this beats Pico's .container
-   max-width media queries (same-origin, later, and more specific). */
-.container.container-wide { max-width: none; }
-
-/* Partners page requested double the default container padding. */
-.container.partners-page { padding: 3rem; }
+/* Table pages (list/data views) need the full window and more breathing
+   room than the 900px form-page default. Both classes are on these pages'
+   <main> so this beats Pico's .container max-width media queries
+   (same-origin, later, and more specific). */
+.container.container-wide { max-width: none; padding: 3rem; }
 
 h1 { font-size: 1.4rem; }
 h2 { font-size: 1.1rem; margin-top: 2rem; }

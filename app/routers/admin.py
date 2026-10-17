@@ -138,8 +138,8 @@ def _apps_menu():
         {"label": "Contacts", "href": "/contacts/partners", "icon": "contacts"},
         {"label": "CRM", "href": "/crm/pipeline", "icon": "crm"},
         {"label": "Actions", "href": "/actions/calls", "icon": "actions"},
-        {"label": "Settings", "href": "/settings", "icon": "settings"},
         {"label": "Definitions", "href": "/definitions/services", "icon": "definitions"},
+        {"label": "Settings", "href": "/settings", "icon": "settings"},
     ]
     apps = []
     for spec, slot in zip(specs, _PALETTE_SLOTS):

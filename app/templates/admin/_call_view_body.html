@@ -1,5 +1,5 @@
 <div class="call-view" id="call-view">
-    <p class="muted call-view-back"><a href="/calls">&larr; Today's calls</a></p>
+    <p class="muted call-view-back"><a href="/crm/calls">&larr; Today's calls</a></p>
 
     <h1>{{ partner.name }}</h1>
     <p class="muted">{{ service.name }}{% if deal.value_estimate %} · ${{ "%.0f"|format(deal.value_estimate) }}{% endif %}</p>
@@ -15,7 +15,7 @@
         {% if partner.phone is dialable %}
         <a href="{{ partner.phone|tel_href }}" class="btn btn-tel btn-tel-big"
            aria-label="Call {{ partner.name }} at {{ partner.phone }}"
-           onclick="logCallTap('/deals/{{ deal.id }}/call-tel', '{{ csrf_token }}')">Call {{ partner.phone }}</a>
+           onclick="logCallTap('/crm/deals/{{ deal.id }}/call-tel', '{{ csrf_token }}')">Call {{ partner.phone }}</a>
         {% else %}
         <p class="muted">No phone number on file.</p>
         {% endif %}
@@ -47,7 +47,7 @@
     <p class="muted">No offer selected for this deal.</p>
     {% endif %}
     {% if offer_options %}
-    <form method="post" action="/deals/{{ deal.id }}/offer" class="stage-form">
+    <form method="post" action="/crm/deals/{{ deal.id }}/offer" class="stage-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <select name="offer_id" onchange="this.form.submit()">
             <option value="">— none —</option>
@@ -60,7 +60,7 @@
     {% endif %}
     <details class="call-view-new-offer">
         <summary class="muted">+ New offer</summary>
-        <form method="post" action="/deals/{{ deal.id }}/offer/new">
+        <form method="post" action="/crm/deals/{{ deal.id }}/offer/new">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <div class="form-row"><input type="text" name="name" placeholder="Offer name" required></div>
             <div class="form-row"><input type="text" name="pitch" placeholder="Pitch"></div>
@@ -79,8 +79,8 @@
     {% endif %}
 
     <h2>Log this call</h2>
-    <form method="post" action="/deals/{{ deal.id }}/call-outcome" class="call-outcome-form call-view-outcome-form"
-          hx-post="/deals/{{ deal.id }}/call-outcome"
+    <form method="post" action="/crm/deals/{{ deal.id }}/call-outcome" class="call-outcome-form call-view-outcome-form"
+          hx-post="/crm/deals/{{ deal.id }}/call-outcome"
           hx-target="#call-view"
           hx-swap="outerHTML"
           hx-push-url="false">

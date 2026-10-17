@@ -4,20 +4,20 @@
 {% block content %}
 <h1>Pipeline</h1>
 <p class="muted">
-    Columns follow the stage order set on the <a href="/stages">Stages</a> page.
+    Columns follow the stage order set on the <a href="/crm/stages">Stages</a> page.
     Drag a card to move an opportunity, or pick a new stage on the card.
     The dropdown still works without JavaScript. Leads never appear here.
     Lost records appear only when the lost filter is on.
 </p>
 <p>
-    <a href="/pipeline{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_lost else 'btn-secondary' }}">Open</a>
-    <a href="/pipeline?lost=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_lost else 'btn-secondary' }}">Lost</a>
+    <a href="/crm/pipeline{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_lost else 'btn-secondary' }}">Open</a>
+    <a href="/crm/pipeline?lost=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_lost else 'btn-secondary' }}">Lost</a>
 </p>
 {% if tags_in_use or current_tag %}
 <div class="tag-filters">
-    {% if current_tag %}<a class="pill pill-tag" href="/pipeline">All tags</a>{% endif %}
+    {% if current_tag %}<a class="pill pill-tag" href="/crm/pipeline">All tags</a>{% endif %}
     {% for t in tags_in_use %}
-    <a href="/pipeline?tag={{ t.tag }}" class="pill pill-tag{% if current_tag == t.tag %} pill-tag-on{% endif %}">{{ t.tag }} ({{ t.count }})</a>
+    <a href="/crm/pipeline?tag={{ t.tag }}" class="pill pill-tag{% if current_tag == t.tag %} pill-tag-on{% endif %}">{{ t.tag }} ({{ t.count }})</a>
     {% endfor %}
 </div>
 {% endif %}

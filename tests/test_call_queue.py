@@ -226,17 +226,17 @@ def test_recency_breaks_ties_newer_first(db):
 
 
 def test_calls_page_requires_login(client):
-    resp = client.get("/calls", follow_redirects=False)
+    resp = client.get("/crm/calls", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
 
 def test_calls_page_empty_state(logged_in_client):
-    resp = logged_in_client.get("/calls")
+    resp = logged_in_client.get("/crm/calls")
     assert resp.status_code == 200
     assert "Today's calls" in resp.text
     assert "No qualified deals with a phone number" in resp.text
-    assert 'href="/calls"' in resp.text  # nav link
+    assert 'href="/crm/calls"' in resp.text  # nav link
 
 
 def test_calls_page_shows_ranked_row(logged_in_client):
@@ -247,12 +247,12 @@ def test_calls_page_shows_ranked_row(logged_in_client):
     deal_id = create_deal(pid, sid, source="referral", value_estimate=8000, next_action="Call Jane")
     set_deal_stage(deal_id, "qualified")
 
-    resp = logged_in_client.get("/calls")
+    resp = logged_in_client.get("/crm/calls")
     assert resp.status_code == 200
     assert "Jane Doe" in resp.text
     assert "0400 111 222" in resp.text
-    assert f"/deals/{deal_id}/call-tel" in resp.text
-    assert f"/deals/{deal_id}/call" in resp.text
+    assert f"/crm/deals/{deal_id}/call-tel" in resp.text
+    assert f"/crm/deals/{deal_id}/call" in resp.text
     assert "Consulting" in resp.text
     assert "Call Jane" in resp.text
     assert f"/contacts/partners/{pid}" in resp.text

@@ -12,7 +12,7 @@ def _deal(db, **fields):
 
 
 def test_edit_deal_requires_login(client, db):
-    resp = client.get("/deals/1/edit", follow_redirects=False)
+    resp = client.get("/crm/deals/1/edit", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
@@ -25,7 +25,7 @@ def test_edit_deal_form_shows_existing_fields(logged_in_client, db):
         next_action="Call Jane",
         next_action_date="2026-09-01T09:00:00",
     )
-    resp = logged_in_client.get(f"/deals/{deal_id}/edit")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/edit")
     assert resp.status_code == 200
     html = resp.text
     assert "Edit deal" in html
@@ -44,7 +44,7 @@ def test_edit_deal_form_shows_existing_fields(logged_in_client, db):
 def test_edit_deal_saves_and_returns_to_partner(logged_in_client, db):
     pid, _, deal_id = _deal(db, pain_points="old pain", next_action="Ping")
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "website",
@@ -76,7 +76,7 @@ def test_edit_deal_can_clear_optional_fields(logged_in_client, db):
         next_action="Call", next_action_date="2026-09-01",
     )
     logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
@@ -99,7 +99,7 @@ def test_edit_deal_can_clear_optional_fields(logged_in_client, db):
 def test_edit_deal_bad_csrf_does_not_save(logged_in_client, db):
     _, _, deal_id = _deal(db, pain_points="original")
     logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": "not-a-token",
             "source": "website",
@@ -116,15 +116,15 @@ def test_edit_deal_bad_csrf_does_not_save(logged_in_client, db):
 
 
 def test_edit_deal_missing_redirects(logged_in_client, db):
-    resp = logged_in_client.get("/deals/999/edit", follow_redirects=False)
+    resp = logged_in_client.get("/crm/deals/999/edit", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/deals"
+    assert resp.headers["location"] == "/crm/deals"
 
 
 def test_edit_deal_invalid_value_keeps_existing(logged_in_client, db):
     _, _, deal_id = _deal(db, pain_points="keep me")
     logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "website",
@@ -145,7 +145,7 @@ def test_edit_deal_null_source_does_not_render_none(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
-    resp = logged_in_client.get(f"/deals/{deal_id}/edit")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/edit")
     assert resp.status_code == 200
     assert 'id="source"' in resp.text
     assert 'value="None"' not in resp.text
@@ -155,12 +155,12 @@ def test_edit_deal_null_source_does_not_render_none(logged_in_client, db):
 def test_edit_deal_zero_value_displays_and_persists(logged_in_client, db):
     _, _, deal_id = _deal(db)
     update_deal_fields(deal_id, value_estimate=0)
-    page = logged_in_client.get(f"/deals/{deal_id}/edit")
+    page = logged_in_client.get(f"/crm/deals/{deal_id}/edit")
     assert 'id="value_estimate"' in page.text
     assert 'value="0"' in page.text
 
     logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
@@ -182,7 +182,7 @@ def test_edit_deal_orphan_partner_post_does_not_save(logged_in_client, db):
         conn.execute("UPDATE deals SET partner_id = 999 WHERE id = ?", (deal_id,))
         conn.commit()
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "website",
@@ -195,7 +195,7 @@ def test_edit_deal_orphan_partner_post_does_not_save(logged_in_client, db):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/deals"
+    assert resp.headers["location"] == "/crm/deals"
     assert get_deal(deal_id)["pain_points"] == "original"
     assert get_deal(deal_id)["source"] == "referral"
 
@@ -206,18 +206,18 @@ def test_edit_deal_orphan_partner_redirects(logged_in_client, db):
     with get_db() as conn:
         conn.execute("UPDATE deals SET partner_id = 999 WHERE id = ?", (deal_id,))
         conn.commit()
-    resp = logged_in_client.get(f"/deals/{deal_id}/edit", follow_redirects=False)
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/edit", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/deals"
+    assert resp.headers["location"] == "/crm/deals"
 
 
 def test_partner_and_deals_list_link_to_edit(logged_in_client, db):
     pid, _, deal_id = _deal(db)
     partner_page = logged_in_client.get(f"/contacts/partners/{pid}")
-    assert f"/deals/{deal_id}/edit" in partner_page.text
-    deals_page = logged_in_client.get("/deals")
-    assert f"/deals/{deal_id}/edit" in deals_page.text
-    assert "/deals/new" in deals_page.text
+    assert f"/crm/deals/{deal_id}/edit" in partner_page.text
+    deals_page = logged_in_client.get("/crm/deals")
+    assert f"/crm/deals/{deal_id}/edit" in deals_page.text
+    assert "/crm/deals/new" in deals_page.text
 
 
 def _two_deals(db):
@@ -246,7 +246,7 @@ def _edit_payload(client, parent_deal_id="", **extra):
 
 def test_new_deal_form_has_parent_picker(logged_in_client, db):
     pid, consulting, _support, parent_id, child_id = _two_deals(db)
-    resp = logged_in_client.get("/deals/new")
+    resp = logged_in_client.get("/crm/deals/new")
     assert resp.status_code == 200
     assert 'name="parent_deal_id"' in resp.text
     assert f'value="{parent_id}"' in resp.text
@@ -260,7 +260,7 @@ def test_new_deal_form_groups_parents_by_partner_when_none_selected(logged_in_cl
     pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     other = create_partner("Other Co", email="other@acme.example")
     stranger_id = create_deal(other, create_service("Audit", "audit"))
-    resp = logged_in_client.get("/deals/new")
+    resp = logged_in_client.get("/crm/deals/new")
     assert resp.status_code == 200
     assert '<optgroup label="Jane Doe">' in resp.text
     assert '<optgroup label="Other Co">' in resp.text
@@ -275,7 +275,7 @@ def test_new_deal_form_with_partner_id_only_lists_that_partners_candidates(logge
     pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     other = create_partner("Other Co", email="other@acme.example")
     stranger_id = create_deal(other, create_service("Audit", "audit"))
-    resp = logged_in_client.get(f"/deals/new?partner_id={pid}")
+    resp = logged_in_client.get(f"/crm/deals/new?partner_id={pid}")
     assert resp.status_code == 200
     assert f'value="{parent_id}"' in resp.text
     assert f'value="{child_id}"' in resp.text
@@ -291,15 +291,15 @@ def test_edit_deal_form_lists_parent_candidates_and_children(logged_in_client, d
     _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     update_deal_fields(child_id, parent_deal_id=parent_id)
 
-    parent_page = logged_in_client.get(f"/deals/{parent_id}/edit")
+    parent_page = logged_in_client.get(f"/crm/deals/{parent_id}/edit")
     assert parent_page.status_code == 200
     assert 'name="parent_deal_id"' in parent_page.text
     assert f'<option value="{parent_id}"' not in parent_page.text
-    assert f"/deals/{child_id}/edit" in parent_page.text
+    assert f"/crm/deals/{child_id}/edit" in parent_page.text
     assert "Follow-on deals" in parent_page.text
     assert "Support" in parent_page.text
 
-    child_page = logged_in_client.get(f"/deals/{child_id}/edit")
+    child_page = logged_in_client.get(f"/crm/deals/{child_id}/edit")
     assert child_page.status_code == 200
     assert f'<option value="{parent_id}"' in child_page.text
     assert 'selected' in child_page.text
@@ -310,7 +310,7 @@ def test_edit_deal_form_lists_parent_candidates_and_children(logged_in_client, d
 def test_edit_deal_sets_parent(logged_in_client, db):
     pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     resp = logged_in_client.post(
-        f"/deals/{child_id}/edit",
+        f"/crm/deals/{child_id}/edit",
         data=_edit_payload(logged_in_client, str(parent_id)),
         follow_redirects=False,
     )
@@ -323,7 +323,7 @@ def test_edit_deal_clears_parent(logged_in_client, db):
     _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     update_deal_fields(child_id, parent_deal_id=parent_id)
     resp = logged_in_client.post(
-        f"/deals/{child_id}/edit",
+        f"/crm/deals/{child_id}/edit",
         data=_edit_payload(logged_in_client, ""),
         follow_redirects=False,
     )
@@ -337,7 +337,7 @@ def test_edit_deal_rejects_other_partner_parent(logged_in_client, db):
     stranger_id = create_deal(other, create_service("Audit", "audit"))
 
     resp = logged_in_client.post(
-        f"/deals/{child_id}/edit",
+        f"/crm/deals/{child_id}/edit",
         data=_edit_payload(logged_in_client, str(stranger_id)),
         follow_redirects=False,
     )
@@ -350,7 +350,7 @@ def test_edit_deal_rejects_parent_cycle(logged_in_client, db):
     _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     update_deal_fields(child_id, parent_deal_id=parent_id)
     resp = logged_in_client.post(
-        f"/deals/{parent_id}/edit",
+        f"/crm/deals/{parent_id}/edit",
         data=_edit_payload(logged_in_client, str(child_id)),
         follow_redirects=False,
     )
@@ -363,7 +363,7 @@ def test_edit_deal_rejects_parent_cycle(logged_in_client, db):
 def test_new_deal_sets_parent(logged_in_client, db):
     pid, _consulting, support, parent_id, _child_id = _two_deals(db)
     resp = logged_in_client.post(
-        "/deals/new",
+        "/crm/deals/new",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "partner_id": str(pid),
@@ -390,7 +390,7 @@ def test_new_deal_rejects_other_partner_parent(logged_in_client, db):
     other = create_partner("Other Co", email="other@acme.example")
     stranger_id = create_deal(other, create_service("Audit", "audit"))
     resp = logged_in_client.post(
-        "/deals/new",
+        "/crm/deals/new",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "partner_id": str(pid),
@@ -414,12 +414,12 @@ def test_pipeline_and_deals_list_show_follow_on(logged_in_client, db):
     _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     update_deal_fields(child_id, parent_deal_id=parent_id)
 
-    board = logged_in_client.get("/pipeline")
+    board = logged_in_client.get("/crm/pipeline")
     assert board.status_code == 200
     assert f"follow-on of #{parent_id}" in board.text
     assert "1 child" in board.text
 
-    deals_page = logged_in_client.get("/deals")
+    deals_page = logged_in_client.get("/crm/deals")
     assert f"follow-on of #{parent_id}" in deals_page.text
 
 
@@ -430,7 +430,7 @@ def test_pipeline_tag_filter_still_counts_children_without_that_tag(logged_in_cl
     update_deal_fields(child_id, parent_deal_id=parent_id)
     apply_deal_tags(parent_id, replace=["campaign"])
 
-    board = logged_in_client.get("/pipeline?tag=campaign")
+    board = logged_in_client.get("/crm/pipeline?tag=campaign")
     assert board.status_code == 200
     assert "Jane Doe" in board.text
     assert "1 child" in board.text

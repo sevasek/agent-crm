@@ -320,7 +320,7 @@ def test_admin_root_redirects_to_partners(client):
 def test_admin_redirect_keeps_query_string(client):
     resp = client.get("/admin/deals?due=1", follow_redirects=False)
     assert resp.status_code == 307
-    assert resp.headers["location"] == "/deals?due=1"
+    assert resp.headers["location"] == "/crm/deals?due=1"
 
 
 def test_admin_redirect_rejects_protocol_relative_target(client):
@@ -329,8 +329,8 @@ def test_admin_redirect_rejects_protocol_relative_target(client):
     assert compat_admin_redirect_target("/evil.example") == "/contacts/partners"
     assert compat_admin_redirect_target("//evil.example") == "/contacts/partners"
     assert compat_admin_redirect_target("https://evil.example") == "/contacts/partners"
-    assert compat_admin_redirect_target("deals") == "/deals"
-    assert compat_admin_redirect_target("deals", "due=1") == "/deals?due=1"
+    assert compat_admin_redirect_target("deals") == "/crm/deals"
+    assert compat_admin_redirect_target("deals", "due=1") == "/crm/deals?due=1"
 
     resp = client.get("/admin//evil.example", follow_redirects=False)
     assert resp.status_code == 307

@@ -49,7 +49,7 @@ def test_nav_on_contacts_page_shows_only_contacts_and_partners(logged_in_client)
 
 
 def test_legacy_pages_drop_bare_partners_nav_link_but_keep_others(logged_in_client):
-    nav = _nav(logged_in_client.get("/deals").text)
+    nav = _nav(logged_in_client.get("/crm/deals").text)
     assert ">Pipeline<" in nav
     assert ">Deals<" in nav
     assert ">Contacts<" not in nav

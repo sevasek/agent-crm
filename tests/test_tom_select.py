@@ -37,7 +37,7 @@ def test_vendor_md_pins_tom_select_version():
 def test_new_deal_form_keeps_native_partner_select(logged_in_client, db):
     create_partner("Jane Doe", email="jane@acme.example")
     create_service("Consulting", "consulting")
-    resp = logged_in_client.get("/deals/new")
+    resp = logged_in_client.get("/crm/deals/new")
     assert resp.status_code == 200
     html = resp.text
     assert 'id="partner_id"' in html
@@ -53,7 +53,7 @@ def test_edit_deal_form_has_no_partner_select(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
-    resp = logged_in_client.get(f"/deals/{deal_id}/edit")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/edit")
     assert resp.status_code == 200
     html = resp.text
     assert 'name="partner_id"' not in html

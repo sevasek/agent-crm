@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/static/vendor/tom-select.min.css">
     <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body{% if request.url.path.startswith("/crm") %} class="crm-theme"{% endif %}>
     <a class="skip-link" href="#main">Skip to main content</a>
     {% set path = request.url.path %}
     {% if user %}
@@ -18,16 +18,17 @@
         <a class="nav-app-contacts" href="/contacts/partners" aria-current="page">Contacts</a>
         <a href="/contacts/partners"{% if path == "/contacts/partners" or path.startswith("/contacts/partners/") %} aria-current="page"{% endif %}>Partners</a>
         {% elif path != "/apps" %}
-        <a href="/calls"{% if path == "/calls" or path.startswith("/calls/") or (path.startswith("/deals/") and path.endswith("/call")) %} aria-current="page"{% endif %}>Calls</a>
-        <a href="/pipeline"{% if path == "/pipeline" or path.startswith("/pipeline/") %} aria-current="page"{% endif %}>Pipeline</a>
-        <a href="/deals"{% if path == "/deals" or (path.startswith("/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>
-        <a href="/leads"{% if path == "/leads" or path.startswith("/leads/") %} aria-current="page"{% endif %}>Leads</a>
-        <a href="/services"{% if path == "/services" or path.startswith("/services/") %} aria-current="page"{% endif %}>Services</a>
-        <a href="/stages"{% if path == "/stages" or path.startswith("/stages/") %} aria-current="page"{% endif %}>Stages</a>
-        <a href="/automations"{% if path == "/automations" or path.startswith("/automations/") %} aria-current="page"{% endif %}>Automations</a>
-        <a href="/lost-reasons"{% if path == "/lost-reasons" or path.startswith("/lost-reasons/") %} aria-current="page"{% endif %}>Lost reasons</a>
-        <a href="/offers"{% if path == "/offers" or path.startswith("/offers/") %} aria-current="page"{% endif %}>Offers</a>
-        <a href="/icp"{% if path == "/icp" or path.startswith("/icp/") %} aria-current="page"{% endif %}>ICP</a>
+        <a class="nav-app-crm" href="/crm/pipeline"{% if path.startswith("/crm") %} aria-current="page"{% endif %}>CRM</a>
+        <a href="/crm/calls"{% if path == "/crm/calls" or path.startswith("/crm/calls/") or (path.startswith("/crm/deals/") and path.endswith("/call")) %} aria-current="page"{% endif %}>Calls</a>
+        <a href="/crm/pipeline"{% if path == "/crm/pipeline" or path.startswith("/crm/pipeline/") %} aria-current="page"{% endif %}>Pipeline</a>
+        <a href="/crm/deals"{% if path == "/crm/deals" or (path.startswith("/crm/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>
+        <a href="/crm/leads"{% if path == "/crm/leads" or path.startswith("/crm/leads/") %} aria-current="page"{% endif %}>Leads</a>
+        <a href="/crm/services"{% if path == "/crm/services" or path.startswith("/crm/services/") %} aria-current="page"{% endif %}>Services</a>
+        <a href="/crm/stages"{% if path == "/crm/stages" or path.startswith("/crm/stages/") %} aria-current="page"{% endif %}>Stages</a>
+        <a href="/crm/automations"{% if path == "/crm/automations" or path.startswith("/crm/automations/") %} aria-current="page"{% endif %}>Automations</a>
+        <a href="/crm/lost-reasons"{% if path == "/crm/lost-reasons" or path.startswith("/crm/lost-reasons/") %} aria-current="page"{% endif %}>Lost reasons</a>
+        <a href="/crm/offers"{% if path == "/crm/offers" or path.startswith("/crm/offers/") %} aria-current="page"{% endif %}>Offers</a>
+        <a href="/crm/icp"{% if path == "/crm/icp" or path.startswith("/crm/icp/") %} aria-current="page"{% endif %}>ICP</a>
         {% endif %}
         <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>
         <form class="topnav-logout" method="post" action="/auth/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token | default(request.state.csrf_token) }}"><button type="submit">Logout</button></form>

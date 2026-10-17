@@ -200,6 +200,31 @@ summary:focus-visible {
 }
 [data-theme="dark"] .topnav .nav-app-contacts { color: #3987e5; }
 
+/* Matches the CRM tile's orange slot in _PALETTE_SLOTS (app/routers/admin.py) —
+   update both if that palette assignment ever changes. */
+.topnav .nav-app-crm { font-weight: 700; color: #eb6834; }
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .topnav .nav-app-crm { color: #d95926; }
+}
+[data-theme="dark"] .topnav .nav-app-crm { color: #d95926; }
+
+/* /crm/* pages (Calls/Deals/Pipeline/Stages/Offers/ICP/Automations/Leads/
+   Lost-reasons/Services) use the CRM tile's orange instead of the brand
+   blue for buttons — --accent drives .btn, .btn-secondary's border and the
+   pico-primary-* tokens, all already var(--accent)-based above, so
+   redefining it here on body is enough; it's the same orange as the CRM
+   tile's light/dark pair. */
+body.crm-theme {
+    --accent: #eb6834;
+    --pico-primary-hover-background: #d95926;
+    --pico-primary-hover-border: #d95926;
+    --pico-primary-focus: rgba(235, 104, 52, 0.25);
+}
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) body.crm-theme { --accent: #d95926; }
+}
+[data-theme="dark"] body.crm-theme { --accent: #d95926; }
+
 .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 /* Table pages (list/data views) need the full window and more breathing
    room than the 900px form-page default. Both classes are on these pages'

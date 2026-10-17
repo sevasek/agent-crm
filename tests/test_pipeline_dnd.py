@@ -39,7 +39,7 @@ def test_sortable_script_is_vendored_and_linked(client):
 
 def test_pipeline_board_has_sortable_lists(logged_in_client, db):
     deal_id = _deal()
-    resp = logged_in_client.get("/pipeline")
+    resp = logged_in_client.get("/crm/pipeline")
     assert resp.status_code == 200
     html = resp.text
     assert 'class="pipeline-card-list"' in html
@@ -54,7 +54,7 @@ def test_pipeline_board_has_sortable_lists(logged_in_client, db):
 def test_drop_post_moves_deal_and_returns_both_columns(logged_in_client, db):
     deal_id = _deal()
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/stage",
+        f"/crm/deals/{deal_id}/stage",
         data={
             "stage": "contacted",
             "next": "pipeline",
@@ -79,7 +79,7 @@ def test_drop_post_moves_deal_and_returns_both_columns(logged_in_client, db):
 def test_drop_post_requires_csrf(logged_in_client, db):
     deal_id = _deal()
     missing = logged_in_client.post(
-        f"/deals/{deal_id}/stage",
+        f"/crm/deals/{deal_id}/stage",
         data={"stage": "contacted", "next": "pipeline", "position": "0"},
         headers={"HX-Request": "true"},
         follow_redirects=False,
@@ -88,7 +88,7 @@ def test_drop_post_requires_csrf(logged_in_client, db):
     assert get_deal(deal_id)["stage"] == "new"
 
     bad = logged_in_client.post(
-        f"/deals/{deal_id}/stage",
+        f"/crm/deals/{deal_id}/stage",
         data={
             "stage": "contacted",
             "next": "pipeline",
@@ -111,7 +111,7 @@ def test_drop_persists_position_among_siblings(logged_in_client, db):
     ]
 
     resp = logged_in_client.post(
-        f"/deals/{incoming}/stage",
+        f"/crm/deals/{incoming}/stage",
         data={
             "stage": "contacted",
             "next": "pipeline",
@@ -148,7 +148,7 @@ def test_dropdown_without_position_appends(logged_in_client, db):
     first = _deal(stage="proposal", name="Keep Top")
     incoming = _deal(stage="new", name="Appended")
     resp = logged_in_client.post(
-        f"/deals/{incoming}/stage",
+        f"/crm/deals/{incoming}/stage",
         data={
             "stage": "proposal",
             "next": "pipeline",
@@ -191,9 +191,9 @@ def test_reorder_ignores_hidden_lead_rows_in_same_stage(db):
 def test_lost_cards_are_view_only_and_not_draggable(logged_in_client, db):
     deal_id = _deal()
     mark_lost(deal_id, lost_reason="Not a fit")
-    lost_board = logged_in_client.get("/pipeline?lost=1")
+    lost_board = logged_in_client.get("/crm/pipeline?lost=1")
     assert "pipeline-card-lost" in lost_board.text
-    open_board = logged_in_client.get("/pipeline")
+    open_board = logged_in_client.get("/crm/pipeline")
     assert "pipeline-card-lost" not in open_board.text
     app_js = (Path(__file__).resolve().parents[1] / "app" / "static" / "app.js").read_text()
     assert '".pipeline-card:not(.pipeline-card-lost)"' in app_js

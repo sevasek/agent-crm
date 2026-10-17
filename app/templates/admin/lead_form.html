@@ -19,7 +19,7 @@
 </p>
 {% endif %}
 
-<form method="post" action="{{ '/leads/' ~ lead.id ~ '/edit' if lead else '/leads/new' }}">
+<form method="post" action="{{ '/crm/leads/' ~ lead.id ~ '/edit' if lead else '/crm/leads/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="company_name">Company name</label>
@@ -109,7 +109,7 @@
                value="{% if form_tags is not none %}{{ form_tags }}{% elif lead and lead.tags %}{{ lead.tags | join(', ') }}{% endif %}">
     </div>
     <button type="submit">{{ "Save" if lead else "Create lead" }}</button>
-    <a class="btn-secondary btn" href="/leads">Back to leads</a>
+    <a class="btn-secondary btn" href="/crm/leads">Back to leads</a>
 </form>
 
 {% if lead and lead.active %}
@@ -134,7 +134,7 @@
     {% endfor %}
 </ul>
 {% endif %}
-<form method="post" action="/leads/{{ lead.id }}/convert" id="convert-lead-form">
+<form method="post" action="/crm/leads/{{ lead.id }}/convert" id="convert-lead-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="convert_service_slug">Service</label>
@@ -191,7 +191,7 @@
 </form>
 
 <h2>Mark lost</h2>
-<form method="post" action="/leads/{{ lead.id }}/lost">
+<form method="post" action="/crm/leads/{{ lead.id }}/lost">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="lost_reason">Lost reason</label>
@@ -214,7 +214,7 @@
     {% if lead.lost_reason %}( {{ lead.lost_reason.name }} ){% endif %}.
 </p>
 {% if not lead.merged_into_id %}
-<form method="post" action="/leads/{{ lead.id }}/restore">
+<form method="post" action="/crm/leads/{{ lead.id }}/restore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit">Restore</button>
 </form>
@@ -225,7 +225,7 @@
 
 {% if lead %}
 <h2>Research notes</h2>
-<form method="post" action="/leads/{{ lead.id }}/activities">
+<form method="post" action="/crm/leads/{{ lead.id }}/activities">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <select name="type" style="width:auto;" aria-label="Note type">

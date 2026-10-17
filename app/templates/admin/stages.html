@@ -6,7 +6,7 @@
 <p class="muted">
     The workflow leads move through, top to bottom. Role checkboxes replace what used to be
     hardcoded stage names: <strong>Default</strong> is where new deals start, <strong>Qualified
-    pool</strong> feeds the <a href="/calls">call queue</a>, <strong>Triggers nurture</strong>
+    pool</strong> feeds the <a href="/crm/calls">call queue</a>, <strong>Triggers nurture</strong>
     enrolls the partner on the service's nurture list on entry, and <strong>Won/Lost</strong> close
     the deal (sets <code>closed_at</code>) — a stage can't be both. If more than one stage
     carries the same role, the call queue uses all of them, but a call outcome (won/lost/nurture)
@@ -23,10 +23,10 @@
         <th>Triggers nurture</th><th>Won</th><th>Lost</th><th></th>
     </tr>
     {% for s in stages %}
-    <form id="stage-edit-{{ s.key }}" method="post" action="/stages/{{ s.key }}/edit"></form>
+    <form id="stage-edit-{{ s.key }}" method="post" action="/crm/stages/{{ s.key }}/edit"></form>
     <tr>
         <td>
-            <form method="post" action="/stages/{{ s.key }}/move" class="stage-move-form">
+            <form method="post" action="/crm/stages/{{ s.key }}/move" class="stage-move-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 <button type="submit" name="direction" value="up" class="btn-secondary" aria-label="Move stage up" {% if loop.first %}disabled{% endif %}>&uarr;</button>
                 <button type="submit" name="direction" value="down" class="btn-secondary" aria-label="Move stage down" {% if loop.last %}disabled{% endif %}>&darr;</button>
@@ -48,7 +48,7 @@
 </table>
 
 <h2>Add a stage</h2>
-<form method="post" action="/stages/new">
+<form method="post" action="/crm/stages/new">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
         <label for="key">Key</label>
@@ -71,7 +71,7 @@
 <h2>Delete a stage</h2>
 <p class="muted">Only a stage with no deals currently in it can be deleted.</p>
 {% for s in stages %}
-<form method="post" action="/stages/{{ s.key }}/delete" style="display:inline;">
+<form method="post" action="/crm/stages/{{ s.key }}/delete" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn-secondary" onclick="return confirm('Delete this stage?')">Delete {{ s.label }}</button>
 </form>

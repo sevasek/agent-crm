@@ -9,7 +9,7 @@
         {% if d.tags %}
         <div class="tag-filters">
             {% for tag in d.tags %}
-            <a class="pill pill-tag" href="/deals?tag={{ tag }}">{{ tag }}</a>
+            <a class="pill pill-tag" href="/crm/deals?tag={{ tag }}">{{ tag }}</a>
             {% endfor %}
         </div>
         {% endif %}
@@ -20,14 +20,14 @@
         {% if d.due_status == "overdue" %}<span class="pill pill-overdue">overdue{% if d.days_overdue %} {{ d.days_overdue }}d{% endif %}</span>
         {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
         {% if d.active %}
-        <form method="post" action="/deals/{{ d.id }}/stage" class="stage-form">
+        <form method="post" action="/crm/deals/{{ d.id }}/stage" class="stage-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="next" value="pipeline">
             {% if current_tag %}<input type="hidden" name="tag" value="{{ current_tag }}">{% endif %}
             {% if current_lost %}<input type="hidden" name="lost" value="1">{% endif %}
             <select name="stage"
                     aria-label="Stage for deal #{{ d.id }}"
-                    hx-post="/deals/{{ d.id }}/stage"
+                    hx-post="/crm/deals/{{ d.id }}/stage"
                     hx-include="closest form"
                     hx-swap="none"
                     hx-trigger="change"

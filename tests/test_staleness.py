@@ -179,7 +179,7 @@ def test_due_today_uses_due_wording(db):
 
 def test_deals_page_marks_overdue(logged_in_client):
     _setup("2000-01-01", next_action="Call Jane")
-    resp = logged_in_client.get("/deals")
+    resp = logged_in_client.get("/crm/deals")
     assert resp.status_code == 200
     assert "pill-overdue" in resp.text
     assert "Call Jane" in resp.text
@@ -189,7 +189,7 @@ def test_deals_page_marks_overdue(logged_in_client):
 def test_due_filter_hides_future_deals(logged_in_client):
     _setup("2000-01-01", name="Overdue Person")
     _setup("2099-12-01", name="Future Person")
-    resp = logged_in_client.get("/deals?due=1")
+    resp = logged_in_client.get("/crm/deals?due=1")
     assert resp.status_code == 200
     assert "Overdue Person" in resp.text
     assert "Future Person" not in resp.text
@@ -198,7 +198,7 @@ def test_due_filter_hides_future_deals(logged_in_client):
 def test_due_filter_keeps_stage(logged_in_client):
     _setup("2000-01-01", stage="qualified", name="Qualified Due")
     _setup("2000-01-01", stage="contacted", name="Contacted Due")
-    resp = logged_in_client.get("/deals?due=1&stage=qualified")
+    resp = logged_in_client.get("/crm/deals?due=1&stage=qualified")
     assert resp.status_code == 200
     assert "Qualified Due" in resp.text
     assert "Contacted Due" not in resp.text
@@ -209,7 +209,7 @@ def test_partner_detail_shows_overdue_pill(logged_in_client):
     resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert resp.status_code == 200
     assert "pill-overdue" in resp.text
-    assert 'action="/deals/' in resp.text
+    assert 'action="/crm/deals/' in resp.text
     assert "next_action_date" in resp.text
 
 
@@ -224,7 +224,7 @@ def test_partner_timeline_hides_due_gate_marker(logged_in_client):
 
 def test_due_query_zero_is_not_a_filter(logged_in_client):
     _setup("2099-12-01", name="Future Person")
-    resp = logged_in_client.get("/deals?due=0")
+    resp = logged_in_client.get("/crm/deals?due=0")
     assert resp.status_code == 200
     assert "Future Person" in resp.text
 
@@ -245,7 +245,7 @@ def test_partner_detail_can_snooze_next_action(logged_in_client):
     page = logged_in_client.get(f"/contacts/partners/{pid}")
     token = re.search(r'name="csrf_token" value="([^"]+)"', page.text).group(1)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/next-action",
+        f"/crm/deals/{deal_id}/next-action",
         data={
             "csrf_token": token,
             "next_action": "Call next week",

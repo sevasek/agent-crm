@@ -84,7 +84,7 @@ def test_missing_deal_rejected(db):
 
 
 def test_call_outcome_route_requires_login(client, db):
-    resp = client.post("/deals/1/call-outcome", data={
+    resp = client.post("/crm/deals/1/call-outcome", data={
         "outcome": "no_answer", "csrf_token": "x",
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -94,19 +94,19 @@ def test_call_outcome_route_requires_login(client, db):
 def test_call_outcome_route_logs_and_redirects(logged_in_client, db):
     _, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-outcome",
+        f"/crm/deals/{deal_id}/call-outcome",
         data={"outcome": "won", "note": "Signed", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/calls"
+    assert resp.headers["location"] == "/crm/calls"
     assert get_deal(deal_id)["stage"] == "won"
 
 
 def test_call_outcome_route_bad_csrf_does_nothing(logged_in_client, db):
     _, _, deal_id = _qualified_deal(db)
     logged_in_client.post(
-        f"/deals/{deal_id}/call-outcome",
+        f"/crm/deals/{deal_id}/call-outcome",
         data={"outcome": "won", "csrf_token": "not-a-token"},
         follow_redirects=False,
     )
@@ -115,8 +115,8 @@ def test_call_outcome_route_bad_csrf_does_nothing(logged_in_client, db):
 
 def test_calls_page_renders_outcome_buttons(logged_in_client, db):
     _, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get("/calls")
+    resp = logged_in_client.get("/crm/calls")
     assert resp.status_code == 200
-    assert f"/deals/{deal_id}/call-outcome" in resp.text
+    assert f"/crm/deals/{deal_id}/call-outcome" in resp.text
     assert "No answer" in resp.text
     assert "Not interested" in resp.text

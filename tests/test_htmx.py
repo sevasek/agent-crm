@@ -22,7 +22,7 @@ def test_htmx_script_is_vendored_and_linked(client):
 
 def test_pipeline_stage_select_has_htmx_attrs(logged_in_client, db):
     _deal(db)
-    resp = logged_in_client.get("/pipeline")
+    resp = logged_in_client.get("/crm/pipeline")
     assert resp.status_code == 200
     assert 'id="pipeline-col-new"' in resp.text
     assert 'hx-post="' in resp.text
@@ -34,7 +34,7 @@ def test_pipeline_stage_select_has_htmx_attrs(logged_in_client, db):
 def test_stage_change_without_hx_still_redirects(logged_in_client, db):
     deal_id = _deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/stage",
+        f"/crm/deals/{deal_id}/stage",
         data={
             "stage": "contacted",
             "next": "pipeline",
@@ -43,14 +43,14 @@ def test_stage_change_without_hx_still_redirects(logged_in_client, db):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/pipeline"
+    assert resp.headers["location"] == "/crm/pipeline"
     assert get_deal(deal_id)["stage"] == "contacted"
 
 
 def test_stage_change_htmx_returns_column_fragments(logged_in_client, db):
     deal_id = _deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/stage",
+        f"/crm/deals/{deal_id}/stage",
         data={
             "stage": "contacted",
             "next": "pipeline",
@@ -81,17 +81,17 @@ def _qualified_callable_deal(db):
 
 def test_calls_page_wires_htmx_on_the_outcome_form(logged_in_client, db):
     _qualified_callable_deal(db)
-    resp = logged_in_client.get("/calls")
+    resp = logged_in_client.get("/crm/calls")
     assert resp.status_code == 200
     assert 'id="calls-table"' in resp.text
     assert 'hx-target="#calls-table"' in resp.text
-    assert 'hx-post="/deals/' in resp.text
+    assert 'hx-post="/crm/deals/' in resp.text
 
 
 def test_call_outcome_without_hx_still_redirects(logged_in_client, db):
     deal_id = _qualified_callable_deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-outcome",
+        f"/crm/deals/{deal_id}/call-outcome",
         data={
             "outcome": "no_answer",
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
@@ -99,13 +99,13 @@ def test_call_outcome_without_hx_still_redirects(logged_in_client, db):
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/calls"
+    assert resp.headers["location"] == "/crm/calls"
 
 
 def test_call_outcome_htmx_from_calls_returns_table(logged_in_client, db):
     deal_id = _qualified_callable_deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-outcome",
+        f"/crm/deals/{deal_id}/call-outcome",
         data={
             "outcome": "no_answer",
             "note": "Voicemail",
@@ -125,7 +125,7 @@ def test_call_outcome_htmx_from_calls_returns_table(logged_in_client, db):
 def test_call_outcome_htmx_from_call_view_returns_fragment(logged_in_client, db):
     deal_id = _qualified_callable_deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-outcome",
+        f"/crm/deals/{deal_id}/call-outcome",
         data={
             "outcome": "won",
             "note": "Signed today",

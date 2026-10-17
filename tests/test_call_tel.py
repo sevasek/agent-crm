@@ -35,7 +35,7 @@ def test_has_callable_phone():
 def test_deal_call_tel_logs(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db, phone="0400 111 222")
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-tel",
+        f"/crm/deals/{deal_id}/call-tel",
         data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
@@ -44,7 +44,7 @@ def test_deal_call_tel_logs(logged_in_client, db):
 
 
 def test_deal_call_tel_requires_login(client, db):
-    resp = client.post("/deals/1/call-tel", data={"csrf_token": "x"}, follow_redirects=False)
+    resp = client.post("/crm/deals/1/call-tel", data={"csrf_token": "x"}, follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
@@ -52,7 +52,7 @@ def test_deal_call_tel_requires_login(client, db):
 def test_deal_call_tel_bad_csrf_does_not_log(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-tel",
+        f"/crm/deals/{deal_id}/call-tel",
         data={"csrf_token": "not-a-token"},
     )
     assert resp.status_code == 204
@@ -64,7 +64,7 @@ def test_deal_call_tel_missing_phone_does_not_log(logged_in_client, db):
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-tel",
+        f"/crm/deals/{deal_id}/call-tel",
         data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
@@ -74,7 +74,7 @@ def test_deal_call_tel_missing_phone_does_not_log(logged_in_client, db):
 def test_deal_call_tel_unparseable_phone_does_not_log(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db, phone="---")
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-tel",
+        f"/crm/deals/{deal_id}/call-tel",
         data={"csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
     )
     assert resp.status_code == 204
@@ -100,7 +100,7 @@ def test_partner_call_tel_requires_login(client, db):
 
 def test_call_view_shows_talk_track_and_dial_link(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert "Jane Doe" in resp.text
     assert "No CRM" in resp.text
@@ -110,8 +110,8 @@ def test_call_view_shows_talk_track_and_dial_link(logged_in_client, db):
     assert "btn-tel-big" in resp.text
     assert 'href="#main"' in resp.text
     assert 'id="main"' in resp.text
-    assert f"logCallTap('/deals/{deal_id}/call-tel'" in resp.text
-    assert f"/deals/{deal_id}/call-outcome" in resp.text
+    assert f"logCallTap('/crm/deals/{deal_id}/call-tel'" in resp.text
+    assert f"/crm/deals/{deal_id}/call-outcome" in resp.text
     assert "Score" in resp.text  # qualified-pool deal, so score section renders
     assert "unknown when qualified" not in resp.text
     assert "referral/inbound" not in resp.text
@@ -122,11 +122,11 @@ def test_call_view_shows_deal_tags(logged_in_client, db):
 
     pid, _, deal_id = _qualified_deal(db)
     apply_deal_tags(deal_id, replace=["clinic", "referral"])
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert 'class="pill pill-tag">clinic</span>' in resp.text
     assert 'class="pill pill-tag">referral</span>' in resp.text
-    assert 'href="/deals?tag=' not in resp.text
+    assert 'href="/crm/deals?tag=' not in resp.text
 
 
 def test_call_view_score_uses_actual_qualified_at_recency(logged_in_client, db):
@@ -134,7 +134,7 @@ def test_call_view_score_uses_actual_qualified_at_recency(logged_in_client, db):
     # entered its qualified-pool stage, not silently score recency as
     # "unknown" because qualified_at was never populated on the row.
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert "unknown when qualified" not in resp.text
 
 
@@ -142,7 +142,7 @@ def test_call_view_hides_score_for_non_qualified_pool_stage(logged_in_client, db
     pid = create_partner("Jane Doe", email="jane@x.example", phone="0400 111 222")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)  # stays in "new"
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert "Score" not in resp.text
 
@@ -151,7 +151,7 @@ def test_call_view_no_phone_shows_message_not_dial_button(logged_in_client, db):
     pid = create_partner("No Phone", email="nophone@example.com")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert "No phone number on file" in resp.text
     assert "btn-tel-big" not in resp.text
@@ -161,33 +161,33 @@ def test_call_view_undialable_phone_shows_message_not_dial_button(logged_in_clie
     pid = create_partner("Punctuation Phone", email="punct@example.com", phone="---")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert "No phone number on file" in resp.text
     assert "btn-tel-big" not in resp.text
 
 
 def test_call_view_requires_login(client, db):
-    resp = client.get("/deals/1/call", follow_redirects=False)
+    resp = client.get("/crm/deals/1/call", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
 
 def test_call_view_missing_deal_redirects(logged_in_client, db):
-    resp = logged_in_client.get("/deals/999/call", follow_redirects=False)
+    resp = logged_in_client.get("/crm/deals/999/call", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/calls"
+    assert resp.headers["location"] == "/crm/calls"
 
 
 def test_call_outcome_from_call_view_redirects_back_to_call_view(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db)
     resp = logged_in_client.post(
-        f"/deals/{deal_id}/call-outcome",
+        f"/crm/deals/{deal_id}/call-outcome",
         data={"outcome": "no_answer", "next": "call_view", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session"))},
         follow_redirects=False,
     )
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/deals/{deal_id}/call"
+    assert resp.headers["location"] == f"/crm/deals/{deal_id}/call"
 
 
 def test_partner_detail_phone_uses_tel_link(logged_in_client, db):

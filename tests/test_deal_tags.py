@@ -277,35 +277,35 @@ def test_deals_page_shows_tags_and_filters(logged_in_client, db):
         tags=["clinic"],
     )
 
-    page = logged_in_client.get("/deals")
+    page = logged_in_client.get("/crm/deals")
     assert page.status_code == 200
     assert "clinic" in page.text
     assert "referral" in page.text
     assert page.text.count("Other") == 1
 
-    filtered = logged_in_client.get("/deals?tag=referral")
+    filtered = logged_in_client.get("/crm/deals?tag=referral")
     assert "Jane Doe" in filtered.text
     assert "Other" not in filtered.text
     assert "pill-tag-on" in filtered.text
 
-    both = logged_in_client.get("/deals?tag=clinic&stage=new")
+    both = logged_in_client.get("/crm/deals?tag=clinic&stage=new")
     assert "Jane Doe" in both.text
     assert "Other" in both.text
 
     partner = logged_in_client.get(f"/contacts/partners/{pid}")
     assert "clinic" in partner.text
-    assert f"/deals?tag=clinic" in partner.text
+    assert f"/crm/deals?tag=clinic" in partner.text
 
-    board = logged_in_client.get("/pipeline?tag=referral")
+    board = logged_in_client.get("/crm/pipeline?tag=referral")
     assert "Jane Doe" in board.text
     assert "Other" not in board.text
 
-    edit = logged_in_client.get(f"/deals/{deal_id}/edit")
+    edit = logged_in_client.get(f"/crm/deals/{deal_id}/edit")
     assert 'name="tags"' in edit.text
     assert "clinic, referral" in edit.text
 
     saved = logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",
@@ -322,7 +322,7 @@ def test_deals_page_shows_tags_and_filters(logged_in_client, db):
     assert get_deal(deal_id)["tags"] == [CAMPAIGN, "clinic"]
 
     rejected = logged_in_client.post(
-        f"/deals/{deal_id}/edit",
+        f"/crm/deals/{deal_id}/edit",
         data={
             "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
             "source": "referral",

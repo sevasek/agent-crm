@@ -6,7 +6,7 @@ from app.services.auth import create_user
 
 
 def test_timed_session_cookie_is_accepted(logged_in_client):
-    resp = logged_in_client.get("/pipeline", follow_redirects=False)
+    resp = logged_in_client.get("/crm/pipeline", follow_redirects=False)
     assert resp.status_code == 200
 
 
@@ -15,7 +15,7 @@ def test_untimed_session_cookie_is_rejected(client):
     user_id = create_user("oldcookie@example.com", "Old", "password123")
     token = URLSafeSerializer(SECRET_KEY, salt="session").dumps({"user_id": user_id})
     client.cookies.set("session", token)
-    resp = client.get("/pipeline", follow_redirects=False)
+    resp = client.get("/crm/pipeline", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
@@ -33,7 +33,7 @@ def test_get_current_user_honors_session_max_age(client, monkeypatch):
     user_id = create_user("expired@example.com", "Expired", "password123")
     token = cookie_signer.dumps({"user_id": user_id})
     client.cookies.set("session", token)
-    resp = client.get("/pipeline", follow_redirects=False)
+    resp = client.get("/crm/pipeline", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
@@ -178,7 +178,7 @@ def test_session_cookie_from_another_database_is_rejected(tmp_path, monkeypatch)
     create_user("b@example.com", "B", "password123")
     with TestClient(create_app()) as c:
         c.cookies.set("session", token)
-        resp = c.get("/pipeline", follow_redirects=False)
+        resp = c.get("/crm/pipeline", follow_redirects=False)
         assert resp.status_code == 303
         assert resp.headers["location"] == "/auth/login"
 

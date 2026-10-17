@@ -21,23 +21,24 @@ def test_partners_has_skip_link_and_main(logged_in_client):
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
     assert 'href="/contacts/partners" aria-current="page">Partners</a>' in resp.text
-    assert 'href="/calls" aria-current="page"' not in resp.text
+    assert 'href="/crm/calls" aria-current="page"' not in resp.text
 
 
 def test_pipeline_nav_marks_current_page(logged_in_client):
-    resp = logged_in_client.get("/pipeline")
+    resp = logged_in_client.get("/crm/pipeline")
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
-    assert 'href="/pipeline" aria-current="page">Pipeline</a>' in resp.text
+    assert 'href="/crm/pipeline" aria-current="page">Pipeline</a>' in resp.text
     assert 'href="/contacts/partners" aria-current="page"' not in resp.text
+    assert 'href="/crm/pipeline">CRM</a>' in resp.text  # the group label itself must not also get aria-current
 
 
 def test_leads_nav_marks_current_page(logged_in_client):
-    resp = logged_in_client.get("/leads")
+    resp = logged_in_client.get("/crm/leads")
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
-    assert 'href="/leads" aria-current="page">Leads</a>' in resp.text
-    assert 'href="/deals" aria-current="page"' not in resp.text
+    assert 'href="/crm/leads" aria-current="page">Leads</a>' in resp.text
+    assert 'href="/crm/deals" aria-current="page"' not in resp.text
 
 
 def test_login_error_is_announced(client):
@@ -64,8 +65,8 @@ def test_call_view_marks_calls_nav_current(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@acme.example", phone="0400 111 222")
     sid = create_service("Consulting", "consulting")
     deal_id = create_deal(pid, sid)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     _assert_skip_and_main(resp.text)
-    assert 'href="/calls" aria-current="page">Calls</a>' in resp.text
-    assert 'href="/deals" aria-current="page"' not in resp.text
+    assert 'href="/crm/calls" aria-current="page">Calls</a>' in resp.text
+    assert 'href="/crm/deals" aria-current="page"' not in resp.text

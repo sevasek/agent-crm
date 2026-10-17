@@ -17,13 +17,13 @@ def _qualified_deal(db, phone="0400 111 222"):
 # ==================== Offers admin ====================
 
 def test_offers_settings_requires_login(client, db):
-    resp = client.get("/offers", follow_redirects=False)
+    resp = client.get("/crm/offers", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
 
 def test_create_offer_via_admin_form(logged_in_client, db):
-    resp = logged_in_client.post("/offers/new", data={
+    resp = logged_in_client.post("/crm/offers/new", data={
         "name": "Starter", "pitch": "A free review", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -31,7 +31,7 @@ def test_create_offer_via_admin_form(logged_in_client, db):
 
 
 def test_create_offer_missing_name_shows_error(logged_in_client, db):
-    resp = logged_in_client.post("/offers/new", data={
+    resp = logged_in_client.post("/crm/offers/new", data={
         "name": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
@@ -42,7 +42,7 @@ def test_create_offer_unchecked_active_is_inactive(logged_in_client, db):
     # Regression: FastAPI's Form("on") default meant an omitted checkbox
     # (unchecked, not just missing from a raw POST) still created an active
     # offer — there was no way to add an inactive one from this form.
-    resp = logged_in_client.post("/offers/new", data={
+    resp = logged_in_client.post("/crm/offers/new", data={
         "name": "Retired pitch", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
         # "active" omitted entirely, as an unchecked checkbox would send
     }, follow_redirects=False)
@@ -53,7 +53,7 @@ def test_create_offer_unchecked_active_is_inactive(logged_in_client, db):
 
 def test_edit_offer_via_admin_form(logged_in_client, db):
     offer, _ = offers.create_offer("Starter")
-    resp = logged_in_client.post(f"/offers/{offer['id']}/edit", data={
+    resp = logged_in_client.post(f"/crm/offers/{offer['id']}/edit", data={
         "name": "Starter Plus", "pitch": "New pitch", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -65,7 +65,7 @@ def test_delete_offer_in_use_shows_error(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@x.example")
     sid = create_service("Consulting", "consulting")
     create_deal(pid, sid, offer_id=offer["id"])
-    resp = logged_in_client.post(f"/offers/{offer['id']}/delete", data={
+    resp = logged_in_client.post(f"/crm/offers/{offer['id']}/delete", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
     assert resp.status_code == 400
@@ -74,7 +74,7 @@ def test_delete_offer_in_use_shows_error(logged_in_client, db):
 
 def test_delete_unused_offer(logged_in_client, db):
     offer, _ = offers.create_offer("Starter")
-    resp = logged_in_client.post(f"/offers/{offer['id']}/delete", data={
+    resp = logged_in_client.post(f"/crm/offers/{offer['id']}/delete", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -84,13 +84,13 @@ def test_delete_unused_offer(logged_in_client, db):
 # ==================== ICP admin ====================
 
 def test_icp_settings_requires_login(client, db):
-    resp = client.get("/icp", follow_redirects=False)
+    resp = client.get("/crm/icp", follow_redirects=False)
     assert resp.status_code == 303
     assert resp.headers["location"] == "/auth/login"
 
 
 def test_create_icp_criterion_via_admin_form(logged_in_client, db):
-    resp = logged_in_client.post("/icp/new", data={
+    resp = logged_in_client.post("/crm/icp/new", data={
         "label": "Enterprise-sized", "field": "team_size", "operator": "gt", "value": "10",
         "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
@@ -101,7 +101,7 @@ def test_create_icp_criterion_via_admin_form(logged_in_client, db):
 
 
 def test_create_icp_criterion_invalid_value_shows_error(logged_in_client, db):
-    resp = logged_in_client.post("/icp/new", data={
+    resp = logged_in_client.post("/crm/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "not-a-number",
         "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
@@ -110,7 +110,7 @@ def test_create_icp_criterion_invalid_value_shows_error(logged_in_client, db):
 
 
 def test_create_icp_criterion_bad_weight_does_not_500(logged_in_client, db):
-    resp = logged_in_client.post("/icp/new", data={
+    resp = logged_in_client.post("/crm/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "10",
         "weight": "not-a-number", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
@@ -120,7 +120,7 @@ def test_create_icp_criterion_bad_weight_does_not_500(logged_in_client, db):
 
 
 def test_create_icp_criterion_out_of_range_weight_does_not_500(logged_in_client, db):
-    resp = logged_in_client.post("/icp/new", data={
+    resp = logged_in_client.post("/crm/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "10",
         "weight": str(2 ** 63), "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
@@ -129,7 +129,7 @@ def test_create_icp_criterion_out_of_range_weight_does_not_500(logged_in_client,
 
 
 def test_create_icp_criterion_unchecked_active_is_inactive(logged_in_client, db):
-    resp = logged_in_client.post("/icp/new", data={
+    resp = logged_in_client.post("/crm/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "10",
         "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
@@ -140,7 +140,7 @@ def test_create_icp_criterion_unchecked_active_is_inactive(logged_in_client, db)
 def test_create_icp_criterion_rejects_infinite_value(logged_in_client, db):
     # Python's float() accepts the literal string "Infinity"/"inf" directly
     # (unlike JSON, no raw-bytes trick needed to exercise this).
-    resp = logged_in_client.post("/icp/new", data={
+    resp = logged_in_client.post("/crm/icp/new", data={
         "label": "", "field": "team_size", "operator": "gt", "value": "Infinity",
         "weight": "5", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     })
@@ -150,7 +150,7 @@ def test_create_icp_criterion_rejects_infinite_value(logged_in_client, db):
 
 def test_edit_icp_criterion(logged_in_client, db):
     c, _ = icp.create_criterion("team_size", "gt", "10", weight=5)
-    resp = logged_in_client.post(f"/icp/{c['id']}/edit", data={
+    resp = logged_in_client.post(f"/crm/icp/{c['id']}/edit", data={
         "label": "Big teams", "field": "team_size", "operator": "gt", "value": "10",
         "weight": "8", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
@@ -160,7 +160,7 @@ def test_edit_icp_criterion(logged_in_client, db):
 
 def test_delete_icp_criterion(logged_in_client, db):
     c, _ = icp.create_criterion("team_size", "gt", "10")
-    resp = logged_in_client.post(f"/icp/{c['id']}/delete", data={
+    resp = logged_in_client.post(f"/crm/icp/{c['id']}/delete", data={
         "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -173,7 +173,7 @@ def test_call_view_shows_fit_score(logged_in_client, db):
     icp.create_criterion("team_size", "gt", "10", weight=5, label="Big team")
     icp.create_criterion("industry", "fuzzy_match", "retail", weight=3, label="Retail")
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert resp.status_code == 200
     assert "Fit 8/8" in resp.text
     assert "Big team" in resp.text
@@ -182,7 +182,7 @@ def test_call_view_shows_fit_score(logged_in_client, db):
 
 def test_call_view_no_fit_section_without_criteria(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert "Fit " not in resp.text
 
 
@@ -192,7 +192,7 @@ def test_call_view_shows_offer_pitch(logged_in_client, db):
         price_anchor="$500/mo", is_default=True,
     )
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert "A free 30-minute review" in resp.text
     assert "Saved 10 hrs/week" in resp.text
     assert "$500/mo" in resp.text
@@ -202,11 +202,11 @@ def test_set_deal_offer(logged_in_client, db):
     offer1, _ = offers.create_offer("Starter")
     offer2, _ = offers.create_offer("Premium")
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
+    resp = logged_in_client.post(f"/crm/deals/{deal_id}/offer", data={
         "offer_id": str(offer2["id"]), "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == f"/deals/{deal_id}/call"
+    assert resp.headers["location"] == f"/crm/deals/{deal_id}/call"
     from app.services.deals import get_deal
     assert get_deal(deal_id)["offer_id"] == offer2["id"]
 
@@ -219,7 +219,7 @@ def test_set_deal_offer_garbage_value_leaves_existing_offer(logged_in_client, db
     from app.services.deals import update_deal_fields, get_deal
     update_deal_fields(deal_id, offer_id=offer["id"])
 
-    resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
+    resp = logged_in_client.post(f"/crm/deals/{deal_id}/offer", data={
         "offer_id": "not-a-number", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -232,7 +232,7 @@ def test_set_deal_offer_out_of_range_value_leaves_existing_offer(logged_in_clien
     from app.services.deals import update_deal_fields, get_deal
     update_deal_fields(deal_id, offer_id=offer["id"])
 
-    resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
+    resp = logged_in_client.post(f"/crm/deals/{deal_id}/offer", data={
         "offer_id": str(2 ** 63), "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -245,7 +245,7 @@ def test_set_deal_offer_explicit_none_clears_offer(logged_in_client, db):
     from app.services.deals import update_deal_fields, get_deal
     update_deal_fields(deal_id, offer_id=offer["id"])
 
-    resp = logged_in_client.post(f"/deals/{deal_id}/offer", data={
+    resp = logged_in_client.post(f"/crm/deals/{deal_id}/offer", data={
         "offer_id": "", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303
@@ -255,14 +255,14 @@ def test_set_deal_offer_explicit_none_clears_offer(logged_in_client, db):
 def test_call_view_offer_select_has_submit_button_for_no_js(logged_in_client, db):
     offers.create_offer("Starter")
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.get(f"/deals/{deal_id}/call")
+    resp = logged_in_client.get(f"/crm/deals/{deal_id}/call")
     assert "<select name=\"offer_id\"" in resp.text
     assert "<button type=\"submit\">Save</button>" in resp.text
 
 
 def test_create_offer_from_call_view(logged_in_client, db):
     pid, _, deal_id = _qualified_deal(db)
-    resp = logged_in_client.post(f"/deals/{deal_id}/offer/new", data={
+    resp = logged_in_client.post(f"/crm/deals/{deal_id}/offer/new", data={
         "name": "On-the-spot Offer", "pitch": "New pitch", "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
     }, follow_redirects=False)
     assert resp.status_code == 303

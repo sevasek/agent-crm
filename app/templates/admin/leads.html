@@ -7,7 +7,7 @@
     Research candidates. A lead is not in the pipeline until you convert it to an
     opportunity. Creating a lead does not create a partner.
 </p>
-<form method="get" action="/leads" style="margin-bottom:1rem;">
+<form method="get" action="/crm/leads" style="margin-bottom:1rem;">
     <div class="form-row">
         <label for="q">Search</label>
         <input type="text" id="q" name="q" value="{{ q }}" placeholder="Name, company, email, phone, website">
@@ -41,7 +41,7 @@
         </select>
     </div>
     <button type="submit">Filter</button>
-    <a class="btn" href="/leads/new">+ New lead</a>
+    <a class="btn" href="/crm/leads/new">+ New lead</a>
 </form>
 {% if tag_error %}<p class="error" role="alert">{{ tag_error }}</p>{% endif %}
 <table>
@@ -52,7 +52,7 @@
     {% for d in leads %}
     <tr>
         <td>
-            <a href="/leads/{{ d.id }}">{{ d.company_name or d.contact_name or d.name or d.email or ("Lead #" ~ d.id) }}</a>
+            <a href="/crm/leads/{{ d.id }}">{{ d.company_name or d.contact_name or d.name or d.email or ("Lead #" ~ d.id) }}</a>
             {% set record = d %}{% include "admin/_record_badges.html" %}
             {% if d.tags %}
             <div>
@@ -72,7 +72,7 @@
         <td>
             {{ d.next_action or "" }}{% if d.next_action_date %} ({{ (d.next_action_date or "")[:10] }}){% endif %}
         </td>
-        <td><a href="/leads/{{ d.id }}">Open</a></td>
+        <td><a href="/crm/leads/{{ d.id }}">Open</a></td>
     </tr>
     {% else %}
     <tr><td colspan="6" class="muted">{% if q or owner or source_prefix or current_tag or current_due or current_lost %}No leads match those filters.{% else %}No leads yet.{% endif %}</td></tr>

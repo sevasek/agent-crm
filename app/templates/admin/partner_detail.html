@@ -22,7 +22,7 @@
     {% endfor %}
 </p>
 <a class="btn btn-secondary" href="/contacts/partners/{{ partner.id }}/edit">Edit</a>
-<a class="btn" href="/deals/new?partner_id={{ partner.id }}">+ New deal</a>
+<a class="btn" href="/crm/deals/new?partner_id={{ partner.id }}">+ New deal</a>
 
 {% if partner.is_company and children %}
 <h2>People at this company</h2>
@@ -40,7 +40,7 @@
     <strong>{{ d.service_name }}</strong> — {% set record = d %}{% include "admin/_record_badges.html" %} <span class="pill">{{ d.stage }}</span>
     {% if d.value_estimate %}· ${{ "%.0f"|format(d.value_estimate) }}{% endif %}
     {% for tag in d.tags %}
-    <a class="pill pill-tag" href="/deals?tag={{ tag }}">{{ tag }}</a>
+    <a class="pill pill-tag" href="/crm/deals?tag={{ tag }}">{{ tag }}</a>
     {% endfor %}
     {% if d.parent_deal_id %}<span class="muted"> · follow-on of deal #{{ d.parent_deal_id }}</span>{% endif %}
     {% set kids = deals | selectattr("parent_deal_id", "equalto", d.id) | list %}
@@ -51,7 +51,7 @@
     {% endif %}
     {% if d.pain_points %}<br><span class="muted">Pain points: {{ d.pain_points }}</span>{% endif %}
     {% if d.goals %}<br><span class="muted">Goals: {{ d.goals }}</span>{% endif %}
-    <form class="next-action-form" method="post" action="/deals/{{ d.id }}/next-action">
+    <form class="next-action-form" method="post" action="/crm/deals/{{ d.id }}/next-action">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="text" name="next_action" value="{{ d.next_action or '' }}" placeholder="Next action" aria-label="Next action">
         <input type="date" name="next_action_date" value="{{ (d.next_action_date or '')[:10] }}" aria-label="Next action date">
@@ -59,8 +59,8 @@
         {% elif d.due_status == "due" %}<span class="pill pill-due">due today</span>{% endif %}
         <button type="submit">Save</button>
     </form>
-    <p><a class="btn btn-secondary" href="/deals/{{ d.id }}/edit">Edit deal</a></p>
-    <form class="stage-form" method="post" action="/deals/{{ d.id }}/stage">
+    <p><a class="btn btn-secondary" href="/crm/deals/{{ d.id }}/edit">Edit deal</a></p>
+    <form class="stage-form" method="post" action="/crm/deals/{{ d.id }}/stage">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <select name="stage" aria-label="Stage for deal #{{ d.id }}" onchange="this.form.submit()">
             {% for s in stages %}

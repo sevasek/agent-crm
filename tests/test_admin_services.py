@@ -9,7 +9,7 @@ from app.services.catalog import (
 
 
 def test_new_service_rejects_path_nurture_slug(logged_in_client):
-    resp = logged_in_client.post("/services/new", data={
+    resp = logged_in_client.post("/crm/services/new", data={
         "name": "Bad",
         "slug": "bad-nurture",
         "description": "",
@@ -25,7 +25,7 @@ def test_edit_service_rejects_path_nurture_slug_and_keeps_existing(logged_in_cli
     sid = create_service(
         "Consulting", "consulting", nurture_list_slug="automation-interest",
     )
-    resp = logged_in_client.post(f"/services/{sid}/edit", data={
+    resp = logged_in_client.post(f"/crm/services/{sid}/edit", data={
         "name": "Consulting",
         "description": "",
         "nurture_list_slug": "../admin",

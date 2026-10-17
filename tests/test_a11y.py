@@ -30,6 +30,7 @@ def test_pipeline_nav_marks_current_page(logged_in_client):
     _assert_skip_and_main(resp.text)
     assert 'href="/crm/pipeline" aria-current="page">Pipeline</a>' in resp.text
     assert 'href="/contacts/partners" aria-current="page"' not in resp.text
+    assert 'href="/crm/pipeline">CRM</a>' in resp.text  # the group label itself must not also get aria-current
 
 
 def test_leads_nav_marks_current_page(logged_in_client):

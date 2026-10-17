@@ -18,7 +18,7 @@
         <a class="nav-app-contacts" href="/contacts/partners" aria-current="page">Contacts</a>
         <a href="/contacts/partners"{% if path == "/contacts/partners" or path.startswith("/contacts/partners/") %} aria-current="page"{% endif %}>Partners</a>
         {% elif path != "/apps" %}
-        <a class="nav-app-crm" href="/crm/pipeline"{% if path.startswith("/crm") %} aria-current="page"{% endif %}>CRM</a>
+        <a class="nav-app-crm" href="/crm/pipeline">CRM</a>
         <a href="/crm/calls"{% if path == "/crm/calls" or path.startswith("/crm/calls/") or (path.startswith("/crm/deals/") and path.endswith("/call")) %} aria-current="page"{% endif %}>Calls</a>
         <a href="/crm/pipeline"{% if path == "/crm/pipeline" or path.startswith("/crm/pipeline/") %} aria-current="page"{% endif %}>Pipeline</a>
         <a href="/crm/deals"{% if path == "/crm/deals" or (path.startswith("/crm/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>

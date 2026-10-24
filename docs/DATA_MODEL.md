@@ -347,6 +347,115 @@ Both scores are formulas computed at query time, not stored columns.
 
 The queue shows the top 10. **Fit score** is the `icp_criteria` sum above.
 
+## Campaign metrics
+
+`app/services/campaign_metrics.py` is a pure function,
+`compute_campaign_metrics(campaign, deals, events, today, tz, period=None)`.
+It does not read the database or the clock. The caller passes the campaign
+window and targets, the deals (each already labelled `open`, `won`, `lost`,
+or `disqualified`), and dated events. Every number comes back with the
+formula and the inputs that produced it, so a screen can show them on hover.
+`value` is `None` when the figure does not exist. It is never a stand-in zero.
+
+Rates use a fixed length: a week is 7 days, a month is 30 days, a year is
+365 days. That is not a calendar month. The period table is separate and
+uses real calendar weeks (Monday start), months, and years in `tz`.
+
+### Window
+
+`days_total = (deadline - start_date).days + 1`. Both dates count. A start
+of 1 September and a deadline of 30 September is 30 days. The day after the
+deadline, the campaign has ended.
+
+Days elapsed are the calendar days before today that sit inside the window,
+so the start date itself has elapsed 0 and today still counts as a day
+remaining. Elapsed + remaining = total. Time percent is
+`days_elapsed / days_total * 100`.
+
+| Situation | What is reported |
+|---|---|
+| No start date | Actuals only. No rates, no time percent, no projection. |
+| No deadline | Actuals, and the actual rate once at least one day has elapsed. No required rate, no time percent, no projection. |
+| Deadline before the start | Zero-length window. Actuals only. No divide-by-zero. |
+| Start and deadline on the same day | A one-day campaign, not a zero-length window. |
+| Today before the start | Elapsed 0, time percent 0. Required rate is the full target spread over the whole window. No actual rate yet. |
+| Today inside the window, including the deadline | Required rate uses the days still left, including today. |
+| Today after the deadline | Final percent against the target. Actual rate uses the whole window. No required rate and no projection. |
+
+Worked example: start 1 September 2026, deadline 30 September 2026, today
+16 September 2026. Total 30, elapsed 15, remaining 15, time percent 50.
+
+### Actuals
+
+| Target | Actual |
+|---|---|
+| Leads | Deals whose outcome is not disqualified. Open, won, and lost all count. |
+| Contacts | Events typed `contact`, `contacts`, or `contact_made`. |
+| Conversations | Events typed `conversation` or `conversations`. |
+| Advanced | Events typed `advanced` or `advance`. |
+| Won | Deals with outcome `won`. |
+| Won value | Sum of `value` on won deals. A missing value counts as 0. |
+
+Contact, conversation, and advanced targets count events, not unique deals.
+A deal is contacted when any of those events names its id. Everyone else is
+not yet touched.
+
+Naive event timestamps are UTC, then converted to `tz`. A date-only value is
+that calendar date and is not shifted. Campaign start, deadline, and `today`
+are calendar dates: a naive datetime keeps its date part.
+
+### Win/loss
+
+Closed deals are won and lost only. Disqualified deals are excluded from the
+ratio and the win rate, and so are open deals.
+
+- Ratio is `won : lost`, unreduced (`3 : 9`).
+- Win rate is `won / (won + lost) * 100`.
+- When `won + lost` is 0, both are `None` with note `no closed deals`. A run
+  of losses and no wins is a real 0%, not that note.
+- Disqualification rate is `disqualified / deals * 100` over every deal
+  passed in. No deals at all is `None` with note `no leads`.
+- Lost deals are grouped by `lost_reason`. Disqualified deals are not in
+  that group. Won value and lost value are separate sums.
+
+### Pacing
+
+For each target that is set (a missing target is skipped; `0` is a real
+target and has no percent complete):
+
+- Remaining is `target - actual` (negative once the target is passed).
+- Percent complete is `actual / target * 100`.
+- Required rate is `remaining / days_remaining * 7` (or 30, or 365).
+- Actual rate is `actual / days_elapsed * 7` (or 30, or 365).
+- Projection is `actual / days_elapsed * days_total`, and only while the
+  window is still open and at least one day has elapsed.
+- Status is ahead when percent complete is above the time percent, behind
+  when it is below, on track when they match. `pacing_status` is behind if
+  any target is behind, ahead if every comparable target is ahead, and on
+  track in between.
+
+Continuing the example, target 30 leads and actual 10: remaining 20, percent
+complete `10 / 30 * 100`, required per week `20 / 15 * 7`, required per month 40,
+required per year `20 / 15 * 365`, actual per week `10 / 15 * 7`, projection
+20, status behind.
+
+### Period breakdown
+
+`period` is `week`, `month`, or `year`. Omit it and `periods` is `None`.
+
+Each row is a whole calendar period. Its required figure is
+`target * overlap_days / window_days`, so a week that only partly sits in
+the window is prorated and the rows add back to the target. The cumulative
+target is that same straight line at the end of the period. The cumulative
+actual adds the period actuals. Undated rows are listed beside the table
+and are not inside a period; overall actual = last cumulative actual +
+undated.
+
+Lead counts in a period use `created_at` and skip disqualified deals. Won,
+lost, disqualified, and the period win rate use `closed_at`. A period with
+no won or lost deals has win rate `None` and note `no closed deals`, even
+if someone was disqualified that period.
+
 ## Follow-ups
 
 Open opportunities (`active = 1`, stage not `is_won`) whose

@@ -22,6 +22,10 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   is seeded idempotently (insert-or-ignore by name, then set the flag).
   `mark_lost` can change the reason on an already-lost deal and keeps
   `closed_at`. Part of #154.
+- Straight-line campaign metrics (`app/services/campaign_metrics.py`):
+  results, win/loss with disqualified deals excluded, pacing rates, and a
+  week/month/year breakdown. Each number includes the inputs behind it.
+  Part of #154.
 
 ## [1.0.0] - 2026-10-17
 

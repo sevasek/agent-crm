@@ -8,7 +8,9 @@ service is kept when offer_id is omitted. Stage, tags, and next action stay.
 from app.services.activities import list_activities_for_deal
 from app.services.auth import generate_csrf_token
 from app.services.catalog import create_service, update_service
-from app.services.deals import create_deal, get_deal, set_deal_stage, update_deal_fields
+from app.services.deals import (
+    assign_deals_service, create_deal, get_deal, set_deal_stage, update_deal_fields,
+)
 from app.services.offers import create_offer
 from app.services.partners import create_partner
 from tests.test_mcp_tools import _enable, call
@@ -242,7 +244,7 @@ def test_bulk_update_deals_sets_service_by_slug_and_id(client, db, monkeypatch):
 
     by_slug, is_error = call(client, "bulk_update_deals", {
         "deal_ids": [first, second, already],
-        "service_slug": "website-rebuild",
+        "set_service_slug": "website-rebuild",
     })
     assert is_error is False
     assert by_slug["ok"] is True
@@ -261,7 +263,7 @@ def test_bulk_update_deals_sets_service_by_slug_and_id(client, db, monkeypatch):
 
     by_id, is_error = call(client, "bulk_update_deals", {
         "deal_ids": [first, second],
-        "service_id": retainer,
+        "set_service_id": retainer,
     })
     assert is_error is False
     assert get_deal(first)["service_id"] == retainer
@@ -282,8 +284,8 @@ def test_bulk_service_change_validates_before_writing(client, db, monkeypatch):
 
     both, is_error = call(client, "bulk_update_deals", {
         "deal_ids": [blocked_id, clean_id],
-        "service_id": rebuild,
-        "service_slug": "website-rebuild",
+        "set_service_id": rebuild,
+        "set_service_slug": "website-rebuild",
     })
     assert is_error is True
     assert both["error"] == "invalid_service"
@@ -292,7 +294,7 @@ def test_bulk_service_change_validates_before_writing(client, db, monkeypatch):
 
     mismatch, is_error = call(client, "bulk_update_deals", {
         "deal_ids": [blocked_id, clean_id],
-        "service_slug": "website-rebuild",
+        "set_service_slug": "website-rebuild",
     })
     assert is_error is True
     assert mismatch["error"] == "offer_service_mismatch"
@@ -310,7 +312,7 @@ def test_bulk_service_change_validates_before_writing(client, db, monkeypatch):
 
     update_service(rebuild, active=False)
     inactive, is_error = call(client, "bulk_update_deals", {
-        "deal_ids": [clean_id], "service_id": rebuild,
+        "deal_ids": [clean_id], "set_service_id": rebuild,
     })
     assert is_error is True
     assert inactive["error"] == "inactive_service"
@@ -318,7 +320,7 @@ def test_bulk_service_change_validates_before_writing(client, db, monkeypatch):
 
     update_service(rebuild, active=True)
     missing, is_error = call(client, "bulk_update_deals", {
-        "deal_ids": [clean_id], "service_slug": "no-such-service",
+        "deal_ids": [clean_id], "set_service_slug": "no-such-service",
     })
     assert is_error is True
     assert missing["error"] == "invalid_service"
@@ -335,7 +337,7 @@ def test_bulk_service_change_can_set_or_clear_offer(client, db, monkeypatch):
 
     replaced, is_error = call(client, "bulk_update_deals", {
         "deal_ids": [first, second],
-        "service_id": rebuild,
+        "set_service_id": rebuild,
         "offer_id": new_offer["id"],
     })
     assert is_error is False
@@ -350,7 +352,7 @@ def test_bulk_service_change_can_set_or_clear_offer(client, db, monkeypatch):
 
     cleared, is_error = call(client, "bulk_update_deals", {
         "deal_ids": [first, second],
-        "service_slug": "consulting",
+        "set_service_slug": "consulting",
         "offer_id": None,
     })
     assert is_error is False
@@ -386,7 +388,7 @@ def test_bulk_service_change_stops_at_50(client, db, monkeypatch):
     ids = [_deal(consulting, partner) for _ in range(51)]
     payload, is_error = call(client, "bulk_update_deals", {
         "deal_ids": ids,
-        "service_id": rebuild,
+        "set_service_id": rebuild,
     })
     assert is_error is False
     assert payload["count"] == 50
@@ -494,3 +496,54 @@ def test_edit_form_can_clear_offer_while_changing_service(logged_in_client, db):
     assert get_deal(deal_id)["service_id"] == rebuild
     assert get_deal(deal_id)["offer_id"] == new_offer["id"]
     assert get_deal(deal_id)["next_action"] == "Call Jane"
+
+
+def test_bulk_service_slug_with_deal_ids_only_filters(client, db, monkeypatch):
+    _enable(monkeypatch)
+    consulting, rebuild, partner = _pair(db)
+    on_rebuild = _deal(rebuild, partner)
+    on_consulting = _deal(consulting, create_partner("Other", is_company=True, phone="0400100013"))
+    payload, is_error = call(client, "bulk_update_deals", {
+        "deal_ids": [on_rebuild, on_consulting],
+        "service_slug": "website-rebuild",
+        "set_stage": "contacted",
+    })
+    assert is_error is False
+    assert payload["updated_ids"] == [on_rebuild]
+    assert get_deal(on_consulting)["service_id"] == consulting
+    assert get_deal(on_consulting)["stage"] == "new"
+    assert _service_logs(on_consulting) == []
+
+
+def test_assign_deals_service_rolls_back_on_missing_deal(db):
+    consulting, rebuild, partner = _pair(db)
+    first = _deal(consulting, partner)
+    gone = dict(get_deal(first), id=999999)
+    _ids, error, _blocked = assign_deals_service([get_deal(first), gone], rebuild)
+    assert error == "not_found"
+    assert get_deal(first)["service_id"] == consulting
+    assert _service_logs(first) == []
+
+
+def test_offer_only_change_rejects_other_services_offer(client, logged_in_client, db, monkeypatch):
+    _enable(monkeypatch)
+    consulting, rebuild, partner = _pair(db)
+    theirs, _err = create_offer("Rebuild", service_id=rebuild, price=1200)
+    loose, _err = create_offer("Loose", price=10)
+    deal_id = _deal(consulting, partner)
+
+    form = _edit(logged_in_client, deal_id, service_id=str(consulting), offer_id=str(theirs["id"]))
+    assert form.status_code == 400
+    assert "different service" in form.text
+    missing = _edit(logged_in_client, deal_id, service_id=str(consulting), offer_id="999999")
+    assert missing.status_code == 400
+    assert get_deal(deal_id)["offer_id"] is None
+
+    mcp, is_error = call(client, "update_deal", {"deal_id": deal_id, "offer_id": theirs["id"]})
+    assert is_error is True
+    assert mcp["error"] == "offer_service_mismatch"
+    assert get_deal(deal_id)["offer_id"] is None
+
+    ok = _edit(logged_in_client, deal_id, service_id=str(consulting), offer_id=str(loose["id"]))
+    assert ok.status_code == 303
+    assert get_deal(deal_id)["offer_id"] == loose["id"]

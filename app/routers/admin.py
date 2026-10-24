@@ -23,7 +23,7 @@ from app.services.catalog import create_service, get_service, update_service, li
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
     create_deal, get_deal, list_deals, list_parent_candidates, mark_lost,
-    restore_deal, set_deal_service, set_deal_stage, update_deal_fields, record_call_outcome,
+    check_offer_for_deal, restore_deal, set_deal_service, set_deal_stage, update_deal_fields, record_call_outcome,
     validate_parent_link, CALL_OUTCOMES, UNSET, service_change_message,
 )
 from app.services.lead_records import create_lead, get_lead, list_leads, update_lead, convert_lead
@@ -1181,8 +1181,19 @@ async def edit_deal_submit(
             field_updates["offer_id"] = None
         else:
             parsed_offer = _safe_int(offer_id)
-            if parsed_offer is not None and parsed_offer >= 1:
-                field_updates["offer_id"] = parsed_offer
+            offer_error = (
+                check_offer_for_deal(deal, parsed_offer)
+                if parsed_offer is not None and parsed_offer >= 1 else "invalid_offer"
+            )
+            if offer_error:
+                return _edit_deal_form(
+                    request, user, deal, partner, service, form_tags=tags,
+                    form_parent_deal_id=parent_deal_id, form_service_id=service_id,
+                    form_offer_id=offer_id,
+                    error=_service_form_error(offer_error, service=service, offer_id=parsed_offer),
+                    status_code=400,
+                )
+            field_updates["offer_id"] = parsed_offer
     update_deal_fields(deal_id, **field_updates)
     apply_deal_tags(deal_id, replace=parsed_tags or [])
     return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)

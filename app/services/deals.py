@@ -99,6 +99,20 @@ def _offer_belongs_to_service(offer, service_id) -> bool:
     return bound is not None and bound == int(service_id)
 
 
+def check_offer_for_deal(deal, offer_id):
+    """Error code when offer_id can't go on the deal as-is, else None.
+
+    For an offer-only change: the offer must exist and not be tied to a
+    service other than the deal's.
+    """
+    offer = get_offer(offer_id)
+    if not offer:
+        return "invalid_offer"
+    if deal.get("service_id") and _offer_tied_to_other_service(offer, deal["service_id"]):
+        return "offer_not_for_service"
+    return None
+
+
 def _plan_service_change(deal, service, offer_id=UNSET):
     """Return (plan, error_code). Does not write.
 
@@ -162,10 +176,13 @@ def _plan_service_change(deal, service, offer_id=UNSET):
     }, None
 
 
-def _apply_service_plan(deal, service, plan):
-    """Write a plan from _plan_service_change. Stage, tags, and next action stay."""
+def _write_service_plan(db, deal, service, plan):
+    """Write a plan from _plan_service_change on `db`; the caller commits.
+
+    Stage, tags, and next action stay. Returns False when the deal is gone.
+    """
     if plan.get("noop"):
-        return get_deal(deal["id"])
+        return True
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     columns = ["service_id = ?", "updated_at = ?"]
     params = [plan["service_id"], now]
@@ -173,24 +190,26 @@ def _apply_service_plan(deal, service, plan):
         columns.insert(1, "offer_id = ?")
         params.insert(1, plan["offer_id"])
     params.append(deal["id"])
-    with get_db() as db:
-        cursor = db.execute(
-            f"UPDATE deals SET {', '.join(columns)} WHERE id = ?",
-            params,
-        )
-        db.commit()
-        if cursor.rowcount < 1:
-            return None
+    cursor = db.execute(
+        f"UPDATE deals SET {', '.join(columns)} WHERE id = ?",
+        params,
+    )
+    if cursor.rowcount < 1:
+        return False
     if plan.get("log"):
+        # Inline rather than log_activity so it shares the UPDATE's transaction.
         old = get_service(deal.get("service_id")) if deal.get("service_id") else None
         old_label = old["slug"] if old else "(none)"
-        log_activity(
-            deal.get("partner_id"),
-            "system",
-            service_changed_body(old_label, service["slug"]),
-            deal_id=deal["id"],
+        db.execute(
+            """INSERT INTO activities (partner_id, deal_id, type, body)
+               VALUES (?, ?, 'system', ?)""",
+            (
+                deal.get("partner_id") or None,
+                deal["id"],
+                sanitize_text(service_changed_body(old_label, service["slug"]), max_len=4000),
+            ),
         )
-    return get_deal(deal["id"])
+    return True
 
 
 def set_deal_service(deal_id: int, service_id: int, *, offer_id=UNSET):
@@ -203,23 +222,19 @@ def set_deal_service(deal_id: int, service_id: int, *, offer_id=UNSET):
     deal = get_deal(deal_id)
     if not deal:
         return None, "not_found"
-    service = get_service(service_id)
-    plan, error = _plan_service_change(deal, service, offer_id)
+    _ids, error, _blocked = assign_deals_service([deal], service_id, offer_id=offer_id)
     if error:
         return None, error
-    updated = _apply_service_plan(deal, service, plan)
-    if updated is None:
-        return None, "not_found"
-    return updated, None
+    return get_deal(deal_id), None
 
 
 def assign_deals_service(deals, service_id: int, *, offer_id=UNSET):
-    """Apply one service change to many deals. Nothing is written on error.
+    """Apply one service change to many deals in one transaction.
 
-    Returns (updated_ids, error, blocked_ids). `blocked_ids` is the deals
-    whose current offer is tied to a different service, when `offer_id` was
-    left unset or repeated the current offer. Other errors leave it None.
-    Does not change stage, tags, or next action.
+    Returns (updated_ids, error, blocked_ids). Nothing is written on error.
+    `blocked_ids` is the deals whose current offer is tied to a different
+    service, when `offer_id` was left unset or repeated the current offer.
+    Other errors leave it None. Does not change stage, tags, or next action.
     """
     service = get_service(service_id)
     if not service:
@@ -238,13 +253,14 @@ def assign_deals_service(deals, service_id: int, *, offer_id=UNSET):
         plans.append((deal, plan))
     if blocked:
         return None, "offer_service_mismatch", blocked
-    updated = []
-    for deal, plan in plans:
-        applied = _apply_service_plan(deal, service, plan)
-        if applied is None:
-            return None, "not_found", None
-        updated.append(deal["id"])
-    return updated, None, None
+    with get_db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        for deal, plan in plans:
+            if not _write_service_plan(db, deal, service, plan):
+                db.rollback()
+                return None, "not_found", None
+        db.commit()
+    return [deal["id"] for deal, _plan in plans], None, None
 
 
 def service_change_message(error, *, service=None, offer_id=None, deal_ids=None) -> str:

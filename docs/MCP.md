@@ -116,7 +116,7 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `create_service` / `update_service` | Add or change a catalogue service (`slug` is idempotent on create; `active=false` hides it without deleting; `nurture_list_slug`). |
 | `create_offer` / `update_offer` | Priced offers (`name`, `service_id` or `service_slug`, `price`, `currency`, `description`, `active`). Idempotent on name + service. Currency defaults to USD. |
 | `set_deal_owner` | Assign an owner slug such as `alice`, `bob` or `sales-agent`. |
-| `bulk_update_deals` | Selects open opportunities only. Set `set_stage` and/or `next_action` + `next_action_date`, `add_tags` / `remove_tags`, or `mark_lost` with `lost_reason`, for up to 50 `deal_ids`, or for a `service_slug` (optionally filtered by `stage`). To change service, pass `deal_ids` plus `service_id` or `service_slug` (not both) and an optional `offer_id`. With `deal_ids`, `service_slug` sets the service and does not filter; without `deal_ids` it still filters. The offer rule matches `update_deal`. A mismatch writes nothing. Each changed deal logs `Service changed: old-slug -> new-slug`. Changing service does not change stage, tags, or next action unless those fields are also sent. |
+| `bulk_update_deals` | Selects open opportunities only. Set `set_stage` and/or `next_action` + `next_action_date`, `add_tags` / `remove_tags`, or `mark_lost` with `lost_reason`, for up to 50 `deal_ids`, or for a `service_slug` (optionally filtered by `stage`). To change service, pass `deal_ids` plus `set_service_id` or `set_service_slug` (not both) and an optional `offer_id`. `service_slug` only filters. The offer rule matches `update_deal`. A mismatch writes nothing. Each changed deal logs `Service changed: old-slug -> new-slug`. Changing service does not change stage, tags, or next action unless those fields are also sent. |
 | `create_delegated_task` | Deal-scoped work for another agent or a person. Needs `deal_id` and `title`. Owner defaults to the default owner and status to `delegated`. Idempotent on deal + title + owner while open. |
 | `list_delegated_tasks` | Filter `owner`, `status`, `deal_id`, `due_only`. Rows include webhook delivery fields. |
 | `get_delegated_task` | Full task row plus partner and deal, with webhook `notified` / `notified_at` / `last_attempt_at` / `last_error`. |
@@ -323,7 +323,7 @@ campaign does that.
 }}
 
 {"name": "bulk_update_deals", "arguments": {
-  "deal_ids": [28, 29], "service_slug": "website-rebuild"
+  "deal_ids": [28, 29], "set_service_slug": "website-rebuild"
 }}
 
 {"name": "list_deals", "arguments": {

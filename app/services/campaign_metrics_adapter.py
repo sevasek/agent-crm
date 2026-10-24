@@ -25,17 +25,13 @@ A conversation does not also emit a contact. The stage change is the
 advanced event, so a meeting-scheduled call and its stage move count
 once each.
 """
-import logging
-
 from app.database import get_db
 from app.services import pipeline_stages
+from app.services.campaign_metrics import compute_campaign_metrics
 from app.services.deals import CALL_OUTCOMES, STAGE_CHANGED_PREFIX, STAGE_CHANGED_SEP
 from app.services.staleness import operator_today, operator_zone
 
-logger = logging.getLogger(__name__)
-
 PERIODS = ("week", "month", "year")
-_OUTCOMES = {"open", "won", "lost", "disqualified"}
 _CALL_LABEL_TO_KEY = {label: key for key, label, _target in CALL_OUTCOMES}
 _CONVERSATION_OUTCOMES = frozenset({"interested", "meeting_scheduled", "won"})
 
@@ -47,50 +43,6 @@ _TARGET_COLUMNS = {
     "won": "target_won",
     "won_value": "target_won_value",
 }
-
-
-def _load_shared_outcome():
-    """The disqualification-aware classifier."""
-    try:
-        from app.services.deal_outcome import deal_outcome
-    except ImportError:
-        return None
-    if not callable(deal_outcome):
-        logger.warning("app.services.deal_outcome.deal_outcome is not callable")
-        return None
-    return deal_outcome
-
-
-def _load_compute():
-    """The pure campaign metrics function."""
-    from app.services.campaign_metrics import compute_campaign_metrics
-
-    return compute_campaign_metrics, "campaign_metrics"
-
-
-def classify_deal(deal, *, won_stage_keys=None) -> str:
-    """open, won, lost, or disqualified, via `deal_outcome`."""
-    shared = _load_shared_outcome()
-    if shared is None:
-        return _fallback_outcome(deal, won_stage_keys)
-    outcome = shared(deal, won_stage_keys=won_stage_keys) if won_stage_keys is not None else shared(deal)
-    if isinstance(outcome, str) and outcome.strip().lower() in _OUTCOMES:
-        return outcome.strip().lower()
-    logger.warning("deal_outcome returned %r; using the open/won/lost fallback", outcome)
-    return _fallback_outcome(deal, won_stage_keys)
-
-
-def _fallback_outcome(deal, won_stage_keys) -> str:
-    """Used only when `deal_outcome` cannot be imported."""
-    if won_stage_keys is None:
-        won_stage_keys = pipeline_stages.won_stage_keys()
-    active = deal.get("active")
-    if active in (0, False):
-        return "lost"
-    stage = deal.get("stage") or ""
-    if stage in won_stage_keys:
-        return "won"
-    return "open"
 
 
 def annotate_outcomes(deals):
@@ -117,13 +69,7 @@ def metrics_for_campaign(campaign, *, period=None, today=None) -> dict:
     deals = _load_deals(campaign["slug"])
     events = _load_events([deal["id"] for deal in deals])
     payload = _campaign_payload(campaign)
-    function, engine = _load_compute()
-    raw = function(payload, deals, events, today, tz, period=period)
-    if not isinstance(raw, dict):
-        raise TypeError("compute_campaign_metrics must return a dict")
-    metrics = dict(raw)
-    metrics["engine"] = engine
-    return metrics
+    return compute_campaign_metrics(payload, deals, events, today, tz, period=period)
 
 
 def summary_from_metrics(metrics) -> dict:

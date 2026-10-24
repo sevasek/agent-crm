@@ -8,7 +8,7 @@ from app.mcp.tools import TOOLS
 from app.services.activities import log_activity
 from app.services.auth import generate_csrf_token
 from app.services.call_queue import list_todays_calls
-from app.services.campaign_metrics_adapter import classify_deal, metrics_for_campaign
+from app.services.campaign_metrics_adapter import metrics_for_campaign
 from app.services.campaigns import (
     campaign_links_for_tags,
     create_campaign,
@@ -169,10 +169,8 @@ def test_form_rejects_a_deadline_before_the_start(logged_in_client, db):
 
 
 def test_outcome_uses_the_shared_helper(db):
-    from app.services.deal_outcome import deal_outcome
-    from app.services.campaign_metrics_adapter import _load_shared_outcome
+    from app.services.deal_outcome import deal_outcome as classify_deal
 
-    assert _load_shared_outcome() is deal_outcome
     assert classify_deal({"active": 1, "stage": "qualified"}) == "open"
     assert classify_deal({"active": 1, "stage": "won"}) == "won"
     assert classify_deal({
@@ -188,13 +186,6 @@ def test_outcome_uses_the_shared_helper(db):
 
 
 def test_real_metrics_exclude_disqualified_and_fill_rates(db):
-    from app.services.campaign_metrics import compute_campaign_metrics
-    from app.services.campaign_metrics_adapter import _load_compute
-
-    function, engine_name = _load_compute()
-    assert function is compute_campaign_metrics
-    assert engine_name == "campaign_metrics"
-
     won_id = _deal(tags=["campaign:push"], phone="0400 111 001")
     set_deal_stage(won_id, "won")
     lost_id = _deal(tags=["campaign:push"], phone="0400 111 002")
@@ -210,7 +201,6 @@ def test_real_metrics_exclude_disqualified_and_fill_rates(db):
     )
     assert error is None
     metrics = metrics_for_campaign(campaign, period="month", today=date(2026, 10, 24))
-    assert metrics["engine"] == "campaign_metrics"
     assert metrics["results"]["deals"]["value"] == 3
     assert metrics["results"]["leads"]["value"] == 2
     assert metrics["results"]["leads"]["inputs"]["disqualified"] == 1
@@ -341,8 +331,7 @@ def test_page_and_mcp_share_the_metrics_function(logged_in_client, db, monkeypat
         }
 
     monkeypatch.setattr(
-        "app.services.campaign_metrics_adapter._load_compute",
-        lambda: (spy, "campaign_metrics"),
+        "app.services.campaign_metrics_adapter.compute_campaign_metrics", spy,
     )
     page = logged_in_client.get(f"/crm/campaigns/{campaign['id']}?period=month")
     assert page.status_code == 200
@@ -355,7 +344,6 @@ def test_page_and_mcp_share_the_metrics_function(logged_in_client, db, monkeypat
         "slug": "shared", "period": "month",
     })
     assert is_error is False
-    assert payload["metrics"]["engine"] == "campaign_metrics"
     assert payload["metrics"]["results"]["deals"]["value"] == 7
     assert payload["metrics"]["targets"]["leads"]["required_rate"]["week"]["formula"] == "four tens"
     assert payload["deals"][0]["id"]

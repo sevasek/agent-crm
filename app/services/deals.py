@@ -385,7 +385,8 @@ def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
     reason = resolve_lost_reason(lost_reason_id, lost_reason) if supplied else None
     already = not deal.get("active", 1)
     if already:
-        if not supplied:
+        # A merged source keeps its Duplicate reason.
+        if not supplied or deal.get("merged_into_id"):
             return None, "already_lost"
         if not reason:
             return None, "invalid_lost_reason"

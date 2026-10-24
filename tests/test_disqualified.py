@@ -169,6 +169,17 @@ def test_mark_lost_can_change_reason_without_moving_closed_at(db):
     assert deal_outcome(get_deal(lead["id"])) == OUTCOME_LOST
 
 
+def test_merged_record_keeps_its_lost_reason(db):
+    lead, _ = create_lead(company_name="Dupe Co")
+    lost, _ = mark_lost(lead["id"], lost_reason="Duplicate")
+    with get_db() as conn:
+        conn.execute("UPDATE deals SET merged_into_id = ? WHERE id = ?", (lead["id"], lead["id"]))
+        conn.commit()
+    _, error = mark_lost(lead["id"], lost_reason="Disqualified")
+    assert error == "already_lost"
+    assert get_deal(lead["id"])["lost_reason_id"] == lost["lost_reason_id"]
+
+
 def test_reason_change_does_not_enroll_nurture(db, monkeypatch):
     calls = []
 

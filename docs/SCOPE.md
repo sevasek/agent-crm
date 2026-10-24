@@ -10,7 +10,8 @@ When a deal enters a stage, the CRM runs only the automations you saved: a task,
 
 - Contacts: companies and people, and a timeline of calls, notes, meetings, and research.
 - Leads, and deals on a pipeline. You choose when a lead becomes a deal. You can mark a deal lost, give a reason, and merge duplicate leads.
-- Labels on a deal, such as a campaign name.
+- Labels on a deal, such as a region or a source.
+- Campaigns: a name, a shared pitch, optional targets, and the deals that carry that campaign's tag. The campaign page shows counts, win/loss, and a period table. It does not draw a chart.
 - A next step and a date, with due and overdue marks, and a daily note when a follow-up is due.
 - After a sale, another deal linked to the first, and tasks you hand to a person or an agent. Not invoices, and not a delivery tracker.
 - A call list ranked by a fixed formula, and a call page meant for a phone.

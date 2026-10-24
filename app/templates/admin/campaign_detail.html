@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
+{% block content %}
+{% macro cell(path, value) %}
+{% set tip = metrics.inputs.get(path, '') %}
+<span{% if tip %} title="{{ tip }}"{% endif %}>{{ value|metric }}</span>
+{% endmacro %}
+{% macro pct_cell(path, value) %}
+{% set tip = metrics.inputs.get(path, '') %}
+<span{% if tip %} title="{{ tip }}"{% endif %}>{{ value|pct }}</span>
+{% endmacro %}
+
+<h1>{{ campaign.name }} <span class="pill">{{ campaign.status }}</span></h1>
+<p>
+    <a class="btn" href="/actions/calls?campaign={{ campaign.slug }}&include_new=1">Start calls</a>
+    <a class="btn btn-secondary" href="/crm/campaigns/{{ campaign.id }}/edit">Edit</a>
+    <a class="btn btn-secondary" href="/crm/campaigns">All campaigns</a>
+</p>
+<p class="muted">Tag <span class="pill pill-tag">{{ campaign.tag }}</span>
+    {% if campaign.channel %} · {{ campaign.channel }}{% endif %}
+    {% if campaign.start_date %} · starts {{ campaign.start_date }}{% endif %}
+    {% if campaign.deadline %} · deadline {{ campaign.deadline }}{% endif %}
+</p>
+
+<h2>Shared pitch</h2>
+<p class="muted">These fields are the same for every lead. Notes about one lead stay on that lead.</p>
+{% if campaign.audience %}<p><strong>Audience.</strong> {{ campaign.audience }}</p>{% endif %}
+<p>
+    {% if campaign.service_id %}<a href="/definitions/services">{{ campaign.service_name }}</a>{% endif %}
+    {% if campaign.service_id and campaign.offer_id %} · {% endif %}
+    {% if campaign.offer_id %}{{ campaign.offer_name }}{% endif %}
+    {% if not campaign.service_id and not campaign.offer_id %}<span class="muted">No service or offer.</span>{% endif %}
+</p>
+{% if campaign.angle %}
+<p><strong>Angle.</strong></p>
+<div class="campaign-script">{{ campaign.angle }}</div>
+{% endif %}
+{% if campaign.opener %}
+<p><strong>Opener / script.</strong></p>
+<div class="campaign-script">{{ campaign.opener }}</div>
+{% endif %}
+
+<h2>Results</h2>
+{% if metrics.results.by_stage %}
+<p>
+    {% for stage in metrics.results.by_stage %}
+    <span class="pill" title="{{ metrics.inputs.get('results.by_stage.' ~ stage.key, '') }}">{{ stage.label }} {{ stage.count }}</span>
+    {% endfor %}
+</p>
+{% endif %}
+<div class="table-scroll">
+<table>
+    <tr><th></th><th>Count</th></tr>
+    <tr><td>Deals</td><td>{{ cell('results.total', metrics.results.total) }}</td></tr>
+    <tr><td>Contacted</td><td>{{ cell('results.contacted', metrics.results.contacted) }}</td></tr>
+    <tr><td>Not yet touched</td><td>{{ cell('results.not_contacted', metrics.results.not_contacted) }}</td></tr>
+    <tr><td>Conversations</td><td>{{ cell('results.conversations', metrics.results.conversations) }}</td></tr>
+    <tr><td>Advanced</td><td>{{ cell('results.advanced', metrics.results.advanced) }}</td></tr>
+    <tr><td>Open</td><td>{{ cell('results.open', metrics.results.open) }}</td></tr>
+    <tr><td>Won</td><td>{{ cell('results.won', metrics.results.won) }}</td></tr>
+    <tr><td>Lost</td><td>{{ cell('results.lost', metrics.results.lost) }}</td></tr>
+    <tr><td>Disqualified</td><td>{{ cell('results.disqualified', metrics.results.disqualified) }}</td></tr>
+    <tr><td>Won value</td><td>{{ cell('results.won_value', metrics.results.won_value) }}</td></tr>
+    <tr><td>Lost value</td><td>{{ cell('results.lost_value', metrics.results.lost_value) }}</td></tr>
+</table>
+</div>
+
+<h2>Win/loss</h2>
+<p>
+    <span{% if metrics.inputs.get('win_loss.label') %} title="{{ metrics.inputs.get('win_loss.label') }}"{% endif %}>{{ metrics.win_loss.label }}</span>
+    {% if metrics.win_loss.win_rate is not none %}
+    · <span{% if metrics.inputs.get('win_loss.win_rate') %} title="{{ metrics.inputs.get('win_loss.win_rate') }}"{% endif %}>{{ metrics.win_loss.win_rate|pct }} win rate</span>
+    {% endif %}
+</p>
+<p class="muted">
+    Open {{ cell('results.open', metrics.win_loss.open) }}.
+    Disqualified {{ cell('results.disqualified', metrics.win_loss.disqualified) }}
+    ({% if metrics.win_loss.disqualification_rate is not none %}{{ pct_cell('win_loss.disqualification_rate', metrics.win_loss.disqualification_rate) }} of deals{% else %}—{% endif %}).
+    Won value {{ cell('win_loss.won_value', metrics.win_loss.won_value) }},
+    lost value {{ cell('win_loss.lost_value', metrics.win_loss.lost_value) }}.
+</p>
+{% if metrics.win_loss.lost_by_reason %}
+<table>
+    <tr><th>Lost reason</th><th>Deals</th><th>Value</th></tr>
+    {% for reason in metrics.win_loss.lost_by_reason %}
+    <tr>
+        <td>{{ reason.name }}</td>
+        <td>{{ cell('win_loss.lost_by_reason.' ~ reason.name, reason.count) }}</td>
+        <td>{{ cell('win_loss.lost_by_reason.' ~ reason.name, reason.value) }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+<h2>Pacing</h2>
+{% if not metrics.pacing.has_deadline %}
+<p class="muted">No deadline, so required rates and the projection stay blank. Actuals are still shown.</p>
+{% elif metrics.pacing.deadline_passed %}
+<p class="muted">The deadline has passed. This is the result against the target, with no required rate.</p>
+{% endif %}
+<p>
+    Today {{ metrics.pacing.today or "—" }}
+    {% if metrics.pacing.timezone %} ({{ metrics.pacing.timezone }}){% endif %}.
+    Elapsed {{ cell('pacing.days_elapsed', metrics.pacing.days_elapsed) }} days,
+    remaining {{ cell('pacing.days_remaining', metrics.pacing.days_remaining) }} days,
+    window {{ cell('pacing.days_total', metrics.pacing.days_total) }} days
+    ({{ pct_cell('pacing.time_elapsed_pct', metrics.pacing.time_elapsed_pct) }} of the window).
+</p>
+{% if metrics.pacing.targets %}
+<div class="table-scroll">
+<table>
+    <tr>
+        <th>Target</th>
+        <th>Actual</th>
+        <th>Remaining</th>
+        <th>% complete</th>
+        <th>Required / week</th>
+        <th>Required / month</th>
+        <th>Required / year</th>
+        <th>Actual / week</th>
+        <th>Actual / month</th>
+        <th>Actual / year</th>
+        <th>Pace</th>
+        <th>Projected</th>
+    </tr>
+    {% for key, label in target_labels %}
+    {% if key in metrics.pacing.targets %}
+    {% set row = metrics.pacing.targets[key] %}
+    <tr>
+        <td>{{ label }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.actual', row.actual) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.remaining', row.remaining) }}</td>
+        <td>{{ pct_cell('pacing.targets.' ~ key ~ '.pct_complete', row.pct_complete) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.required_per_week', row.required_per_week) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.required_per_month', row.required_per_month) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.required_per_year', row.required_per_year) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.actual_per_week', row.actual_per_week) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.actual_per_month', row.actual_per_month) }}</td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.actual_per_year', row.actual_per_year) }}</td>
+        <td>
+            {% if row.pace %}
+            <span class="pill pill-pace pill-pace-{{ row.pace|replace('_', '-') }}"{% if metrics.inputs.get('pacing.targets.' ~ key ~ '.pace') %} title="{{ metrics.inputs.get('pacing.targets.' ~ key ~ '.pace') }}"{% endif %}>{{ pace_labels.get(row.pace, row.pace) }}</span>
+            {% else %}
+            {{ cell('pacing.targets.' ~ key ~ '.pace', none) }}
+            {% endif %}
+        </td>
+        <td>{{ cell('pacing.targets.' ~ key ~ '.projected', row.projected) }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+</table>
+</div>
+{% else %}
+<p class="muted">No targets set. Results and win/loss are above.</p>
+{% endif %}
+
+<h2>Period breakdown</h2>
+<p>
+    <a class="btn{% if period != 'week' %} btn-secondary{% endif %}" href="/crm/campaigns/{{ campaign.id }}?period=week">Week</a>
+    <a class="btn{% if period != 'month' %} btn-secondary{% endif %}" href="/crm/campaigns/{{ campaign.id }}?period=month">Month</a>
+    <a class="btn{% if period != 'year' %} btn-secondary{% endif %}" href="/crm/campaigns/{{ campaign.id }}?period=year">Year</a>
+</p>
+<p class="muted">Weeks start on Monday. Dates use {{ metrics.pacing.timezone or "UTC" }}.</p>
+{% if metrics.periods.rows %}
+<div class="table-scroll">
+<table>
+    <tr>
+        <th>Period</th>
+        {% for key, label in target_labels %}
+        {% if key in metrics.pacing.targets %}
+        <th>{{ label }} actual</th>
+        <th>{{ label }} required</th>
+        <th>{{ label }} cumulative</th>
+        {% endif %}
+        {% endfor %}
+        <th>Won</th>
+        <th>Lost</th>
+        <th>Disqualified</th>
+        <th>Win rate</th>
+    </tr>
+    {% for row in metrics.periods.rows %}
+    {% set actuals = row.actuals if row.actuals is mapping else {} %}
+    {% set required = row.required if row.required is mapping else {} %}
+    {% set cumulative = row.cumulative if row.cumulative is mapping else {} %}
+    <tr>
+        <td>{{ row.label or row.key }}</td>
+        {% for key, label in target_labels %}
+        {% if key in metrics.pacing.targets %}
+        <td>{{ cell('periods.' ~ row.key ~ '.actuals.' ~ key, actuals.get(key)) }}</td>
+        <td>{{ cell('periods.' ~ row.key ~ '.required.' ~ key, required.get(key)) }}</td>
+        <td>{{ cell('periods.' ~ row.key ~ '.cumulative.' ~ key, cumulative.get(key)) }}</td>
+        {% endif %}
+        {% endfor %}
+        <td>{{ cell('periods.' ~ row.key ~ '.won', row.won) }}</td>
+        <td>{{ cell('periods.' ~ row.key ~ '.lost', row.lost) }}</td>
+        <td>{{ cell('periods.' ~ row.key ~ '.disqualified', row.disqualified) }}</td>
+        <td>
+            {% if row.win_rate is not none %}
+            {{ pct_cell('periods.' ~ row.key ~ '.win_rate', row.win_rate) }}
+            {% else %}
+            <span{% if metrics.inputs.get('periods.' ~ row.key ~ '.win_rate') %} title="{{ metrics.inputs.get('periods.' ~ row.key ~ '.win_rate') }}"{% endif %}>{{ row.win_loss_label or "no closed deals" }}</span>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+</div>
+{% else %}
+<p class="muted">{{ metrics.periods.note or "No periods to show." }}</p>
+{% endif %}
+
+<h2>Deals</h2>
+{% if not deals %}
+<p class="muted">No deals carry {{ campaign.tag }} yet. Add that tag on a lead or a deal.</p>
+{% else %}
+<div class="table-scroll">
+<table>
+    <tr><th>Name</th><th>Type</th><th>Stage</th><th>Outcome</th><th>Value</th><th></th></tr>
+    {% for deal in deals %}
+    <tr>
+        <td>
+            {% if deal.type == 'lead' %}
+            <a href="/crm/leads/{{ deal.id }}">{{ deal.display_name }}</a>
+            {% else %}
+            <a href="/crm/deals/{{ deal.id }}/edit">{{ deal.display_name }}</a>
+            {% endif %}
+        </td>
+        <td>{% set record = deal %}{% include "admin/_record_badges.html" %}</td>
+        <td><span class="pill">{{ deal.stage }}</span></td>
+        <td>{{ deal.outcome }}</td>
+        <td>{% if deal.value_estimate %}${{ "%.0f"|format(deal.value_estimate) }}{% endif %}</td>
+        <td>
+            {% if deal.type == 'opportunity' and deal.active and deal.partner_id and deal.service_id %}
+            <a href="/actions/deals/{{ deal.id }}/call">Call</a>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+</div>
+{% endif %}
+{% endblock %}

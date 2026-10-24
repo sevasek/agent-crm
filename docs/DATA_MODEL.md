@@ -23,13 +23,14 @@ Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguou
 | **Won** | An opportunity in a stage with `is_won = 1`. |
 | **Lost** | A deal record with `active = 0` and a `lost_reason_id`. Lost is not a stage. |
 | **Lost reason** | One row in `lost_reasons`. Operator configuration. |
+| **Campaign** | One row in `campaigns`. The shared pitch for a set of deals. A deal is in it when the deal carries the tag `campaign:<slug>`. |
 | **Merged** | A lost deal record with `merged_into_id` set. The CRM does not delete merged records. |
 | **Research note** | An `activities` row with `type = 'research'`. |
 | **Fit score** | The sum of weights of the matching `icp_criteria`. A lead scores from its own columns. An opportunity scores from the partner. |
 | **Conversion readiness** | Missing data that conversion needs. Information, not a gate. |
 | **Customer** | A partner with one or more won opportunities. Calculated, not stored. |
 
-Other tables: `services` (catalogue), `deal_tags`, `activities`,
+Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `activities`,
 `pipeline_stages`, `offers`, `icp_criteria`, `delegated_tasks`,
 `stage_automations`, `users`, `api_keys`, OAuth tables, `app_install`.
 
@@ -129,9 +130,34 @@ opportunity needs both.
 `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false`.
 Leads never appear in a pipeline stage column.
 
+### `campaigns`
+
+The shared pitch for a planned outbound push: who it is for, which service or offer it leads to, the angle, and the opener. Lead-specific notes stay on the deal timeline. A new install has no campaigns. Rows appear when someone creates one, or when migration 12 backfills a row for each distinct `campaign:` tag already on a deal.
+
+Membership is the tag, not a `campaign_id` column. A deal can be in more than one campaign, and the call queue, ingest, and deal list already filter on `campaign:<slug>`. A second id would be another list that can drift from those tags. The slug is the part after `campaign:`. Renaming the slug rewrites that tag on every linked deal. A tag with no campaign row is just a tag until a campaign with that slug exists; creating the row links the deals without a further write.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT NOT NULL | |
+| `slug` | TEXT UNIQUE NOT NULL | Lowercase tag body. The deal tag is `campaign:<slug>`. |
+| `audience` | TEXT | Who the campaign is for. |
+| `service_id` | INTEGER | FK to `services(id)`. Optional. |
+| `offer_id` | INTEGER | FK to `offers(id)`. Optional. If the offer belongs to a service and `service_id` is empty, the service is filled in. An offer for a different service is rejected. |
+| `angle` | TEXT | Shared angle. Not a note about one lead. |
+| `opener` | TEXT | Shared opener or call script. |
+| `channel` | TEXT | `phone`, `email`, or `text`. Blank is allowed. |
+| `status` | TEXT NOT NULL DEFAULT 'draft' | `draft`, `active`, `paused`, or `completed`. Backfilled rows are `active`. |
+| `start_date`, `deadline` | TEXT | ISO dates (`YYYY-MM-DD`). Both optional. Deadline before the start date is rejected. |
+| `target_leads`, `target_contacts`, `target_conversations`, `target_advanced`, `target_won` | INTEGER | Optional counts. Blank means the target is not set. |
+| `target_won_value` | REAL | Optional. |
+| `created_at`, `updated_at` | TEXT | ISO timestamps. |
+
+Results, win/loss, pacing, and the period breakdown are calculated, not stored. The page and the MCP tools call the same function. Disqualified deals are left out of win/loss when a deal's outcome is `disqualified`. Until that outcome exists, a lost deal counts as lost.
+
 ### `deal_tags`
 
-Labels on a deal. A campaign is a tag, not a separate table. A deal has many tags and a tag covers many deals.
+Labels on a deal. A campaign link is the tag `campaign:<slug>` (see `campaigns`). A deal has many tags and a tag covers many deals.
 
 | Column | Type | Notes |
 |---|---|---|

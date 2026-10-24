@@ -56,6 +56,40 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.filters["tel_href"] = to_tel_href
 templates.env.tests["dialable"] = has_callable_phone
 
+
+def _format_metric(value):
+    """A count or amount for a campaign table. Blank stays an em dash."""
+    if value is None or isinstance(value, bool):
+        return "—"
+    if isinstance(value, int):
+        return str(value)
+    try:
+        number = float(value)
+    except Exception:
+        return "—"
+    if not math.isfinite(number):
+        return "—"
+    if number == int(number) and abs(number) < 1e15:
+        return str(int(number))
+    text = f"{number:.2f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _format_pct(value):
+    if value is None or isinstance(value, bool):
+        return "—"
+    try:
+        number = float(value)
+    except Exception:
+        return "—"
+    if not math.isfinite(number):
+        return "—"
+    return f"{round(number * 100)}%"
+
+
+templates.env.filters["metric"] = _format_metric
+templates.env.filters["pct"] = _format_pct
+
 # SQLite INTEGER is signed 64-bit; Python's int is unbounded, so an
 # out-of-range value would raise OverflowError on bind rather than fail
 # validation here. Same bounds/shape as api.py's _safe_int for /api/v1/stages.
@@ -467,46 +501,86 @@ async def edit_service_submit(
 
 
 # ==================== Today's calls ====================
-@actions_router.get("/actions/calls", response_class=HTMLResponse)
-async def todays_calls(request: Request, user=Depends(require_login)):
-    return templates.TemplateResponse(request, "admin/calls.html", {
-        "request": request, "user": user,
-        "calls": list_todays_calls(),
+def _calls_location(campaign_slug: str, include_new: bool) -> str:
+    params = {}
+    if campaign_slug:
+        params["campaign"] = campaign_slug
+    if include_new:
+        params["include_new"] = "1"
+    query = urlencode(params)
+    return "/actions/calls" + (f"?{query}" if query else "")
+
+
+def _calls_context(request, user, *, campaign="", include_new=False):
+    from app.services.campaigns import get_campaign_by_slug
+
+    row = None
+    error = ""
+    slug = (campaign or "").strip().lower()
+    if slug:
+        row = get_campaign_by_slug(slug)
+        if not row:
+            error = "No campaign with that slug."
+            calls = []
+            slug = ""
+        else:
+            slug = row["slug"]
+            calls = list_todays_calls(campaign_slug=slug, include_new=include_new)
+    else:
+        calls = list_todays_calls()
+    return {
+        "request": request,
+        "user": user,
+        "calls": calls,
         "limit": CALL_QUEUE_LIMIT,
         "score_max": SCORE_MAX,
         "outcomes": CALL_OUTCOMES,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
-    })
+        "campaign": row,
+        "campaign_slug": slug,
+        "include_new": include_new,
+        "campaign_error": error,
+    }
+
+
+@actions_router.get("/actions/calls", response_class=HTMLResponse)
+async def todays_calls(
+    request: Request, campaign: str = "", include_new: str = "",
+    user=Depends(require_login),
+):
+    return templates.TemplateResponse(request, "admin/calls.html", _calls_context(
+        request, user,
+        campaign=campaign,
+        include_new=_truthy_query(include_new),
+    ))
 
 
 @actions_router.post("/actions/deals/{deal_id}/call-outcome")
 async def log_call_outcome(
     request: Request, deal_id: int,
     outcome: str = Form(""), note: str = Form(""), next: str = Form("calls"),
+    campaign: str = Form(""), include_new: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if validate_csrf_token(csrf_token, get_session_cookie(request)):
         record_call_outcome(deal_id, outcome, note)
+    include = _truthy_query(include_new)
+    slug = (campaign or "").strip().lower()
     if _is_htmx(request):
         if next == "call_view":
             ctx = _call_view_context(request, user, deal_id)
             if not ctx:
                 response = HTMLResponse("")
-                response.headers["HX-Redirect"] = "/actions/calls"
+                response.headers["HX-Redirect"] = _calls_location(slug, include)
                 return response
             return HTMLResponse(_render_partial("admin/_call_view_body.html", **ctx))
         return HTMLResponse(_render_partial(
             "admin/_calls_table.html",
-            request=request, user=user,
-            calls=list_todays_calls(),
-            limit=CALL_QUEUE_LIMIT,
-            score_max=SCORE_MAX,
-            outcomes=CALL_OUTCOMES,
-            csrf_token=generate_csrf_token(get_session_cookie(request)),
+            **_calls_context(request, user, campaign=slug, include_new=include),
         ))
     if next == "call_view":
         return RedirectResponse(f"/actions/deals/{deal_id}/call", status_code=303)
-    return RedirectResponse("/actions/calls", status_code=303)
+    return RedirectResponse(_calls_location(slug, include), status_code=303)
 
 
 def _call_view_context(request, user, deal_id):
@@ -777,6 +851,7 @@ def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
         "error": error, "lost_reasons": list_lost_reasons(active_only=True),
+        "campaign_links": _campaign_links(deal, form_tags),
     }
     ctx.update(_deal_parent_context(deal))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
@@ -1736,8 +1811,21 @@ def _lead_form_page(request, user, lead=None, form=None, form_tags=None, error=N
         "partners": list_partners(),
         "lost_reasons": list_lost_reasons(active_only=True),
         "lead_service_slug": _lead_service_slug(lead),
+        "campaign_links": _campaign_links(lead, form_tags),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
     }, status_code=status_code)
+
+
+def _campaign_links(record, form_tags):
+    """Campaigns named by this record's tags. Invalid form text keeps the saved tags."""
+    from app.services.campaigns import campaign_links_for_tags
+
+    if form_tags is not None:
+        parsed, error = parse_tag_list(form_tags)
+        tags = parsed if error is None and parsed is not None else ((record or {}).get("tags") or [])
+    else:
+        tags = (record or {}).get("tags") or []
+    return campaign_links_for_tags(tags)
 
 
 @crm_router.get("/crm/leads", response_class=HTMLResponse)
@@ -2013,4 +2101,228 @@ async def edit_lost_reason_submit(
             request, user, error=_LOST_REASON_ERRORS.get(error, error), status_code=400,
         )
     return RedirectResponse("/definitions/lost-reasons", status_code=303)
+
+
+# ==================== Campaigns ====================
+# Membership is the deal tag campaign:<slug>, not a column on deals.
+# Pages and MCP both read metrics_for_campaign so the numbers match.
+
+PACE_LABELS = {"ahead": "Ahead", "on_track": "On track", "behind": "Behind"}
+CHANNEL_CHOICES = (("phone", "Phone"), ("email", "Email"), ("text", "Text"))
+_EMPTY_CAMPAIGN_FORM = {
+    "name": "", "slug": "", "audience": "", "service_id": "", "offer_id": "",
+    "angle": "", "opener": "", "channel": "", "status": "draft",
+    "start_date": "", "deadline": "",
+    "target_leads": "", "target_contacts": "", "target_conversations": "",
+    "target_advanced": "", "target_won": "", "target_won_value": "",
+}
+
+
+def _campaign_form_values(source=None):
+    form = dict(_EMPTY_CAMPAIGN_FORM)
+    if not source:
+        return form
+    for key in form:
+        if key not in source:
+            continue
+        value = source.get(key)
+        form[key] = "" if value is None else value
+    return form
+
+
+def _campaign_choices(campaign=None):
+    services = list_services(active_only=True)
+    if campaign and campaign.get("service_id") and not any(
+        service["id"] == campaign["service_id"] for service in services
+    ):
+        current = get_service(campaign["service_id"])
+        if current:
+            services = [current] + services
+    offers = offers_service.list_offers()
+    by_id = {service["id"]: service for service in list_services()}
+    labelled = []
+    for offer in offers:
+        service = by_id.get(offer.get("service_id"))
+        label = offer["name"] + (f" ({service['name']})" if service else "")
+        labelled.append({**offer, "label": label})
+    if campaign and campaign.get("offer_id") and not any(
+        offer["id"] == campaign["offer_id"] for offer in labelled
+    ):
+        current = offers_service.get_offer(campaign["offer_id"])
+        if current:
+            labelled.insert(0, {**current, "label": current["name"]})
+    return services, labelled
+
+
+def _campaign_form_page(request, user, campaign=None, form=None, error=None, status_code=200):
+    from app.services.campaigns import STATUSES
+
+    services, offers = _campaign_choices(campaign)
+    return templates.TemplateResponse(request, "admin/campaign_form.html", {
+        "request": request,
+        "user": user,
+        "campaign": campaign,
+        "form": form or _campaign_form_values(campaign),
+        "error": error,
+        "services": services,
+        "offers": offers,
+        "statuses": STATUSES,
+        "channels": CHANNEL_CHOICES,
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+    }, status_code=status_code)
+
+
+def _campaign_fields_from_form(
+    name, slug, audience, service_id, offer_id, angle, opener, channel, status,
+    start_date, deadline, target_leads, target_contacts, target_conversations,
+    target_advanced, target_won, target_won_value,
+):
+    return {
+        "name": name,
+        "slug": slug,
+        "audience": audience,
+        "service_id": service_id,
+        "offer_id": offer_id,
+        "angle": angle,
+        "opener": opener,
+        "channel": channel,
+        "status": status,
+        "start_date": start_date,
+        "deadline": deadline,
+        "target_leads": target_leads,
+        "target_contacts": target_contacts,
+        "target_conversations": target_conversations,
+        "target_advanced": target_advanced,
+        "target_won": target_won,
+        "target_won_value": target_won_value,
+    }
+
+
+def _campaign_period(raw: str) -> str:
+    text = (raw or "").strip().lower()
+    if text in ("week", "month", "year"):
+        return text
+    return "month"
+
+
+@crm_router.get("/crm/campaigns", response_class=HTMLResponse)
+async def campaigns_list(request: Request, user=Depends(require_login)):
+    from app.services.campaign_metrics_adapter import metrics_for_campaign, summary_from_metrics
+    from app.services.campaigns import list_campaigns
+
+    rows = []
+    for campaign in list_campaigns():
+        metrics = metrics_for_campaign(campaign)
+        rows.append({
+            "campaign": campaign,
+            "summary": summary_from_metrics(metrics),
+        })
+    return templates.TemplateResponse(request, "admin/campaigns.html", {
+        "request": request,
+        "user": user,
+        "rows": rows,
+        "pace_labels": PACE_LABELS,
+    })
+
+
+@crm_router.get("/crm/campaigns/new", response_class=HTMLResponse)
+async def new_campaign_page(request: Request, user=Depends(require_login)):
+    return _campaign_form_page(request, user)
+
+
+@crm_router.post("/crm/campaigns/new")
+async def new_campaign_submit(
+    request: Request,
+    name: str = Form(""), slug: str = Form(""), audience: str = Form(""),
+    service_id: str = Form(""), offer_id: str = Form(""),
+    angle: str = Form(""), opener: str = Form(""), channel: str = Form(""),
+    status: str = Form("draft"), start_date: str = Form(""), deadline: str = Form(""),
+    target_leads: str = Form(""), target_contacts: str = Form(""),
+    target_conversations: str = Form(""), target_advanced: str = Form(""),
+    target_won: str = Form(""), target_won_value: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    from app.services.campaigns import ERROR_MESSAGES, create_campaign
+
+    fields = _campaign_fields_from_form(
+        name, slug, audience, service_id, offer_id, angle, opener, channel, status,
+        start_date, deadline, target_leads, target_contacts, target_conversations,
+        target_advanced, target_won, target_won_value,
+    )
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/crm/campaigns/new", status_code=303)
+    created, error = create_campaign(**fields)
+    if error:
+        return _campaign_form_page(
+            request, user, form=fields,
+            error=ERROR_MESSAGES.get(error, error), status_code=400,
+        )
+    return RedirectResponse(f"/crm/campaigns/{created['id']}", status_code=303)
+
+
+@crm_router.get("/crm/campaigns/{campaign_id}", response_class=HTMLResponse)
+async def campaign_detail(
+    request: Request, campaign_id: int, period: str = "",
+    user=Depends(require_login),
+):
+    from app.services.campaign_metrics_adapter import metrics_for_campaign
+    from app.services.campaigns import TARGET_LABELS, get_campaign, list_campaign_deals
+
+    campaign = get_campaign(campaign_id)
+    if not campaign:
+        return RedirectResponse("/crm/campaigns", status_code=303)
+    grain = _campaign_period(period)
+    return templates.TemplateResponse(request, "admin/campaign_detail.html", {
+        "request": request,
+        "user": user,
+        "campaign": campaign,
+        "metrics": metrics_for_campaign(campaign, period=grain),
+        "deals": list_campaign_deals(campaign["slug"]),
+        "period": grain,
+        "target_labels": TARGET_LABELS,
+        "pace_labels": PACE_LABELS,
+    })
+
+
+@crm_router.get("/crm/campaigns/{campaign_id}/edit", response_class=HTMLResponse)
+async def edit_campaign_page(request: Request, campaign_id: int, user=Depends(require_login)):
+    from app.services.campaigns import get_campaign
+
+    campaign = get_campaign(campaign_id)
+    if not campaign:
+        return RedirectResponse("/crm/campaigns", status_code=303)
+    return _campaign_form_page(request, user, campaign=campaign)
+
+
+@crm_router.post("/crm/campaigns/{campaign_id}/edit")
+async def edit_campaign_submit(
+    request: Request, campaign_id: int,
+    name: str = Form(""), slug: str = Form(""), audience: str = Form(""),
+    service_id: str = Form(""), offer_id: str = Form(""),
+    angle: str = Form(""), opener: str = Form(""), channel: str = Form(""),
+    status: str = Form("draft"), start_date: str = Form(""), deadline: str = Form(""),
+    target_leads: str = Form(""), target_contacts: str = Form(""),
+    target_conversations: str = Form(""), target_advanced: str = Form(""),
+    target_won: str = Form(""), target_won_value: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    from app.services.campaigns import ERROR_MESSAGES, get_campaign, update_campaign
+
+    campaign = get_campaign(campaign_id)
+    if not campaign:
+        return RedirectResponse("/crm/campaigns", status_code=303)
+    fields = _campaign_fields_from_form(
+        name, slug, audience, service_id, offer_id, angle, opener, channel, status,
+        start_date, deadline, target_leads, target_contacts, target_conversations,
+        target_advanced, target_won, target_won_value,
+    )
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/crm/campaigns/{campaign_id}/edit", status_code=303)
+    updated, error = update_campaign(campaign_id, **fields)
+    if error:
+        return _campaign_form_page(
+            request, user, campaign=campaign, form=fields,
+            error=ERROR_MESSAGES.get(error, error), status_code=400,
+        )
+    return RedirectResponse(f"/crm/campaigns/{updated['id']}", status_code=303)
 

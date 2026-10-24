@@ -31,6 +31,8 @@
                   hx-swap="outerHTML"
                   hx-push-url="false">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                {% if campaign_slug %}<input type="hidden" name="campaign" value="{{ campaign_slug }}">{% endif %}
+                {% if include_new %}<input type="hidden" name="include_new" value="1">{% endif %}
                 <input type="text" name="note" placeholder="Note (optional)" aria-label="Call note"
                        onkeydown="if(event.key==='Enter'){event.preventDefault();}">
                 {% for key, label, _ in outcomes %}
@@ -41,7 +43,7 @@
         </td>
     </tr>
     {% else %}
-    <tr><td colspan="9" class="muted">No qualified deals with a phone number. A lead you can't call doesn't belong on this list.</td></tr>
+    <tr><td colspan="9" class="muted">{% if campaign_slug %}No callable opportunities in this campaign. A lead you can't call doesn't belong on this list.{% else %}No qualified deals with a phone number. A lead you can't call doesn't belong on this list.{% endif %}</td></tr>
     {% endfor %}
 </table>
 </div>

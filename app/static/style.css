@@ -497,6 +497,16 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .pill-lead { background: var(--pill-lead-bg); color: var(--pill-lead-fg); }
 .pill-opportunity { background: var(--pill-opportunity-bg); color: var(--pill-opportunity-fg); }
 .pill-lost { background: var(--pill-lost-bg); color: var(--pill-lost-fg); text-transform: lowercase; }
+.pill-pace { text-transform: none; }
+.pill-pace-ahead { background: var(--pill-lead-bg); color: var(--pill-lead-fg); }
+.pill-pace-on-track { background: var(--pill-opportunity-bg); color: var(--pill-opportunity-fg); }
+.pill-pace-behind { background: var(--pill-overdue-bg); color: var(--pill-overdue-fg); }
+.campaign-script {
+    white-space: pre-wrap;
+    background: var(--bg-alt);
+    padding: 0.75rem 1rem;
+    border-radius: var(--pico-border-radius, 6px);
+}
 .score { font-variant-numeric: tabular-nums; font-weight: 600; }
 
 .pipeline-board {

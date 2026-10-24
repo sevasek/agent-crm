@@ -1,11 +1,12 @@
 """Every entity page has a plain-language definition in docs/WELCOME.md and
 links to it. The entity list comes from the admin routes, not a hand-kept
-list: each parameterless GET page (other than a /new form) is one entity,
+list: each parameterless GET page served from app.routers.admin, on any
+of its routers (other than a /new form) is one entity,
 named by its last path segment, which must match a WELCOME.md heading slug."""
 import re
 from pathlib import Path
 
-from app.routers import admin
+from app.main import create_app
 
 WELCOME = Path(__file__).resolve().parent.parent / "docs" / "WELCOME.md"
 
@@ -20,10 +21,15 @@ def _slug(heading):
 
 def entity_pages():
     pages = {}
-    routes = admin.router.routes + admin.crm_router.routes + admin.actions_router.routes
+    routes = []
+    for route in create_app().routes:
+        # This FastAPI wraps each include_router() in an _IncludedRouter;
+        # older ones flatten them into plain routes.
+        routes += getattr(getattr(route, "original_router", None), "routes", [route])
     for route in routes:
-        path = route.path
-        if "GET" not in route.methods or "{" in path or path.endswith("/new"):
+        path = getattr(route, "path", "")
+        if (getattr(getattr(route, "endpoint", None), "__module__", "") != "app.routers.admin"
+                or "GET" not in route.methods or "{" in path or path.endswith("/new")):
             continue
         pages[path.rstrip("/").rsplit("/", 1)[-1]] = path
     return pages

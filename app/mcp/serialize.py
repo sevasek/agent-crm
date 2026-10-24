@@ -1,6 +1,7 @@
 """Compact partner/deal/activity dicts for tool results — skip noise, keep ids."""
 
 from app.mcp.util import json_safe
+from app.services.deal_outcome import OUTCOME_DISQUALIFIED, deal_outcome
 from app.services.partners import SOCIAL_FIELDS, listed_social_links, primary_social_url
 from app.services.staleness import activity_display_body, annotate_deal
 
@@ -67,13 +68,28 @@ def deal_brief(deal):
     out["due_status"] = annotated.get("due_status")
     out["days_overdue"] = annotated.get("days_overdue")
     out["active"] = bool(annotated.get("active", 1))
-    if annotated.get("lost_reason"):
+    reason_row = annotated.get("lost_reason") if isinstance(annotated.get("lost_reason"), dict) else None
+    if reason_row:
+        out["lost_reason"] = reason_row.get("name")
+    elif annotated.get("lost_reason"):
         out["lost_reason"] = annotated["lost_reason"]
+    elif annotated.get("lost_reason_name"):
+        out["lost_reason"] = annotated["lost_reason_name"]
     elif annotated.get("lost_reason_id"):
         from app.services.lost_reasons import get_lost_reason
-        reason = get_lost_reason(annotated["lost_reason_id"])
-        if reason:
-            out["lost_reason"] = reason.get("name")
+        reason_row = get_lost_reason(annotated["lost_reason_id"])
+        if reason_row:
+            out["lost_reason"] = reason_row.get("name")
+    outcome_source = annotated
+    if reason_row is not None:
+        outcome_source = dict(annotated)
+        outcome_source["lost_reason"] = reason_row
+    if outcome_source.get("outcome") in ("open", "won", "lost", "disqualified"):
+        outcome = outcome_source["outcome"]
+    else:
+        outcome = deal_outcome(outcome_source)
+    out["outcome"] = outcome
+    out["is_disqualified"] = outcome == OUTCOME_DISQUALIFIED
     if annotated.get("action_date"):
         out["action_date"] = annotated["action_date"].isoformat()
     return out

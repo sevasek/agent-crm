@@ -21,7 +21,9 @@ Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguou
 | **Conversion** | The operation that changes a lead into an opportunity. The record keeps its `id`. Conversion sets `type = 'opportunity'` and `date_conversion`. |
 | **Open** | A deal record with `active = 1` that is not in an `is_won` stage. |
 | **Won** | An opportunity in a stage with `is_won = 1`. |
-| **Lost** | A deal record with `active = 0` and a `lost_reason_id`. Lost is not a stage. |
+| **Lost** | A deal record with `active = 0` whose lost reason is not a disqualification. Lost is not a stage. |
+| **Disqualified** | A deal record with `active = 0` whose lost reason has `is_disqualification = 1`. Reported as disqualified, not lost. |
+| **Outcome** | Derived, not stored. `deal_outcome` in `app/services/deal_outcome.py` returns `open`, `won`, `lost`, or `disqualified` from `active`, the stage's `is_won` flag, and the lost reason's current `is_disqualification` flag. |
 | **Lost reason** | One row in `lost_reasons`. Operator configuration. |
 | **Merged** | A lost deal record with `merged_into_id` set. The CRM does not delete merged records. |
 | **Research note** | An `activities` row with `type = 'research'`. |
@@ -106,7 +108,7 @@ opportunity needs both.
 | `next_action` | TEXT | What to do next. |
 | `next_action_date` | TEXT | ISO date. Drives due and overdue flags and the daily follow-up check. |
 | `created_at`, `updated_at` | TEXT | |
-| `closed_at` | TEXT | Set when an opportunity enters `is_won`, or when any deal record is marked lost. Cleared on restore. |
+| `closed_at` | TEXT | Set when an opportunity enters `is_won`, or when any deal record is first marked lost. Cleared on restore. Left unchanged when `mark_lost` only changes the lost reason. |
 | `offer_id` | INTEGER | FK to `offers(id)`. Defaults to the default offer on create. |
 | `owner_key` | TEXT | Owner slug. |
 | `external_ref` | TEXT | Caller's own id, for example from a source system. A value that is a `campaign:` tag slug is copied onto a tag the first time `deal_tags` is created; the ref itself is left unchanged. |
@@ -120,7 +122,7 @@ opportunity needs both.
 | `priority` | INTEGER NOT NULL DEFAULT 0 | 0–3. |
 | `expected_close` | TEXT | ISO date. |
 | `date_conversion` | TEXT | Set once by `convert_lead`. |
-| `active` | INTEGER NOT NULL DEFAULT 1 | 0 = lost. |
+| `active` | INTEGER NOT NULL DEFAULT 1 | 0 = closed without a win (lost or disqualified). Outcome says which. |
 | `lost_reason_id` | INTEGER | FK to `lost_reasons(id)`. Required when `active = 0`. |
 | `lost_note` | TEXT | Free text for the loss. |
 | `merged_into_id` | INTEGER | FK to `deals(id)`. Set by `merge_leads` on the source. |
@@ -155,13 +157,21 @@ Operator configuration, seeded once like pipeline stages.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `name` | TEXT UNIQUE NOT NULL | |
-| `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | `mark_lost` with this reason posts the nurture webhook. |
+| `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | `mark_lost` with this reason posts the nurture webhook. A later reason change does not post it again. |
+| `is_disqualification` | INTEGER NOT NULL DEFAULT 0 | Deals lost with this reason are reported as disqualified. The flag is read when outcome is derived, so changing it changes those deals' outcome without rewriting them. |
 | `active` | INTEGER NOT NULL DEFAULT 1 | Inactive reasons stay on old records but leave pickers. |
 | `created_at`, `updated_at` | TEXT | |
 
 Seed names: "Not a fit", "No budget", "Not now" (`triggers_nurture = 1`),
-"No response", "Lost to competitor", "Duplicate", "Lost stage (migrated)".
-Managed at `/lost-reasons` (and `/admin/lost-reasons`) and via MCP.
+"No response", "Lost to competitor", "Duplicate", "Lost stage (migrated)",
+and "Disqualified" (`is_disqualification = 1`). The Disqualified row is
+inserted with `INSERT OR IGNORE` on its name, then the flag is set, so a
+reason already created by hand with that exact name is kept.
+Managed at `/definitions/lost-reasons` (and `/admin/lost-reasons`) and via MCP.
+
+`mark_lost` on a deal that is already lost, with a different reason, updates
+`lost_reason_id` and logs an activity. `closed_at` stays. The same reason
+returns `already_lost`. An empty note on that change leaves `lost_note` as it was.
 
 ### `activities`
 

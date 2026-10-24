@@ -89,20 +89,20 @@ only `text/event-stream`). It is stateless, so no session is required.
 | --- | --- |
 | `search_partners` | Search name, email, phone, website. Returns nested people and the parent `company`. |
 | `get_partner` | Full record: profile, parent company, people, opportunities, open `leads`, `is_customer`, and recent activities. |
-| `list_deals` | Opportunities by default (`type=opportunity`, `include_lost=false`). Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`, `tags`, `type` (`lead` / `all`), `include_lost`. **Breaking:** lost records are hidden unless `include_lost=true`. Each row includes `type`, `active`, `lost_reason`, `tags`. |
+| `list_deals` | Opportunities by default (`type=opportunity`, `include_lost=false`). Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`, `tags`, `type` (`lead` / `all`), `include_lost`. **Breaking:** lost records are hidden unless `include_lost=true`. Each row includes `type`, `active`, `lost_reason`, `tags`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. |
 | `list_tags` | Tags in use, each with a `count`. Lost records are not counted. |
-| `get_deal` | One deal record (lead or opportunity), including `tags` and `child_deals`. A lead also returns its contact columns. |
+| `get_deal` | One deal record (lead or opportunity), including `tags`, `child_deals`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. A lead also returns its contact columns. |
 | `list_activities` | The timeline for a partner or a deal record, newest first. Accepts a lead without a partner. |
 | `get_call_queue` | Open opportunities in the qualified pool with a dialable phone. No leads. Filters: `stage`, `service_slug`, `source_prefix`, `include_new=true`, `owner`. `limit` up to 50. |
 | `list_due_followups` | Open deal records whose `next_action_date` is today or earlier. Includes leads and opportunities. Filter `type`, `owner` / `owner_key`, `service_slug`. |
-| `list_catalog` | Services, pipeline stages (with `is_lost` marked deprecated), offers, call-outcome keys, activity types (includes `research`), and `lost_reasons`. |
+| `list_catalog` | Services, pipeline stages (with `is_lost` marked deprecated), offers, call-outcome keys, activity types (includes `research`), and `lost_reasons` (including `is_disqualification`). |
 | `ingest_leads` | Creates **leads**, not partners. `type=opportunity` keeps the old partner + opportunity path. Strong-key matches fill-empty; weak-key-only matches create a new lead. Optional `tags` merge. |
 | `create_lead` | Create one lead. Does not create a partner. Never refuses on duplicates; returns `possible_duplicates`. Do not use `create_partner` for a research candidate. |
-| `update_lead` / `get_lead` / `list_leads` | Lead reads and writes. `get_lead` returns `fit`, `conversion_readiness`, `possible_duplicates`, `last_researched_at`, `research_note_count`. |
+| `update_lead` / `get_lead` / `list_leads` | Lead reads and writes. `get_lead` returns `fit`, `conversion_readiness`, `possible_duplicates`, `last_researched_at`, `research_note_count`. Lead payloads include `outcome` and `is_disqualified`. |
 | `find_duplicates` | Strong and weak identity matches against leads, opportunities and partners. |
 | `convert_lead` | Call `get_lead` first. Check `conversion_readiness` and `possible_duplicates`. Errors: `not_a_lead`, `lead_lost`, `missing_service`, `partner_ambiguous`, `duplicate_open_opportunity`. |
-| `mark_lost` / `restore_deal` / `merge_leads` | Archive with a lost reason; restore a mistake; merge leads (max 10 sources). Merged records cannot be restored. |
-| `list_lost_reasons` / `create_lost_reason` / `update_lost_reason` | Operator lost-reason configuration. |
+| `mark_lost` / `restore_deal` / `merge_leads` | Archive with a lost reason; restore a mistake; merge leads (max 10 sources). Merged records cannot be restored. `mark_lost` on an already-lost record with a different reason changes the reason and keeps `closed_at`. The same reason returns `already_lost`. The returned deal includes `outcome` and `is_disqualified`. |
+| `list_lost_reasons` / `create_lost_reason` / `update_lost_reason` | Operator lost-reason configuration. `create_lost_reason` and `update_lost_reason` take `is_disqualification`. Outcome follows the current flag. |
 | `create_partner` / `update_partner` | `update_partner` fills empty fields by default. Do not use `create_partner` for a research candidate. Use `create_lead`. |
 | `create_deal` / `update_deal` | `create_deal` creates an **opportunity**. For an unqualified candidate, use `create_lead`. Accepts `probability`, `priority`, `expected_close`. `update_deal` rejects `type`. |
 | `set_deal_stage` | Move an **opportunity** to any configured stage. Rejects a lead (`not_an_opportunity`) and a lost record (`deal_lost`). Entering `triggers_nurture` fires nurture. Entering `is_won` can fire the deal-won webhook. A move into an existing `is_lost` stage also runs `mark_lost`. |

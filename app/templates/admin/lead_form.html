@@ -198,7 +198,7 @@
         <select id="lost_reason" name="lost_reason" required>
             <option value="">— select —</option>
             {% for r in lost_reasons %}
-            <option value="{{ r.name }}">{{ r.name }}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
+            <option value="{{ r.name }}">{{ r.name }}{% if r.is_disqualification %} (disqualification){% endif %}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
             {% endfor %}
         </select>
     </div>
@@ -210,10 +210,29 @@
 </form>
 {% elif lead and not lead.active %}
 <p>
-    This lead is lost
+    This lead is {{ "disqualified" if lead.outcome == "disqualified" else "lost" }}
     {% if lead.lost_reason %}( {{ lead.lost_reason.name }} ){% endif %}.
 </p>
 {% if not lead.merged_into_id %}
+<h2>Change lost reason</h2>
+<form method="post" action="/crm/leads/{{ lead.id }}/lost">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="lost_reason">Lost reason</label>
+        <select id="lost_reason" name="lost_reason" required>
+            <option value="">— select —</option>
+            {% for r in lost_reasons %}
+            <option value="{{ r.name }}" {% if lead.lost_reason and lead.lost_reason.name == r.name %}selected{% endif %}>{{ r.name }}{% if r.is_disqualification %} (disqualification){% endif %}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="lost_note">Note</label>
+        <textarea id="lost_note" name="note"></textarea>
+    </div>
+    <p class="muted">Changing the reason keeps the date this lead closed.</p>
+    <button type="submit">Update lost reason</button>
+</form>
 <form method="post" action="/crm/leads/{{ lead.id }}/restore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit">Restore</button>

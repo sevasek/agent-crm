@@ -513,6 +513,7 @@ def list_catalog_tool(_arguments):
                 "name": r["name"],
                 "triggers_nurture": bool(r.get("triggers_nurture")),
                 "active": bool(r.get("active")),
+                "is_disqualification": bool(r.get("is_disqualification")),
             }
             for r in list_lost_reasons()
         ],

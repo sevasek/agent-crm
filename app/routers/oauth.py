@@ -181,6 +181,9 @@ async def oauth_authorize_page(request: Request):
         "resource": params.get("resource") or "",
     }
     error, client_name = _validate_authorize_query(form)
+    logged_in = bool(get_current_user(request))
+    if not error and not logged_in:
+        return RedirectResponse(_login_url(request), status_code=302)
     return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
         "request": request,
         "error": error,
@@ -188,7 +191,8 @@ async def oauth_authorize_page(request: Request):
         "form": form,
         "client_name": client_name,
         "mcp_enabled": mcp_oauth.mcp_enabled(),
-        "logged_in": bool(get_current_user(request)),
+        "logged_in": logged_in,
+        "login_url": _login_url(request),
     }, status_code=400 if error else 200)
 
 
@@ -227,6 +231,7 @@ async def oauth_authorize_submit(
                 "client_name": "",
                 "mcp_enabled": mcp_oauth.mcp_enabled(),
                 "logged_in": bool(get_current_user(request)),
+                "login_url": _login_url(request, form),
             }, status_code=429)
         return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
@@ -236,6 +241,7 @@ async def oauth_authorize_submit(
             "client_name": "",
             "mcp_enabled": mcp_oauth.mcp_enabled(),
             "logged_in": bool(get_current_user(request)),
+            "login_url": _login_url(request, form),
         }, status_code=400)
 
     error, client_name = _validate_authorize_query(form)
@@ -248,6 +254,7 @@ async def oauth_authorize_submit(
             "client_name": client_name,
             "mcp_enabled": mcp_oauth.mcp_enabled(),
             "logged_in": bool(get_current_user(request)),
+            "login_url": _login_url(request, form),
         }, status_code=400)
 
     user = get_current_user(request)
@@ -264,18 +271,20 @@ async def oauth_authorize_submit(
                 "client_name": client_name,
                 "mcp_enabled": mcp_oauth.mcp_enabled(),
                 "logged_in": bool(user),
+                "login_url": _login_url(request, form),
             }, status_code=429)
         return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
             "request": request,
             "error": (
                 "MCP is disabled." if not mcp_oauth.mcp_enabled()
-                else "Wrong API key. Use CRM_MCP_API_KEY, or log in to the CRM first."
+                else "Log in to allow access."
             ),
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "form": form,
             "client_name": client_name,
             "mcp_enabled": mcp_oauth.mcp_enabled(),
             "logged_in": bool(user),
+            "login_url": _login_url(request, form),
         }, status_code=401)
 
     code = mcp_oauth.issue_auth_code(client_id, redirect_uri, code_challenge, state)
@@ -338,6 +347,13 @@ async def oauth_token(request: Request):
         if limited:
             return limited
     return _json(tokens)
+
+
+def _login_url(request: Request, form: dict | None = None) -> str:
+    """/auth/login with a return-to of this authorize URL, query included."""
+    query = urlencode(form) if form is not None else request.url.query
+    next_url = f"/oauth/authorize?{query}" if query else "/oauth/authorize"
+    return f"/auth/login?{urlencode({'next': next_url})}"
 
 
 def _validate_authorize_query(form: dict):

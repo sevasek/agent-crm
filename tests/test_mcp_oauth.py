@@ -64,13 +64,10 @@ def test_pkce_round_trip_can_call_mcp(client, db, monkeypatch):
         "code_challenge": challenge,
         "code_challenge_method": "S256",
         "state": "xyz",
-    })
-    assert page.status_code == 200
-    assert "Authorize a bot" in page.text
-    assert redirect in page.text
-    assert client_id in page.text
-    assert "the authorization code is sent to" in page.text
-    assert 'class="error"' not in page.text
+    }, follow_redirects=False)
+    # Logged out: the page sends you to log in; the env key is POST-only.
+    assert page.status_code == 302
+    assert page.headers["location"].startswith("/auth/login?next=")
 
     submitted = client.post("/oauth/authorize", data={
         "csrf_token": generate_csrf_token(client.cookies.get("session")),
@@ -495,3 +492,85 @@ def test_well_known_metadata_is_not_rate_limited(client, db, monkeypatch):
         assert resp.status_code == 200, path
         body = resp.json()
         assert body.get("issuer") or body.get("resource")
+
+
+def _authorize_params(registered, redirect, challenge):
+    return {
+        "response_type": "code",
+        "client_id": registered["client_id"],
+        "redirect_uri": redirect,
+        "state": "s t&ate",
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "scope": "crm",
+    }
+
+
+def test_logged_out_authorize_redirects_to_login_and_back(client, db, monkeypatch):
+    from urllib.parse import parse_qs, urlsplit
+    from app.services.auth import create_user
+
+    create_user("op@example.com", "Op", "password123")
+    verifier, challenge = _pkce()
+    registered, redirect = _register(client, monkeypatch)
+    params = _authorize_params(registered, redirect, challenge)
+
+    first = client.get("/oauth/authorize", params=params, follow_redirects=False)
+    assert first.status_code == 302
+    login = urlsplit(first.headers["location"])
+    assert login.path == "/auth/login"
+    next_url = parse_qs(login.query)["next"][0]
+    assert next_url.startswith("/oauth/authorize?")
+    assert parse_qs(urlsplit(next_url).query) == {k: [v] for k, v in params.items()}
+
+    page = client.get(first.headers["location"])
+    assert 'name="next"' in page.text
+    logged_in = client.post("/auth/login", data={
+        "email": "op@example.com", "password": "password123",
+        "csrf_token": generate_csrf_token(), "next": next_url,
+    }, follow_redirects=False)
+    assert logged_in.status_code == 303
+    assert logged_in.headers["location"] == next_url
+
+    allow_page = client.get(next_url)
+    assert allow_page.status_code == 200
+    assert "Authorize a bot" in allow_page.text
+    assert "Allow access" in allow_page.text
+    assert redirect in allow_page.text
+    assert registered["client_id"] in allow_page.text
+    assert "the authorization code is sent to" in allow_page.text
+    assert 'class="error"' not in allow_page.text
+    allowed = client.post("/oauth/authorize", data={
+        **_authorize_form(client, registered, redirect, challenge, api_key=""),
+        "state": params["state"],
+    }, follow_redirects=False)
+    assert allowed.status_code == 302
+    callback = parse_qs(urlsplit(allowed.headers["location"]).query)
+    assert callback["state"] == [params["state"]]
+    token = client.post("/oauth/token", data={
+        "grant_type": "authorization_code",
+        "client_id": registered["client_id"],
+        "code": callback["code"][0],
+        "redirect_uri": redirect,
+        "code_verifier": verifier,
+    })
+    assert token.status_code == 200, token.text
+
+
+def test_logged_out_authorize_page_never_shows_key(client, db, monkeypatch):
+    verifier, challenge = _pkce()
+    registered, redirect = _register(client, monkeypatch)
+    page = client.post(
+        "/oauth/authorize",
+        data=_authorize_form(client, registered, redirect, challenge, api_key="wrong"),
+    )
+    assert page.status_code == 401
+    assert "Log in to allow" in page.text
+    assert 'name="api_key"' not in page.text
+    assert "test-mcp-key" not in page.text
+    assert "CRM_MCP_API_KEY" not in page.text
+
+
+def test_env_key_fallback_still_authorizes(client, db, monkeypatch):
+    # Setup-only route: no session, CRM_MCP_API_KEY posted as api_key.
+    _handshake(client, monkeypatch)

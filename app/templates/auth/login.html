@@ -5,6 +5,7 @@
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <form method="post" action="/auth/login" style="max-width: 320px;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     <div class="form-row">
         <label for="email">Email</label>
         <input type="email" id="email" name="email" required>

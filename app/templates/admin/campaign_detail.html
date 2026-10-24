@@ -10,6 +10,7 @@
 {% endmacro %}
 
 <h1>{{ campaign.name }} <span class="pill">{{ campaign.status }}</span></h1>
+<p class="muted">A campaign is one planned push — one audience, one offer, one opening line — that a set of deals and leads join. <a href="{{ help_url('campaigns') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <p>
     <a class="btn" href="/actions/calls?campaign={{ campaign.slug }}&include_new=1">Start calls</a>
     <a class="btn btn-secondary" href="/crm/campaigns/{{ campaign.id }}/edit">Edit</a>

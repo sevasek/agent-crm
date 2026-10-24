@@ -32,7 +32,7 @@ for (const label of ["Welcome", "Scope", "Data model", "MCP: the agent interface
 
 const welcome = read(path.join("welcome", "index.html"));
 assert(welcome.includes("<title>Welcome"), "Welcome page has its mapped title");
-for (const anchor of ["apps", "partners", "leads", "deals", "pipeline", "calls", "services", "stages", "offers", "automations", "lost-reasons", "icp", "settings"]) {
+for (const anchor of ["apps", "partners", "leads", "deals", "pipeline", "campaigns", "calls", "services", "stages", "offers", "automations", "lost-reasons", "icp", "settings"]) {
   assert(welcome.includes(`href="#${anchor}"`), `Welcome's generated index links to #${anchor}`);
 }
 

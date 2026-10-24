@@ -10,6 +10,7 @@ links to the section about the thing it shows you.
 - [Leads](#leads)
 - [Deals](#deals)
 - [Pipeline](#pipeline)
+- [Campaigns](#campaigns)
 - [Calls](#calls)
 - [Services](#services)
 - [Stages](#stages)
@@ -50,6 +51,12 @@ database this is called an opportunity; on screen it's called a deal.
 The pipeline is the board view of your open deals, grouped into columns by
 stage. Drag a deal from one column to another to move it forward. Lost
 deals drop off the board, and leads never appear here.
+
+## Campaigns
+
+A campaign is one planned push: a single audience, one offer, and one
+opening line for the call. Deals and leads join a campaign by carrying its
+tag, and the campaign page shows how far along it is against its targets.
 
 ## Calls
 

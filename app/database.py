@@ -15,7 +15,8 @@ IntegrityConflict = sqlite3.IntegrityError
 # After a live database is at version N, editing _SCHEMA_V1 or
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
-# shipped version in place.
+# shipped version in place. Every new migration needs an upgrade test in
+# UPGRADE_TESTS (tests/test_database.py), or CI fails.
 SCHEMA_VERSION = 13
 
 
@@ -993,6 +994,14 @@ def migrate_013(db) -> None:
     Backfill does not commit; init_db() owns the transaction.
     """
     db.execute(_CAMPAIGNS_DDL)
+    # Membership matches the lowercase tag exactly, so a hand-written
+    # `Campaign:Slug` row would sit outside its campaign. Lowercase it; drop
+    # it where the deal already has the lowercase tag.
+    db.execute(
+        """UPDATE OR IGNORE deal_tags SET tag = lower(tag)
+           WHERE tag LIKE 'campaign:%' AND tag != lower(tag)"""
+    )
+    db.execute("DELETE FROM deal_tags WHERE tag LIKE 'campaign:%' AND tag != lower(tag)")
     from app.services.campaigns import backfill_campaigns_from_tags
 
     backfill_campaigns_from_tags(db)

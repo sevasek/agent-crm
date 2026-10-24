@@ -1,10 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Apps — agent-crm{% endblock %}
 {% block content %}
+<p class="muted">Each tile is one of this CRM's work areas, grouped by the kind of work it's for. <a href="{{ help_url('apps') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <div class="apps-grid-wrap">
     <div class="apps-grid">
         {% for app in apps %}
-        <a class="app-tile" href="{{ app.href }}">
+        <a class="app-tile" href="{{ app.href }}"{% if app.external %} target="_blank" rel="noopener"{% endif %}>
             <article class="app-tile-box" style="--tile-bg-light: {{ app.bg_light }}; --tile-bg-dark: {{ app.bg_dark }};">
                 <img class="app-tile-icon" src="/static/icons/{{ app.icon }}-{{ app.icon_color }}.svg" alt="">
             </article>

@@ -3,6 +3,7 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Deals</h1>
+<p class="muted">A deal is a lead you've decided to pursue, moving through the pipeline toward Won or Lost. <a href="{{ help_url('deals') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <div style="margin-bottom:1rem;">
     <a href="/crm/deals{% if current_tag %}?tag={{ current_tag }}{% endif %}" class="{{ 'btn' if not current_stage and not current_due and not current_lost else 'btn-secondary' }}">All</a>
     <a href="/crm/deals?due=1{% if current_tag %}&tag={{ current_tag }}{% endif %}" class="{{ 'btn' if current_due else 'btn-secondary' }}">Due</a>

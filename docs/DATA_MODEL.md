@@ -100,7 +100,7 @@ opportunity needs both.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `partner_id` | INTEGER | FK to `partners(id)`. Required when `type = 'opportunity'`. Null on a research lead. |
-| `service_id` | INTEGER | FK to `services(id)`. Required when `type = 'opportunity'`. |
+| `service_id` | INTEGER | FK to `services(id)`. Required when `type = 'opportunity'`. `update_deal` and `bulk_update_deals` (by `deal_ids`) can move it to another active service. |
 | `type` | TEXT NOT NULL DEFAULT 'opportunity' | `lead` or `opportunity`. |
 | `stage` | TEXT NOT NULL DEFAULT 'new' | A `pipeline_stages.key`. Meaningful on opportunities only. |
 | `source` | TEXT | Free text (referral, cold outreach, website, ...). Feeds the call score. |
@@ -172,7 +172,9 @@ Writes:
 
 - `create_deal` takes `tags` and sets them on the new row.
 - `update_deal` takes `tags` to replace the set (`[]` clears it). `add_tags` and `remove_tags` merge, and run after a replace when both are sent (`remove_tags` wins on overlap). Omitting all three leaves the set alone.
+- `update_deal` takes `service_id` or `service_slug` (not both) to move the deal onto an active service. If the current offer is tied to a different service, the call is rejected unless `offer_id` is an offer for the new service, or null to clear the offer. An offer with no service is kept when `offer_id` is omitted. The timeline gets `Service changed: {old slug} -> {new slug}`. Stage, tags, and next action are not changed unless those fields are also sent.
 - `bulk_update_deals` takes `add_tags` / `remove_tags` for the same selection it already uses (`deal_ids`, or `service_slug` plus optional stage and owner).
+- `bulk_update_deals` changes service for up to 50 open opportunities when `deal_ids` is passed with `service_id` or `service_slug` (not both), plus an optional `offer_id` under the same offer rule. In that mode `service_slug` sets the service; it does not filter. `service_slug` without `deal_ids` still filters. A mismatch writes nothing. Each deal whose service id changes gets the same timeline line.
 - Lead ingest (`POST /api/v1/leads` and MCP `ingest_leads`) takes an optional `tags` array. A re-run merges those tags onto the open deal. Leaving `tags` off the payload leaves the existing set alone. Entries that are not valid slugs are dropped so one bad label cannot fail the lead.
 
 ### `lost_reasons`

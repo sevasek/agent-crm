@@ -58,7 +58,7 @@ def test_edit_deal_form_has_no_partner_select(logged_in_client, db):
     html = resp.text
     assert 'name="partner_id"' not in html
     assert 'id="partner_id"' not in html
-    assert 'name="service_id"' not in html
+    assert '<select id="service_id" name="service_id" required>' in html
 
 
 def test_tom_dropdown_follows_pico_light_and_dark_colors():

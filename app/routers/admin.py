@@ -23,8 +23,8 @@ from app.services.catalog import create_service, get_service, update_service, li
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
     create_deal, get_deal, list_deals, list_parent_candidates, mark_lost,
-    restore_deal, set_deal_stage, update_deal_fields, record_call_outcome,
-    validate_parent_link, CALL_OUTCOMES,
+    restore_deal, set_deal_service, set_deal_stage, update_deal_fields, record_call_outcome,
+    validate_parent_link, CALL_OUTCOMES, UNSET, service_change_message,
 )
 from app.services.lead_records import create_lead, get_lead, list_leads, update_lead, convert_lead
 from app.services.lost_reasons import (
@@ -882,8 +882,48 @@ def _lost_reason_choices(record):
     return reasons
 
 
+def _edit_service_choices(current_service, form_service_id=None):
+    """Active services, plus the deal's current service if it is inactive."""
+    services = list_services(active_only=True)
+    seen = {row["id"] for row in services}
+    extras = []
+    if current_service and current_service["id"] not in seen:
+        extras.append(current_service)
+        seen.add(current_service["id"])
+    parsed = _safe_int(form_service_id) if form_service_id else None
+    if parsed and parsed not in seen:
+        other = get_service(parsed)
+        if other:
+            extras.append(other)
+    return extras + services
+
+
+def _edit_offer_choices(deal):
+    offers = [dict(row) for row in offers_service.list_offers(active_only=True)]
+    seen = {row["id"] for row in offers}
+    if deal and deal.get("offer_id") and deal["offer_id"] not in seen:
+        current = offers_service.get_offer(deal["offer_id"])
+        if current:
+            offers.insert(0, dict(current))
+    names = {row["id"]: row["name"] for row in list_services()}
+    for offer in offers:
+        bound = offer.get("service_id")
+        offer["service_name"] = names.get(bound) if bound else None
+    return offers
+
+
+def _service_form_error(error, service=None, offer_id=None):
+    if error in ("offer_service_mismatch", "offer_not_for_service"):
+        return (
+            "That offer belongs to a different service. "
+            "Pick an offer for the new service, or choose none to clear it."
+        )
+    return service_change_message(error, service=service, offer_id=offer_id)
+
+
 def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
-                    form_parent_deal_id=None, error=None, status_code=200):
+                    form_parent_deal_id=None, form_service_id=None, form_offer_id=None,
+                    error=None, status_code=200):
     if deal and deal.get("lost_reason_id") and not isinstance(deal.get("lost_reason"), dict):
         deal = dict(deal)
         deal["lost_reason"] = get_lost_reason(deal["lost_reason_id"])
@@ -894,8 +934,11 @@ def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
     ctx = {
         "request": request, "user": user, "deal": deal,
         "partner": partner, "service": service,
+        "services": _edit_service_choices(service, form_service_id),
+        "offers": _edit_offer_choices(deal),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
+        "form_service_id": form_service_id, "form_offer_id": form_offer_id,
         "error": error, "lost_reasons": _lost_reason_choices(deal),
         "campaign_links": _campaign_links(deal, form_tags),
     }
@@ -1035,6 +1078,8 @@ async def edit_deal_submit(
     owner_key: str = Form(""), external_ref: str = Form(""),
     parent_deal_id: str = Form(""),
     tags: str = Form(""),
+    service_id: str | None = Form(None),
+    offer_id: str | None = Form(None),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     deal = get_deal(deal_id)
@@ -1071,18 +1116,74 @@ async def edit_deal_submit(
             value = float(raw_value)
         except ValueError:
             value = deal["value_estimate"]
-    update_deal_fields(
-        deal_id,
-        source=source,
-        value_estimate=value,
-        pain_points=pain_points,
-        goals=goals,
-        next_action=next_action,
-        next_action_date=(next_action_date or "").strip()[:10] or None,
-        owner_key=owner_key,
-        external_ref=external_ref,
-        parent_deal_id=cleaned_parent,
+    field_updates = {
+        "source": source,
+        "value_estimate": value,
+        "pain_points": pain_points,
+        "goals": goals,
+        "next_action": next_action,
+        "next_action_date": (next_action_date or "").strip()[:10] or None,
+        "owner_key": owner_key,
+        "external_ref": external_ref,
+        "parent_deal_id": cleaned_parent,
+    }
+    # Form(None) turns an empty select value into None, so "— none —"
+    # (offer_id=) is indistinguishable from an omitted field. The cached form
+    # still has the empty string when the field was posted.
+    raw_form = await request.form()
+    if "service_id" in raw_form:
+        service_id = str(raw_form.get("service_id") or "")
+    if "offer_id" in raw_form:
+        offer_id = str(raw_form.get("offer_id") or "")
+    parsed_service_id = _safe_int(service_id) if service_id is not None else None
+    if service_id is not None and (
+        not str(service_id).strip() or parsed_service_id is None or parsed_service_id < 1
+    ):
+        return _edit_deal_form(
+            request, user, deal, partner, service, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, form_service_id=service_id,
+            form_offer_id=offer_id, error="Pick a service.", status_code=400,
+        )
+    current_service_id = deal.get("service_id")
+    changing_service = (
+        parsed_service_id is not None
+        and (current_service_id is None or int(current_service_id) != int(parsed_service_id))
     )
+    if changing_service:
+        if offer_id is None:
+            offer_arg = UNSET
+        elif not str(offer_id).strip():
+            offer_arg = None
+        else:
+            offer_arg = _safe_int(offer_id)
+            if offer_arg is None or offer_arg < 1:
+                return _edit_deal_form(
+                    request, user, deal, partner, service, form_tags=tags,
+                    form_parent_deal_id=parent_deal_id, form_service_id=service_id,
+                    form_offer_id=offer_id, error="That offer does not exist.",
+                    status_code=400,
+                )
+        _updated, service_error = set_deal_service(deal_id, parsed_service_id, offer_id=offer_arg)
+        if service_error:
+            target = get_service(parsed_service_id)
+            return _edit_deal_form(
+                request, user, deal, partner, service, form_tags=tags,
+                form_parent_deal_id=parent_deal_id, form_service_id=service_id,
+                form_offer_id=offer_id,
+                error=_service_form_error(
+                    service_error, service=target,
+                    offer_id=offer_arg if isinstance(offer_arg, int) else None,
+                ),
+                status_code=400,
+            )
+    elif offer_id is not None:
+        if not str(offer_id).strip():
+            field_updates["offer_id"] = None
+        else:
+            parsed_offer = _safe_int(offer_id)
+            if parsed_offer is not None and parsed_offer >= 1:
+                field_updates["offer_id"] = parsed_offer
+    update_deal_fields(deal_id, **field_updates)
     apply_deal_tags(deal_id, replace=parsed_tags or [])
     return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)
 

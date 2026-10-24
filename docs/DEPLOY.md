@@ -76,6 +76,48 @@ and styles only (vendored Pico, htmx, and Tom Select under `/static/vendor/`).
 Do not add a CDN `<script>` or `<link>`, and do not strip the CSP header at
 the proxy.
 
+## Manual deploy
+
+The live instance is deployed by hand. The host and SSH user are in the
+operator's private notes, not in this repo. When the target commit changes the
+schema (`SCHEMA_VERSION` in `app/database.py`), run the
+[migration dry run](#migration-dry-run) first.
+
+```bash
+ssh <deploy-host>
+cd /opt/agent-crm
+git fetch
+scripts/migration-dryrun.sh <sha>   # schema changes only; must print PASS
+git checkout <sha>
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  -f docker-compose.traefik.yml up -d --build
+```
+
+Always pass all three files; the server's `.env` sets no `COMPOSE_FILE`.
+A bare `docker compose up` would bring up the dev compose: `--reload`,
+`./app` bind-mounted, a public port 8000, and none of the hardening above.
+
+### Migration dry run
+
+`scripts/migration-dryrun.sh <sha>` runs that commit's `init_db()` against
+a copy of the live database and touches nothing in production:
+
+1. Takes an online sqlite backup of live `data/crm.db` inside the running
+   app container, as the owner of `/app/data` (`APP_UID`), and streams it
+   out. `docker cp` can't read the container's tmpfs `/tmp`.
+2. Builds a throwaway image from `git archive <sha>`.
+3. Runs `init_db()` on the copy with `--network none` and a writable
+   `/app/backups` mount.
+4. Checks that `PRAGMA user_version` equals `SCHEMA_VERSION`,
+   `integrity_check` is `ok`, `foreign_key_check` is empty, and row counts
+   of existing tables are unchanged.
+5. Deletes the copy and the image, pass or fail.
+
+It exits non-zero on `FAIL` and lists each problem. A migration that drops
+or merges rows on purpose fails the row-count check; confirm that is the
+intended change before deploying. Set `CRM_CONTAINER` if the app isn't the
+compose service `app` in the current directory.
+
 ## `TRUSTED_PROXIES`
 
 Rate limits key on the client IP. Behind a proxy, uvicorn sees the proxy (or

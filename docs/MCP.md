@@ -12,8 +12,9 @@ and write the CRM's data.
 
 ## What an agent can do
 
-Search and get partners, list and get deals and activities, get today's call
-queue and due follow-ups, read the service/stage/offer catalogue, ingest leads
+Search and get partners, list and get deals and activities, list and update
+campaigns, get today's call queue (optionally for one campaign) and due
+follow-ups, read the service/stage/offer catalogue, ingest leads
 (same idempotent rules as `POST /api/v1/leads`), create and update partners and
 deals, move stages, record call outcomes, log timeline activities, manage
 services and offers, assign owners, bulk-update deals, and hand deal-scoped work
@@ -93,7 +94,11 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `list_tags` | Tags in use, each with a `count`. Lost records are not counted. |
 | `get_deal` | One deal record (lead or opportunity), including `tags`, `child_deals`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. A lead also returns its contact columns. |
 | `list_activities` | The timeline for a partner or a deal record, newest first. Accepts a lead without a partner. |
-| `get_call_queue` | Open opportunities in the qualified pool with a dialable phone. No leads. Filters: `stage`, `service_slug`, `source_prefix`, `include_new=true`, `owner`. `limit` up to 50. |
+| `get_call_queue` | Open opportunities in the qualified pool with a dialable phone. No leads. Filters: `stage`, `service_slug`, `source_prefix`, `include_new=true`, `owner`, `campaign` (slug) or `campaign_id`. `limit` up to 50. A campaign keeps deals tagged `campaign:<slug>`. |
+| `list_campaigns` | Campaigns with win/loss, percent complete, and pace. Optional `status`. |
+| `get_campaign` | One campaign by `campaign_id` or `slug`: fields, results, win/loss, targets, pacing, deals, and `period=week\|month\|year` for the breakdown. Same numbers as the campaign page. |
+| `create_campaign` | Name plus optional slug, audience, service, offer, angle, opener, channel, status, dates, and targets. Deals already tagged `campaign:<slug>` are included. |
+| `update_campaign` | Change fields. `new_slug` rewrites the `campaign:` tag on linked deals. Null clears an optional field. |
 | `list_due_followups` | Open deal records whose `next_action_date` is today or earlier. Includes leads and opportunities. Filter `type`, `owner` / `owner_key`, `service_slug`. |
 | `list_catalog` | Services, pipeline stages (with `is_lost` marked deprecated), offers, call-outcome keys, activity types (includes `research`), and `lost_reasons` (including `is_disqualification`). |
 | `ingest_leads` | Creates **leads**, not partners. `type=opportunity` keeps the old partner + opportunity path. Strong-key matches fill-empty; weak-key-only matches create a new lead. Optional `tags` merge. |
@@ -206,6 +211,31 @@ an invoicing tool or Zapier. An unset URL or a network failure is logged as
 a system activity and the stage change still succeeds. Invoice status is
 not written back into the CRM.
 
+## Campaigns
+
+A campaign is the shared pitch. The deal tag `campaign:<slug>` is the
+membership: there is no `campaign_id` on a deal, because a deal can be in
+more than one campaign and the tag is already how lists are filtered.
+Creating the campaign links existing tagged deals. `new_slug` on
+`update_campaign` renames that tag.
+
+`list_campaigns` and `get_campaign` use the same calculation as the
+campaign page. Win/loss is won to lost. Disqualified deals are excluded
+from that ratio when a deal's outcome is disqualified, and counted on
+their own. Open deals are excluded from the ratio too. With no closed
+deals the label is `no closed deals`, not 0%.
+
+`period` is optional. Omit it and `metrics.periods` is null. `week`,
+`month`, or `year` fills `metrics.periods.rows`. Every figure is
+`{value, formula, inputs, note}` from `app.services.campaign_metrics`.
+Percents are on a 0–100 scale. `value` is null when the figure does not
+exist (no closed deals, no deadline), and the `note` says why. Disqualified
+deals are excluded from win/loss and from the lead-count actual.
+
+`get_call_queue` with `campaign` does not add leads. Pass `include_new=true`
+when the list is still on the default stage. The call page link on a
+campaign does that.
+
 ## Example calls
 
 ```json
@@ -231,6 +261,18 @@ not written back into the CRM.
 
 {"name": "get_call_queue", "arguments": {
   "stage": "new", "service_slug": "consulting", "limit": 50
+}}
+
+{"name": "create_campaign", "arguments": {
+  "name": "Spring outreach", "slug": "spring-2026", "channel": "phone",
+  "audience": "Independent clinics", "target_leads": 40,
+  "start_date": "2026-09-01", "deadline": "2026-12-01"
+}}
+
+{"name": "get_campaign", "arguments": {"slug": "spring-2026", "period": "month"}}
+
+{"name": "get_call_queue", "arguments": {
+  "campaign": "spring-2026", "include_new": true
 }}
 
 {"name": "set_deal_owner", "arguments": {"deal_id": 12, "owner": "alice"}}

@@ -176,7 +176,7 @@ def score_deal(deal, now=None):
 def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
                       stage: str = None, service_slug: str = None,
                       source_prefix: str = None, include_new: bool = False,
-                      owner_key: str = None):
+                      owner_key: str = None, campaign_slug: str = None):
     """Top `limit` callable deals, highest score first (default pool).
 
     Hard filters, not scored away: the partner must have an actually dialable
@@ -187,6 +187,9 @@ def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
     work (win-back lists at stage=new) uses `include_new=True` and/or an
     explicit `stage` / `service_slug` / `source_prefix`. Explicit `stage`
     replaces the pool; `include_new` unions the default stage with it.
+    `campaign_slug` keeps only deals tagged `campaign:<slug>`. An unknown
+    or invalid slug returns nothing. Leads are still excluded: the call
+    page needs an opportunity with a dialable phone.
     No matching stage configured means nothing to call.
 
     Ranking is query-time Python. The default qualified-pool path uses the
@@ -204,7 +207,17 @@ def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
     if not pool_keys:
         return []
 
-    campaign = bool(stage or include_new or service_slug or source_prefix)
+    campaign_tag = None
+    if campaign_slug:
+        from app.services.campaigns import campaign_tag as tag_for_slug
+
+        campaign_tag = tag_for_slug(campaign_slug)
+        if not campaign_tag:
+            return []
+
+    campaign = bool(
+        stage or include_new or service_slug or source_prefix or campaign_tag
+    )
 
     # "When did this deal last enter *its own current* qualified-pool stage"
     # — deals.stage varies per row (several stages can carry the role), so
@@ -261,6 +274,12 @@ def list_todays_calls(limit: int = CALL_QUEUE_LIMIT, now=None, *,
     if owner:
         query += " AND deals.owner_key = ?"
         params.append(owner)
+    if campaign_tag:
+        query += (
+            " AND EXISTS (SELECT 1 FROM deal_tags"
+            " WHERE deal_tags.deal_id = deals.id AND deal_tags.tag = ?)"
+        )
+        params.append(campaign_tag)
 
     with get_db() as db:
         rows = [dict(r) for r in db.execute(query, params).fetchall()]

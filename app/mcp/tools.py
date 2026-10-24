@@ -427,6 +427,8 @@ def list_activities_tool(arguments):
 
 
 def get_call_queue_tool(arguments):
+    from app.services.campaigns import get_campaign, get_campaign_by_slug
+
     limit = clamp_limit(arguments.get("limit"), default=CALL_QUEUE_LIMIT, maximum=MAX_LIMIT)
     stage = as_text(arguments.get("stage")).strip() or None
     if stage and not pipeline_stages.get_stage(stage):
@@ -435,6 +437,20 @@ def get_call_queue_tool(arguments):
     source_prefix = as_text(arguments.get("source_prefix")).strip() or None
     include_new = as_bool(arguments.get("include_new"), default=False)
     owner_key = _owner_arg(arguments)
+    campaign_slug = None
+    campaign_id = as_int(arguments.get("campaign_id"))
+    if campaign_id is not None:
+        if campaign_id < 1:
+            return _err("invalid_id", "campaign_id must be a positive integer")
+        campaign = get_campaign(campaign_id)
+        if not campaign:
+            return _err("not_found", f"No campaign with id {campaign_id}")
+        campaign_slug = campaign["slug"]
+    elif as_text(arguments.get("campaign")).strip():
+        campaign = get_campaign_by_slug(as_text(arguments.get("campaign")))
+        if not campaign:
+            return _err("not_found", "No campaign with that slug")
+        campaign_slug = campaign["slug"]
     rows = list_todays_calls(
         limit=limit,
         stage=stage,
@@ -442,6 +458,7 @@ def get_call_queue_tool(arguments):
         source_prefix=source_prefix,
         include_new=bool(include_new),
         owner_key=owner_key,
+        campaign_slug=campaign_slug,
     )
     rows = [row for row in rows if row.get("type") != "lead" and row.get("active", 1)]
     calls = []
@@ -464,6 +481,7 @@ def get_call_queue_tool(arguments):
         service_slug=service_slug,
         include_new=bool(include_new),
         owner_key=owner_key,
+        campaign=campaign_slug,
     )
 
 
@@ -1475,7 +1493,10 @@ TOOLS = [
             "Today's calls: deals with a dialable phone. Default is qualified-pool only, "
             "ranked by the call-priority score. For ingested niche lists still at stage=new, "
             "pass include_new=true and/or stage=new plus service_slug "
-            "(e.g. win-back). Optional filters: source_prefix, owner."
+            "(e.g. win-back). Optional filters: source_prefix, owner. "
+            "campaign is a campaign slug (or campaign_id) and keeps deals tagged "
+            "campaign:<slug>. Combine it with include_new=true for a list still at "
+            "the default stage. Leads are not included."
         ),
         "inputSchema": {
             "type": "object",
@@ -1496,6 +1517,11 @@ TOOLS = [
                 },
                 "owner": _OWNER_PROP,
                 "owner_key": _OWNER_PROP,
+                "campaign": {
+                    "type": "string",
+                    "description": "Campaign slug. Keeps deals tagged campaign:<slug>.",
+                },
+                "campaign_id": {"type": "integer", "minimum": 1},
             },
         },
         "annotations": {
@@ -2398,7 +2424,9 @@ TOOLS = [
 
 
 from app.mcp.lead_tools import LEAD_TOOLS
+from app.mcp.campaign_tools import CAMPAIGN_TOOLS
 TOOLS.extend(LEAD_TOOLS)
+TOOLS.extend(CAMPAIGN_TOOLS)
 
 TOOL_BY_NAME = {tool["name"]: tool for tool in TOOLS}
 

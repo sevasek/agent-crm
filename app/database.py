@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 
 class SchemaVersionError(RuntimeError):
@@ -956,6 +956,48 @@ def migrate_012(db) -> None:
     )
 
 
+# Campaign rows. Membership is the existing deal tag `campaign:<slug>`,
+# not a column on deals — see migrate_013. Same DDL comment as partner_tags:
+# a fresh database reaches this table only by running the numbered migration.
+_CAMPAIGNS_DDL = """
+CREATE TABLE IF NOT EXISTS campaigns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    audience TEXT,
+    service_id INTEGER REFERENCES services(id),
+    offer_id INTEGER REFERENCES offers(id),
+    angle TEXT,
+    opener TEXT,
+    channel TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    start_date TEXT,
+    deadline TEXT,
+    target_leads INTEGER,
+    target_contacts INTEGER,
+    target_conversations INTEGER,
+    target_advanced INTEGER,
+    target_won INTEGER,
+    target_won_value REAL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+)
+"""
+
+
+def migrate_013(db) -> None:
+    """Add campaigns and one row per distinct `campaign:` tag.
+
+    Does not write a campaign id onto deals. A deal is in the campaign when
+    it carries `campaign:<slug>`. INSERT OR IGNORE so a re-run is safe.
+    Backfill does not commit; init_db() owns the transaction.
+    """
+    db.execute(_CAMPAIGNS_DDL)
+    from app.services.campaigns import backfill_campaigns_from_tags
+
+    backfill_campaigns_from_tags(db)
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
@@ -970,6 +1012,7 @@ MIGRATIONS = {
     10: migrate_010,
     11: migrate_011,
     12: migrate_012,
+    13: migrate_013,
 }
 
 

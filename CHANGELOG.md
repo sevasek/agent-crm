@@ -21,11 +21,12 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   `app/services/deal_outcome.py` and is not stored. A Disqualified reason
   is seeded idempotently (insert-or-ignore by name, then set the flag).
   `mark_lost` can change the reason on an already-lost deal and keeps
-  `closed_at`. Part of #154.
+  `closed_at`.
 - Straight-line campaign metrics (`app/services/campaign_metrics.py`):
   results, win/loss with disqualified deals excluded, pacing rates, and a
-  week/month/year breakdown. Each number includes the inputs behind it.
-  Part of #154.
+  week/month/year breakdown. Each number includes the formula and the inputs
+  behind it.
+- Campaigns. A `campaigns` record holds the shared pitch (audience, service or offer, angle, opener, channel, status, dates, and optional targets). Deals join through the existing `campaign:<slug>` tag, so tags already in the database become campaign rows on upgrade (migration 13, after the disqualification flag in migration 12). The CRM nav has a Campaigns list and a detail page (results, win/loss, pacing, and a week/month/year breakdown). Deal and lead pages link back. `list_campaigns`, `get_campaign`, `create_campaign`, and `update_campaign` are MCP tools, and `get_call_queue` accepts a campaign. Closes #154.
 
 ## [1.0.0] - 2026-10-17
 

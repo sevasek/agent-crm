@@ -236,7 +236,9 @@ def create_app() -> FastAPI:
                     response = Response("Internal Server Error", status_code=500)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        # Not no-referrer: that makes browsers send "Origin: null" on form POSTs,
+        # which _cross_site_cookie_request rejects.
+        response.headers["Referrer-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
         if _production_intent():
             response.headers["Strict-Transport-Security"] = HSTS_HEADER

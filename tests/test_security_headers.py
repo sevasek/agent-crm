@@ -107,7 +107,7 @@ def _csp_directive(csp: str, name: str) -> str | None:
 def _assert_baseline_security_headers(resp, *, hsts: bool = False):
     assert resp.headers["X-Content-Type-Options"] == "nosniff"
     assert resp.headers["X-Frame-Options"] == "DENY"
-    assert resp.headers["Referrer-Policy"] == "no-referrer"
+    assert resp.headers["Referrer-Policy"] == "same-origin"
     csp = resp.headers["Content-Security-Policy"]
     assert _csp_directive(csp, "default-src") == "default-src 'self'"
     assert _csp_directive(csp, "script-src") == "script-src 'self'"

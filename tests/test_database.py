@@ -398,3 +398,127 @@ def test_init_db_lock_serializes_concurrent_migrators(tmp_path, monkeypatch):
     conn = sqlite3.connect(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     conn.close()
+
+
+def _build_v11(tmp_path, monkeypatch, *, disqualified):
+    """A live-shaped v11 database with campaign-tagged deals."""
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        for step in (migrate_001, migrate_002, migrate_003, migrate_004,
+                     migrate_005, migrate_006, migrate_007, migrate_008,
+                     migrate_009, migrate_010, migrate_011):
+            step(db)
+        if disqualified:
+            # Added by hand on sevasek's live database, where it is id 8.
+            db.execute(
+                """INSERT INTO lost_reasons
+                       (id, name, triggers_nurture, active, created_at, updated_at)
+                   VALUES (8, 'Disqualified', 0, 1, '2026-09-01', '2026-09-01')"""
+            )
+        db.execute("INSERT INTO partners (name) VALUES ('Legacy Co')")
+        db.execute(
+            """INSERT INTO deals (partner_id, stage, updated_at)
+               VALUES (1, 'new', '2026-10-01'), (1, 'new', '2026-10-02'),
+                      (1, 'new', '2026-10-03'), (1, 'new', '2026-10-04')"""
+        )
+        db.executemany(
+            "INSERT INTO deal_tags (deal_id, tag) VALUES (?, ?)",
+            [
+                (1, "campaign:spring-push"),
+                (2, "Campaign:Spring-Push"),
+                (3, "campaign:spring-push"),
+                (3, "CAMPAIGN:SPRING-PUSH"),
+                (4, "campaign:icp-hc-illawarra-2026-09"),
+                (4, "clinic"),
+            ],
+        )
+        db.execute("PRAGMA user_version = 11")
+        db.commit()
+        deals = [dict(r) for r in db.execute("SELECT * FROM deals ORDER BY id")]
+        reasons = {r["name"]: r["id"] for r in db.execute("SELECT id, name FROM lost_reasons")}
+    return deals, reasons
+
+
+def _assert_v13(tmp_path, deals_before, reasons_before):
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION == 13
+        rows = conn.execute("SELECT id, name, is_disqualification FROM lost_reasons").fetchall()
+        assert [r["is_disqualification"] for r in rows if r["name"] == "Disqualified"] == [1]
+        assert all(r["is_disqualification"] == 0 for r in rows if r["name"] != "Disqualified")
+        ids = {r["name"]: r["id"] for r in rows}
+        assert all(ids[name] == reason_id for name, reason_id in reasons_before.items())
+        slugs = [r["slug"] for r in conn.execute("SELECT slug FROM campaigns ORDER BY slug")]
+        assert slugs == ["icp-hc-illawarra-2026-09", "spring-push"]
+        tags = conn.execute("SELECT deal_id, tag FROM deal_tags ORDER BY deal_id, tag").fetchall()
+        assert [(r["deal_id"], r["tag"]) for r in tags] == [
+            (1, "campaign:spring-push"),
+            (2, "campaign:spring-push"),
+            (3, "campaign:spring-push"),
+            (4, "campaign:icp-hc-illawarra-2026-09"),
+            (4, "clinic"),
+        ]
+        assert [dict(r) for r in conn.execute("SELECT * FROM deals ORDER BY id")] == deals_before
+        assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
+    pre = list((tmp_path / "backups").glob("pre-migrate-v11-to-v13-*.db"))
+    assert pre, "expected an online backup before migrating a live v11 DB"
+
+
+def test_init_db_migrates_v11_keeps_handmade_disqualified(tmp_path, monkeypatch):
+    deals, reasons = _build_v11(tmp_path, monkeypatch, disqualified=True)
+    init_db()
+    _assert_v13(tmp_path, deals, reasons)
+    assert reasons["Disqualified"] == 8
+
+
+def test_init_db_migrates_v11_seeds_disqualified(tmp_path, monkeypatch):
+    deals, reasons = _build_v11(tmp_path, monkeypatch, disqualified=False)
+    assert "Disqualified" not in reasons
+    init_db()
+    _assert_v13(tmp_path, deals, reasons)
+
+
+def test_migrate_012_and_013_again_are_no_ops(tmp_path, monkeypatch):
+    _build_v11(tmp_path, monkeypatch, disqualified=True)
+    init_db()
+
+    def snapshot(conn):
+        return [
+            [tuple(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY 1, 2")]
+            for table in ("lost_reasons", "campaigns", "deal_tags", "deals")
+        ]
+
+    with get_db() as conn:
+        before = snapshot(conn)
+        migrate_012(conn)
+        migrate_013(conn)
+        conn.commit()
+        assert snapshot(conn) == before
+
+
+# Schema version -> a test that upgrades a populated database into it.
+UPGRADE_TESTS = {
+    1: test_init_db_migrates_legacy_version_0,
+    3: test_init_db_migrates_v2_drops_rate_limit_hits,
+    4: test_init_db_migrates_v3_adds_used_oauth_codes,
+    5: test_init_db_migrates_v4_adds_install_id,
+    7: test_init_db_migrates_v6_adds_empty_stage_automations,
+    9: test_init_db_migrates_v8_adds_board_position,
+    12: test_init_db_migrates_v11_keeps_handmade_disqualified,
+    13: test_init_db_migrates_v11_seeds_disqualified,
+}
+# Shipped before this guard with no upgrade test of their own. Never add to it.
+GRANDFATHERED = frozenset({2, 6, 8, 10, 11})
+
+
+def test_every_migration_has_an_upgrade_test():
+    assert GRANDFATHERED == {2, 6, 8, 10, 11}, "GRANDFATHERED must not grow"
+    missing = set(MIGRATIONS) - set(UPGRADE_TESTS) - GRANDFATHERED
+    assert not missing, (
+        f"migrate_{min(missing):03d} has no upgrade test. Add a test in "
+        "tests/test_database.py that builds a populated database at the "
+        "previous version, runs init_db(), and checks the data, then list "
+        "it in UPGRADE_TESTS."
+    )

@@ -109,14 +109,14 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `mark_lost` / `restore_deal` / `merge_leads` | Archive with a lost reason; restore a mistake; merge leads (max 10 sources). Merged records cannot be restored. `mark_lost` on an already-lost record with a different reason changes the reason and keeps `closed_at`. The same reason returns `already_lost`. The returned deal includes `outcome` and `is_disqualified`. |
 | `list_lost_reasons` / `create_lost_reason` / `update_lost_reason` | Operator lost-reason configuration. `create_lost_reason` and `update_lost_reason` take `is_disqualification`. Outcome follows the current flag. |
 | `create_partner` / `update_partner` | `update_partner` fills empty fields by default. Do not use `create_partner` for a research candidate. Use `create_lead`. |
-| `create_deal` / `update_deal` | `create_deal` creates an **opportunity**. For an unqualified candidate, use `create_lead`. Accepts `probability`, `priority`, `expected_close`. `update_deal` rejects `type`. |
+| `create_deal` / `update_deal` | `create_deal` creates an **opportunity**. For an unqualified candidate, use `create_lead`. Accepts `probability`, `priority`, `expected_close`. `update_deal` rejects `type`. `update_deal` accepts `service_id` or `service_slug` (not both) for an active service. If the current offer is tied to a different service, pass an `offer_id` for the new service or `null` to clear it; an offer with no service is kept when `offer_id` is omitted. The timeline records `Service changed: old-slug -> new-slug`. Stage, tags, and next action stay put unless those fields are sent too. |
 | `set_deal_stage` | Move an **opportunity** to any configured stage. Rejects a lead (`not_an_opportunity`) and a lost record (`deal_lost`). Entering `triggers_nurture` fires nurture. Entering `is_won` can fire the deal-won webhook. A move into an existing `is_lost` stage also runs `mark_lost`. |
 | `record_call_outcome` | One of `no_answer`, `interested`, `meeting_scheduled`, `won`, `not_interested`. Rejects a lead or a lost record. `not_interested` calls `mark_lost` with reason "Not a fit" and does not move the stage. |
 | `log_activity` | Add a `call`, `email`, `meeting`, `note` or `research` to the timeline. `partner_id` is optional when `deal_id` is given. `source_url` is http/https only. |
 | `create_service` / `update_service` | Add or change a catalogue service (`slug` is idempotent on create; `active=false` hides it without deleting; `nurture_list_slug`). |
 | `create_offer` / `update_offer` | Priced offers (`name`, `service_id` or `service_slug`, `price`, `currency`, `description`, `active`). Idempotent on name + service. Currency defaults to USD. |
 | `set_deal_owner` | Assign an owner slug such as `alice`, `bob` or `sales-agent`. |
-| `bulk_update_deals` | Selects opportunities only. Set `set_stage` and/or `next_action` + `next_action_date`, `add_tags` / `remove_tags`, or `mark_lost` with `lost_reason`, for up to 50 `deal_ids`, or for a `service_slug` (optionally filtered by `stage`). |
+| `bulk_update_deals` | Selects open opportunities only. Set `set_stage` and/or `next_action` + `next_action_date`, `add_tags` / `remove_tags`, or `mark_lost` with `lost_reason`, for up to 50 `deal_ids`, or for a `service_slug` (optionally filtered by `stage`). To change service, pass `deal_ids` plus `set_service_id` or `set_service_slug` (not both) and an optional `offer_id`. `service_slug` only filters. The offer rule matches `update_deal`. A mismatch writes nothing. Each changed deal logs `Service changed: old-slug -> new-slug`. Changing service does not change stage, tags, or next action unless those fields are also sent. |
 | `create_delegated_task` | Deal-scoped work for another agent or a person. Needs `deal_id` and `title`. Owner defaults to the default owner and status to `delegated`. Idempotent on deal + title + owner while open. |
 | `list_delegated_tasks` | Filter `owner`, `status`, `deal_id`, `due_only`. Rows include webhook delivery fields. |
 | `get_delegated_task` | Full task row plus partner and deal, with webhook `notified` / `notified_at` / `last_attempt_at` / `last_error`. |
@@ -313,9 +313,17 @@ campaign does that.
   "deal_id": 28, "add_tags": ["clinic"]
 }}
 
+{"name": "update_deal", "arguments": {
+  "deal_id": 28, "service_slug": "website-rebuild", "offer_id": null
+}}
+
 {"name": "bulk_update_deals", "arguments": {
   "deal_ids": [28, 29],
   "add_tags": ["campaign:example-2026-09"]
+}}
+
+{"name": "bulk_update_deals", "arguments": {
+  "deal_ids": [28, 29], "set_service_slug": "website-rebuild"
 }}
 
 {"name": "list_deals", "arguments": {

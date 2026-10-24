@@ -37,7 +37,7 @@ def test_edit_deal_form_shows_existing_fields(logged_in_client, db):
     assert 'value="Call Jane"' in html
     assert 'value="2026-09-01"' in html
     assert 'name="partner_id"' not in html
-    assert 'name="service_id"' not in html
+    assert '<select id="service_id" name="service_id" required>' in html
     assert 'name="stage"' not in html
 
 
@@ -287,6 +287,11 @@ def test_new_deal_form_with_partner_id_only_lists_that_partners_candidates(logge
     assert "selected" in resp.text
 
 
+def _select_html(html, select_id):
+    start = html.index(f'id="{select_id}"')
+    return html[start:html.index("</select>", start)]
+
+
 def test_edit_deal_form_lists_parent_candidates_and_children(logged_in_client, db):
     _pid, _consulting, _support, parent_id, child_id = _two_deals(db)
     update_deal_fields(child_id, parent_deal_id=parent_id)
@@ -294,16 +299,18 @@ def test_edit_deal_form_lists_parent_candidates_and_children(logged_in_client, d
     parent_page = logged_in_client.get(f"/crm/deals/{parent_id}/edit")
     assert parent_page.status_code == 200
     assert 'name="parent_deal_id"' in parent_page.text
-    assert f'<option value="{parent_id}"' not in parent_page.text
+    parent_select = _select_html(parent_page.text, "parent_deal_id")
+    assert f'<option value="{parent_id}"' not in parent_select
     assert f"/crm/deals/{child_id}/edit" in parent_page.text
     assert "Follow-on deals" in parent_page.text
     assert "Support" in parent_page.text
 
     child_page = logged_in_client.get(f"/crm/deals/{child_id}/edit")
     assert child_page.status_code == 200
-    assert f'<option value="{parent_id}"' in child_page.text
-    assert 'selected' in child_page.text
-    assert f'<option value="{child_id}"' not in child_page.text
+    child_select = _select_html(child_page.text, "parent_deal_id")
+    assert f'<option value="{parent_id}"' in child_select
+    assert "selected" in child_select
+    assert f'<option value="{child_id}"' not in child_select
     assert "Follow-on deals" not in child_page.text
 
 

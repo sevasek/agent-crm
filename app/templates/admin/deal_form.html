@@ -6,9 +6,29 @@
 <form method="post" action="{{ '/crm/deals/' ~ deal.id ~ '/edit' if deal else '/crm/deals/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if deal %}
-    <p class="muted">{{ partner.name if partner else "No partner" }} · {{ service.name if service else "No service" }} · <span class="pill">{{ deal.stage }}</span>
+    <p class="muted">{{ partner.name if partner else "No partner" }} · <span class="pill">{{ deal.stage }}</span>
         — stage changes on the partner page.
     </p>
+    {% set selected_service = form_service_id if form_service_id is not none else (service.id if service else none) %}
+    <div class="form-row">
+        <label for="service_id">Service</label>
+        <select id="service_id" name="service_id" required>
+            {% for s in services %}
+            <option value="{{ s.id }}" {% if selected_service and selected_service|string == s.id|string %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% set selected_offer = form_offer_id if form_offer_id is not none else (deal.offer_id if deal.offer_id else '') %}
+    <div class="form-row">
+        <label for="offer_id">Offer</label>
+        <select id="offer_id" name="offer_id">
+            <option value="" {% if not selected_offer %}selected{% endif %}>— none —</option>
+            {% for o in offers %}
+            <option value="{{ o.id }}" {% if selected_offer and selected_offer|string == o.id|string %}selected{% endif %}>{{ o.name }}{% if o.service_name %} — {{ o.service_name }}{% endif %}</option>
+            {% endfor %}
+        </select>
+        <p class="muted">Must belong to the selected service. Choose none to clear it.</p>
+    </div>
     {% else %}
     <div class="form-row">
         <label for="partner_id">Partner</label>

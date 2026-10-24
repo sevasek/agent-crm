@@ -47,6 +47,9 @@ from app.services.catalog import (
 from app.services.deal_tags import TAG_HELP, MAX_TAGS, apply_deal_tags, list_tags, parse_tag_list
 from app.services.deals import (
     CALL_OUTCOMES,
+    UNSET,
+    assign_deals_service,
+    check_offer_for_deal,
     create_deal,
     get_deal,
     get_open_deal_for_partner_service,
@@ -54,6 +57,8 @@ from app.services.deals import (
     mark_lost,
     record_call_outcome,
     restore_deal,
+    service_change_message,
+    set_deal_service,
     set_deal_stage,
     update_deal_fields,
     validate_parent_link,
@@ -162,6 +167,59 @@ def _resolve_service(arguments):
             return service, None
         return None, _err("invalid_service", f"No service with slug {slug!r}")
     return None, _err("service_required", "Pass service_id or service_slug")
+
+
+def _service_change_error(error, *, service=None, offer_id=None, deal_ids=None):
+    """Map a set_deal_service error onto an MCP result. Nothing was written."""
+    public = "offer_service_mismatch" if error == "offer_not_for_service" else error
+    return _err(
+        public,
+        service_change_message(error, service=service, offer_id=offer_id, deal_ids=deal_ids),
+        **({"deal_ids": deal_ids} if deal_ids else {}),
+    )
+
+
+def _optional_service_assignment(arguments):
+    """The service named by service_id or service_slug, or (None, None) if neither was sent.
+
+    Exactly one of the two. The service must exist and be active.
+    """
+    has_id = "service_id" in arguments
+    has_slug = "service_slug" in arguments
+    if not has_id and not has_slug:
+        return None, None
+    if has_id and has_slug:
+        return None, _err("invalid_service", "Pass service_id or service_slug, not both.")
+    if has_id:
+        service_id = as_int(arguments.get("service_id"))
+        if service_id is None or service_id < 1:
+            return None, _err("invalid_service", "service_id must be a positive integer.")
+        service = get_service(service_id)
+        if not service:
+            return None, _err("invalid_service", f"No service with id {service_id}.")
+    else:
+        slug = as_text(arguments.get("service_slug")).strip().lower()
+        if not slug:
+            return None, _err("invalid_service", "service_slug must not be empty.")
+        service = get_service_by_slug(slug)
+        if not service:
+            return None, _err("invalid_service", f"No service with slug {slug!r}.")
+    if not int(service.get("active") or 0):
+        return None, _err("inactive_service", f"Service {service['slug']!r} is not active.")
+    return service, None
+
+
+def _explicit_offer_arg(arguments):
+    """UNSET when offer_id was omitted, None when it clears, or a positive id."""
+    if "offer_id" not in arguments:
+        return UNSET, None
+    raw = arguments.get("offer_id")
+    if raw in (None, "", 0, "0"):
+        return None, None
+    parsed = as_int(raw)
+    if parsed is None or parsed < 1:
+        return None, _err("invalid_offer", "offer_id must be a positive integer, or null to clear it.")
+    return parsed, None
 
 
 def _partner_updates(arguments):
@@ -704,11 +762,29 @@ def update_deal_tool(arguments):
     tag_ops, error = _tag_ops_arg(arguments)
     if error:
         return error
+    service, error = _optional_service_assignment(arguments)
+    if error:
+        return error
     updates = _deal_updates(arguments)
-    if not updates and not tag_ops:
+    changing_service = (
+        service is not None
+        and int(service["id"]) != int(deal.get("service_id") or 0)
+    )
+    offer_arg = UNSET
+    if changing_service:
+        # The service change owns offer_id for this call. A bad offer must
+        # fail before any other field is written.
+        updates.pop("offer_id", None)
+        offer_arg, error = _explicit_offer_arg(arguments)
+        if error:
+            return error
+    if not updates and not tag_ops and not changing_service:
+        if service is not None:
+            return _ok(status="updated", deal=deal_brief(get_deal(deal_id)))
         return _err(
             "no_fields",
             "Pass at least one deal field to change (not stage — use set_deal_stage). "
+            "service_id or service_slug changes the service. "
             "tags replaces the set; add_tags and remove_tags merge.",
         )
     if "parent_deal_id" in updates:
@@ -716,6 +792,16 @@ def update_deal_tool(arguments):
         if error:
             return _parent_error(error)
         updates["parent_deal_id"] = cleaned
+    if not changing_service and updates.get("offer_id"):
+        error = check_offer_for_deal(deal, updates["offer_id"])
+        if error:
+            current = get_service(deal["service_id"]) if deal.get("service_id") else None
+            return _service_change_error(error, service=current, offer_id=updates["offer_id"])
+    if changing_service:
+        _updated, error = set_deal_service(deal_id, service["id"], offer_id=offer_arg)
+        if error:
+            passed_offer = offer_arg if isinstance(offer_arg, int) else None
+            return _service_change_error(error, service=service, offer_id=passed_offer)
     if updates:
         update_deal_fields(deal_id, **updates)
     if tag_ops:
@@ -966,6 +1052,27 @@ def set_deal_owner_tool(arguments):
     return _ok(status="updated", deal=deal_brief(get_deal(deal_id)))
 
 
+def _bulk_service_assignment(arguments, deal_ids):
+    """Service to set from set_service_id / set_service_slug, or (None, None).
+
+    service_slug is always a filter. Changing service needs deal_ids.
+    """
+    has_id = "set_service_id" in arguments
+    has_slug = "set_service_slug" in arguments
+    if not has_id and not has_slug:
+        return None, None
+    if has_id and has_slug:
+        return None, _err("invalid_service", "Pass set_service_id or set_service_slug, not both.")
+    if not deal_ids:
+        return None, _err(
+            "deal_ids_required",
+            f"Pass deal_ids (up to {MAX_BULK}) to change service.",
+        )
+    if has_id:
+        return _optional_service_assignment({"service_id": arguments.get("set_service_id")})
+    return _optional_service_assignment({"service_slug": arguments.get("set_service_slug")})
+
+
 def bulk_update_deals_tool(arguments):
     raw_ids = arguments.get("deal_ids")
     deal_ids = []
@@ -981,8 +1088,17 @@ def bulk_update_deals_tool(arguments):
     stage_filter = as_text(arguments.get("stage")).strip() or None
     if stage_filter and not pipeline_stages.get_stage(stage_filter):
         return _err("invalid_stage", f"Unknown stage {stage_filter!r}. Call list_catalog.")
-    service_slug = as_text(arguments.get("service_slug")).strip().lower() or None
     owner_key = _owner_arg(arguments)
+    assignment, error = _bulk_service_assignment(arguments, deal_ids)
+    if error:
+        return error
+    if "offer_id" in arguments and assignment is None:
+        return _err(
+            "offer_requires_service",
+            "offer_id is only applied together with a service change. "
+            "Pass deal_ids and either set_service_id or set_service_slug.",
+        )
+    service_slug = as_text(arguments.get("service_slug")).strip().lower() or None
 
     if not deal_ids and not service_slug:
         return _err(
@@ -1010,10 +1126,19 @@ def bulk_update_deals_tool(arguments):
         if error:
             return error
     lost_reason = as_text(arguments.get("lost_reason")).strip() or None
-    if not set_stage and next_action is None and next_action_date is None and not add_tags and not remove_tags and not lost_reason:
+    if (
+        not set_stage
+        and next_action is None
+        and next_action_date is None
+        and not add_tags
+        and not remove_tags
+        and not lost_reason
+        and assignment is None
+    ):
         return _err(
             "no_fields",
-            "Pass set_stage, next_action / next_action_date, add_tags / remove_tags, and/or mark_lost via lost_reason",
+            "Pass set_stage, next_action / next_action_date, add_tags / remove_tags, "
+            "set_service_id or set_service_slug with deal_ids, and/or mark_lost via lost_reason",
         )
 
     rows = list_deals(
@@ -1025,6 +1150,18 @@ def bulk_update_deals_tool(arguments):
     )
     truncated = len(rows) > MAX_BULK
     rows = rows[:MAX_BULK]
+    if assignment is not None:
+        offer_arg, error = _explicit_offer_arg(arguments)
+        if error:
+            return error
+        _updated_ids, error, blocked = assign_deals_service(
+            rows, assignment["id"], offer_id=offer_arg,
+        )
+        if error:
+            passed_offer = offer_arg if isinstance(offer_arg, int) else None
+            return _service_change_error(
+                error, service=assignment, offer_id=passed_offer, deal_ids=blocked,
+            )
     updated = []
     for deal in rows:
         if set_stage:
@@ -1802,8 +1939,14 @@ TOOLS = [
         "name": "update_deal",
         "description": (
             "Edit deal fields (source, value, pain_points, goals, next_action, offer, "
-            "owner_key, external_ref, parent_deal_id, tags). Does not change stage — use set_deal_stage, "
+            "owner_key, external_ref, parent_deal_id, service, tags). Does not change stage — use set_deal_stage, "
             "set_deal_owner, record_call_outcome, or bulk_update_deals. "
+            "Pass service_id or service_slug (not both) to move the deal to an active service. "
+            "If the current offer is tied to a different service, the call is rejected unless "
+            "offer_id is an offer for the new service, or null to clear the offer. "
+            "An offer with no service is kept when offer_id is omitted. "
+            "The timeline records 'Service changed: old-slug -> new-slug'. "
+            "Stage, tags, and next action stay as they are unless those fields are also sent. "
             "tags replaces the whole set (tags=[] clears it). add_tags and remove_tags "
             "merge, and are applied after tags when both are sent (remove wins on overlap). "
             "Omitting all three leaves tags unchanged. "
@@ -1821,7 +1964,24 @@ TOOLS = [
                 "goals": {"type": "string"},
                 "next_action": {"type": "string"},
                 "next_action_date": {"type": "string"},
-                "offer_id": {"type": "integer", "minimum": 1},
+                "service_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Move the deal to this active service. Do not also pass service_slug.",
+                },
+                "service_slug": {
+                    "type": "string",
+                    "description": "Move the deal to this active service. Do not also pass service_id.",
+                },
+                "offer_id": {
+                    "type": ["integer", "null"],
+                    "description": (
+                        "Offer to attach. null clears it. When changing service, an offer tied to "
+                        "another service must be replaced with one for the new service or cleared. "
+                        "Omitting offer_id keeps an offer that has no service, or one that already "
+                        "belongs to the new service."
+                    ),
+                },
                 "owner": _OWNER_PROP,
                 "owner_key": _OWNER_PROP,
                 "external_ref": {"type": "string"},
@@ -2106,10 +2266,19 @@ TOOLS = [
             "Set stage and/or next_action + next_action_date, and/or add or remove tags, "
             f"on up to {MAX_BULK} deals. Pass deal_ids, or filter by service_slug "
             "(optionally stage and owner). add_tags merges; remove_tags drops. "
-            "Selects opportunities only. lost_reason marks matching opportunities lost. "
-            "Uses set_deal_stage so nurture side effects fire. "
+            "Selects open opportunities only. lost_reason marks matching opportunities lost. "
+            "Uses set_deal_stage so nurture side effects fire when set_stage is sent. "
+            "To change service, pass deal_ids plus set_service_id or set_service_slug (not both) "
+            "and an optional offer_id. service_slug only ever filters. "
+            "The offer rule matches update_deal: an offer tied to another service must be "
+            "replaced (offer_id for the new service) or cleared (offer_id null), otherwise "
+            "nothing is written. An offer with no service is kept when offer_id is omitted. "
+            "Each changed deal logs 'Service changed: old-slug -> new-slug'. "
+            "Changing service does not change stage, tags, or next action unless those "
+            "fields are also sent. "
             "Example: service_slug=win-back, stage=new, set_stage=contacted, "
-            "next_action_date=today. Or deal_ids plus add_tags=[\"campaign:spring\"]."
+            "next_action_date=today. Or deal_ids plus set_service_slug=website-rebuild. "
+            "Or deal_ids plus add_tags=[\"campaign:spring\"]."
         ),
         "inputSchema": {
             "type": "object",
@@ -2119,8 +2288,25 @@ TOOLS = [
                     "type": "array",
                     "items": {"type": "integer", "minimum": 1},
                     "maxItems": MAX_BULK,
+                    "description": f"Up to {MAX_BULK} opportunity ids. Required when changing service.",
                 },
-                "service_slug": {"type": "string"},
+                "set_service_id": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "With deal_ids: set this active service. Do not also pass set_service_slug.",
+                },
+                "set_service_slug": {
+                    "type": "string",
+                    "description": "With deal_ids: set this active service. Do not also pass set_service_id.",
+                },
+                "service_slug": {"type": "string", "description": "Filter: deals on this service."},
+                "offer_id": {
+                    "type": ["integer", "null"],
+                    "description": (
+                        "With a service change: offer for the new service. null clears the current offer. "
+                        "Omit to keep an offer with no service, or one that already belongs to the new service."
+                    ),
+                },
                 "stage": {"type": "string", "description": "Filter: current stage key."},
                 "owner": _OWNER_PROP,
                 "owner_key": _OWNER_PROP,

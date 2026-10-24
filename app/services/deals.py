@@ -50,10 +50,254 @@ _CALL_OUTCOME_MAP = {key: (label, target) for key, label, target in CALL_OUTCOME
 STAGE_CHANGED_PREFIX = "Stage changed: "
 STAGE_CHANGED_SEP = " -> "
 
+# Same shape as a stage change: old value, then new. Slugs, not display names,
+# so the line stays stable when a service is renamed.
+SERVICE_CHANGED_PREFIX = "Service changed: "
+SERVICE_CHANGED_SEP = " -> "
+
+# Sentinel for set_deal_service(offer_id=...): omit the argument to keep the
+# current offer. None clears it. A positive id replaces it.
+UNSET = object()
+
 
 def stage_changed_body(old_stage: str, new_stage: str) -> str:
     """Activity body written by set_deal_stage."""
     return f"{STAGE_CHANGED_PREFIX}{old_stage}{STAGE_CHANGED_SEP}{new_stage}"
+
+
+def service_changed_body(old_service: str, new_service: str) -> str:
+    """Activity body written when a deal's service changes."""
+    return f"{SERVICE_CHANGED_PREFIX}{old_service}{SERVICE_CHANGED_SEP}{new_service}"
+
+
+def _offer_service_id(offer):
+    if not offer:
+        return None
+    bound = offer.get("service_id")
+    if bound in (None, "", 0):
+        return None
+    try:
+        return int(bound)
+    except (TypeError, ValueError):
+        return None
+
+
+def _offer_tied_to_other_service(offer, service_id) -> bool:
+    """True when the offer is explicitly tied to some other service.
+
+    An offer with no service_id is not tied to a different service, so it can
+    stay on the deal when the caller does not send a replacement.
+    """
+    bound = _offer_service_id(offer)
+    if bound is None:
+        return False
+    return bound != int(service_id)
+
+
+def _offer_belongs_to_service(offer, service_id) -> bool:
+    bound = _offer_service_id(offer)
+    return bound is not None and bound == int(service_id)
+
+
+def check_offer_for_deal(deal, offer_id):
+    """Error code when offer_id can't go on the deal as-is, else None.
+
+    For an offer-only change: the offer must exist and not be tied to a
+    service other than the deal's.
+    """
+    offer = get_offer(offer_id)
+    if not offer:
+        return "invalid_offer"
+    if deal.get("service_id") and _offer_tied_to_other_service(offer, deal["service_id"]):
+        return "offer_not_for_service"
+    return None
+
+
+def _plan_service_change(deal, service, offer_id=UNSET):
+    """Return (plan, error_code). Does not write.
+
+    `offer_id` is UNSET to keep the current offer, None to clear it, or an
+    offer id. A kept offer may have no service. An offer tied to a different
+    service is `offer_service_mismatch` unless the caller clears it or passes
+    an offer whose service_id is the new service (`offer_not_for_service`
+    when the passed offer is some other offer). Passing the deal's current
+    offer id counts as keeping it.
+
+    The plan never includes stage, tags, or next action.
+    """
+    if not deal:
+        return None, "not_found"
+    if not service:
+        return None, "invalid_service"
+    if not int(service.get("active") or 0):
+        return None, "inactive_service"
+    same_service = (
+        deal.get("service_id") is not None
+        and int(deal["service_id"]) == int(service["id"])
+    )
+    current_offer_id = deal.get("offer_id")
+    if offer_id is UNSET:
+        if same_service:
+            return {"noop": True}, None
+        current = get_offer(current_offer_id) if current_offer_id else None
+        if _offer_tied_to_other_service(current, service["id"]):
+            return None, "offer_service_mismatch"
+        return {"service_id": int(service["id"]), "offer_id": UNSET, "log": True}, None
+    if offer_id in (None, "", 0, "0"):
+        if same_service and not current_offer_id:
+            return {"noop": True}, None
+        return {
+            "service_id": int(service["id"]),
+            "offer_id": None,
+            "log": not same_service,
+        }, None
+    try:
+        parsed = int(offer_id)
+    except (TypeError, ValueError):
+        return None, "invalid_offer"
+    if parsed < 1:
+        return None, "invalid_offer"
+    same_offer = current_offer_id is not None and int(current_offer_id) == parsed
+    offer = get_offer(parsed)
+    if same_offer:
+        if _offer_tied_to_other_service(offer, service["id"]):
+            return None, "offer_service_mismatch"
+        if same_service:
+            return {"noop": True}, None
+        return {"service_id": int(service["id"]), "offer_id": UNSET, "log": True}, None
+    if not offer:
+        return None, "invalid_offer"
+    if not _offer_belongs_to_service(offer, service["id"]):
+        return None, "offer_not_for_service"
+    return {
+        "service_id": int(service["id"]),
+        "offer_id": parsed,
+        "log": not same_service,
+    }, None
+
+
+def _write_service_plan(db, deal, service, plan):
+    """Write a plan from _plan_service_change on `db`; the caller commits.
+
+    Stage, tags, and next action stay. Returns False when the deal is gone.
+    """
+    if plan.get("noop"):
+        return True
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    columns = ["service_id = ?", "updated_at = ?"]
+    params = [plan["service_id"], now]
+    if "offer_id" in plan and plan["offer_id"] is not UNSET:
+        columns.insert(1, "offer_id = ?")
+        params.insert(1, plan["offer_id"])
+    params.append(deal["id"])
+    cursor = db.execute(
+        f"UPDATE deals SET {', '.join(columns)} WHERE id = ?",
+        params,
+    )
+    if cursor.rowcount < 1:
+        return False
+    if plan.get("log"):
+        # Inline rather than log_activity so it shares the UPDATE's transaction.
+        old = get_service(deal.get("service_id")) if deal.get("service_id") else None
+        old_label = old["slug"] if old else "(none)"
+        db.execute(
+            """INSERT INTO activities (partner_id, deal_id, type, body)
+               VALUES (?, ?, 'system', ?)""",
+            (
+                deal.get("partner_id") or None,
+                deal["id"],
+                sanitize_text(service_changed_body(old_label, service["slug"]), max_len=4000),
+            ),
+        )
+    return True
+
+
+def set_deal_service(deal_id: int, service_id: int, *, offer_id=UNSET):
+    """Move a deal to another service. Returns (deal, None) or (None, error).
+
+    The service must exist and be active. See `_plan_service_change` for the
+    offer rule. Does not change stage, tags, next action, or next action date.
+    Logs `Service changed: {old slug} -> {new slug}` when the service id changes.
+    """
+    deal = get_deal(deal_id)
+    if not deal:
+        return None, "not_found"
+    _ids, error, _blocked = assign_deals_service([deal], service_id, offer_id=offer_id)
+    if error:
+        return None, error
+    return get_deal(deal_id), None
+
+
+def assign_deals_service(deals, service_id: int, *, offer_id=UNSET):
+    """Apply one service change to many deals in one transaction.
+
+    Returns (updated_ids, error, blocked_ids). Nothing is written on error.
+    `blocked_ids` is the deals whose current offer is tied to a different
+    service, when `offer_id` was left unset or repeated the current offer.
+    Other errors leave it None. Does not change stage, tags, or next action.
+    """
+    service = get_service(service_id)
+    if not service:
+        return None, "invalid_service", None
+    if not int(service.get("active") or 0):
+        return None, "inactive_service", None
+    plans = []
+    blocked = []
+    for deal in deals or []:
+        plan, error = _plan_service_change(deal, service, offer_id)
+        if error == "offer_service_mismatch":
+            blocked.append(deal["id"])
+            continue
+        if error:
+            return None, error, None
+        plans.append((deal, plan))
+    if blocked:
+        return None, "offer_service_mismatch", blocked
+    with get_db() as db:
+        db.execute("BEGIN IMMEDIATE")
+        for deal, plan in plans:
+            if not _write_service_plan(db, deal, service, plan):
+                db.rollback()
+                return None, "not_found", None
+        db.commit()
+    return [deal["id"] for deal, _plan in plans], None, None
+
+
+def service_change_message(error, *, service=None, offer_id=None, deal_ids=None) -> str:
+    """Operator-facing text for a set_deal_service / assign_deals_service error."""
+    slug = (service or {}).get("slug")
+    target = f"{slug!r}" if slug else "the new service"
+    if error == "invalid_service":
+        return "That service does not exist."
+    if error == "inactive_service":
+        if slug:
+            return f"Service {slug!r} is not active."
+        return "That service is not active."
+    if error == "invalid_offer":
+        if offer_id:
+            return f"No offer with id {offer_id}."
+        return "That offer does not exist."
+    if error == "offer_not_for_service":
+        if offer_id:
+            return (
+                f"Offer {offer_id} does not belong to service {target}. "
+                "Pass an offer for that service, or clear the offer."
+            )
+        return f"That offer does not belong to service {target}."
+    if error == "offer_service_mismatch":
+        if deal_ids:
+            listed = ", ".join(str(deal_id) for deal_id in deal_ids)
+            return (
+                f"Deals {listed} have an offer that belongs to a different service. "
+                f"Pass an offer for {target}, or clear the offer. Nothing was changed."
+            )
+        return (
+            "This deal's offer belongs to a different service. "
+            f"Pass an offer for {target}, or clear the offer."
+        )
+    if error == "not_found":
+        return "That deal was not found."
+    return error or "Could not change the service."
 
 
 def stage_changed_to_like(new_stage: str) -> str:

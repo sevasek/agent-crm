@@ -11,6 +11,13 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ## [Unreleased]
 
+### Added
+
+- Straight-line campaign metrics (`app/services/campaign_metrics.py`):
+  results, win/loss with disqualified deals excluded, pacing rates, and a
+  week/month/year breakdown. Each number includes the inputs behind it.
+  Part of #154. No schema, pages, or MCP tools yet.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added

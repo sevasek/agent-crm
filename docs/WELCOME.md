@@ -88,6 +88,8 @@ set up — you add them when you want something to happen on its own.
 A lost reason is the explanation you pick when you stop pursuing a deal —
 for example "Went with a competitor" or "Not now." One reason, "Not now,"
 can also notify your nurture tool automatically, if you've set one up.
+A reason marked as a disqualification (the wrong kind of business, too
+small, out of area) shows the deal as disqualified rather than lost.
 
 ## ICP
 

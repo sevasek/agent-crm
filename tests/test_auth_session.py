@@ -196,3 +196,44 @@ def test_fresh_databases_get_distinct_install_ids(tmp_path, monkeypatch):
     assert len(first) == 64
     assert len(second) == 64
     assert first != second
+
+
+@pytest.mark.parametrize("next_url", [
+    "//evil.example",
+    "https://evil.example/",
+    "javascript:alert(1)",
+    "/\\evil.example",
+    "\\\\evil.example",
+    "/%2F%2Fevil.example",
+    "/%2f/evil.example",
+    "/%5Cevil.example",
+    "/%252F%252Fevil.example",
+    "/%09/evil.example",
+    "/ok\r\nSet-Cookie: x=1",
+    "/ok path",
+    "evil.example",
+])
+def test_login_rejects_unsafe_return_to(client, next_url):
+    from app.services.auth import generate_csrf_token
+
+    create_user("next@example.com", "Next", "password123")
+    page = client.get("/auth/login", params={"next": next_url})
+    assert 'name="next"' not in page.text
+    resp = client.post("/auth/login", data={
+        "email": "next@example.com", "password": "password123",
+        "csrf_token": generate_csrf_token(), "next": next_url,
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/contacts/partners"
+
+
+def test_login_keeps_encoded_query_in_return_to(client):
+    from app.services.auth import generate_csrf_token
+
+    create_user("next2@example.com", "Next", "password123")
+    next_url = "/oauth/authorize?redirect_uri=https%3A%2F%2Fgrok.com%2Fcb&state=a%5Cb"
+    resp = client.post("/auth/login", data={
+        "email": "next2@example.com", "password": "password123",
+        "csrf_token": generate_csrf_token(), "next": next_url,
+    }, follow_redirects=False)
+    assert resp.headers["location"] == next_url

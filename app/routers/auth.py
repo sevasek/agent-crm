@@ -1,5 +1,6 @@
 import hashlib
 import os
+from urllib.parse import unquote, urlsplit
 
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -22,6 +23,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-prod")
 # browser still sends it. Untimed cookies from before this change fail loads.
 SESSION_MAX_AGE = 60 * 60 * 24 * 30
 SESSION_COOKIE_NAME = "session"
+DEFAULT_LANDING = "/contacts/partners"
 HOST_SESSION_COOKIE_NAME = "__Host-session"
 
 
@@ -130,10 +132,33 @@ def set_session_cookie(response: RedirectResponse, user_id: int, session_version
     )
 
 
+def safe_return_to(value: str | None) -> str | None:
+    """Return value if it is a same-origin relative path, else None.
+
+    Only the path is checked for encoded slashes/backslashes: the query of a
+    legitimate return-to (the OAuth authorize URL) carries an encoded
+    redirect_uri such as https%3A%2F%2F...
+    """
+    if not value or not value.startswith("/") or len(value) > 4096:
+        return None
+    if "\\" in value or any(ord(c) < 33 or ord(c) == 127 for c in value):
+        return None
+    parts = urlsplit(value)
+    if parts.scheme or parts.netloc:
+        return None
+    path = parts.path
+    for _ in range(3):  # %252F%252F -> %2F%2F -> //
+        path = unquote(path)
+    if path.startswith("//") or "\\" in path or any(ord(c) < 33 or ord(c) == 127 for c in path):
+        return None
+    return value
+
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request):
     return templates.TemplateResponse(request, "auth/login.html", {
-        "request": request, "csrf_token": generate_csrf_token()
+        "request": request, "csrf_token": generate_csrf_token(),
+        "next": safe_return_to(request.query_params.get("next")) or "",
     })
 
 
@@ -143,16 +168,18 @@ async def login_submit(
     email: str = Form(""),
     password: str = Form(""),
     csrf_token: str = Form(...),
+    next: str = Form(""),
 ):
+    next = safe_return_to(next) or ""
     if not validate_csrf_token(csrf_token):
         return templates.TemplateResponse(request, "auth/login.html", {
             "request": request, "error": "Invalid form submission. Please try again.",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(), "next": next,
         }, status_code=400)
 
     user = authenticate_user(email, password)
     if user:
-        response = RedirectResponse("/contacts/partners", status_code=303)
+        response = RedirectResponse(next or DEFAULT_LANDING, status_code=303)
         clear_session_cookie(response)
         set_session_cookie(response, user["id"], user["session_version"])
         return response
@@ -163,12 +190,12 @@ async def login_submit(
     if not check_rate_limit(get_rate_limit_key(ip, email), action="login"):
         return templates.TemplateResponse(request, "auth/login.html", {
             "request": request, "error": "Too many attempts. Please wait a minute and try again.",
-            "csrf_token": generate_csrf_token(),
+            "csrf_token": generate_csrf_token(), "next": next,
         }, status_code=429)
 
     return templates.TemplateResponse(request, "auth/login.html", {
         "request": request, "error": "Invalid email or password",
-        "csrf_token": generate_csrf_token(),
+        "csrf_token": generate_csrf_token(), "next": next,
     }, status_code=400)
 
 

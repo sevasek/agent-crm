@@ -42,9 +42,12 @@ for example Grok custom connectors) use:
 
 1. Set `CRM_MCP_API_KEY` in `.env` and deploy.
 2. Add a custom connector pointing at `https://your.domain/mcp`.
-3. Complete `/oauth/authorize`. The page shows the redirect URL the code will
-   be sent to. Check it is the client you intended, then paste the MCP key or
-   confirm if you are already logged in.
+3. Complete `/oauth/authorize`. If you are not logged in, it sends you to the
+   CRM login and back to the same authorize URL afterwards. The page shows the
+   redirect URL the code will be sent to. Check it is the client you intended,
+   then click **Allow access**. (For setup without a CRM user, the endpoint
+   also accepts `CRM_MCP_API_KEY` as an `api_key` form field on the POST; the
+   page does not offer it.)
 
 Clients that accept a static header (xAI Remote MCP tools, Cursor) can skip
 OAuth and pass the key directly.

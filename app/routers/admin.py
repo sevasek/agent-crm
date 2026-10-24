@@ -766,17 +766,30 @@ def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
 
 
+def _lost_reason_choices(record):
+    """Active reasons, plus the record's current reason if it is inactive."""
+    reasons = list_lost_reasons(active_only=True)
+    current = (record or {}).get("lost_reason")
+    if isinstance(current, dict) and not any(r["id"] == current["id"] for r in reasons):
+        reasons = reasons + [current]
+    return reasons
+
+
 def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
                     form_parent_deal_id=None, error=None, status_code=200):
-    if deal and deal.get("lost_reason_id") and "lost_reason" not in deal:
+    if deal and deal.get("lost_reason_id") and not isinstance(deal.get("lost_reason"), dict):
         deal = dict(deal)
         deal["lost_reason"] = get_lost_reason(deal["lost_reason_id"])
+    if deal:
+        from app.services.deal_outcome import attach_outcomes
+        deal = dict(deal)
+        attach_outcomes([deal])
     ctx = {
         "request": request, "user": user, "deal": deal,
         "partner": partner, "service": service,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
-        "error": error, "lost_reasons": list_lost_reasons(active_only=True),
+        "error": error, "lost_reasons": _lost_reason_choices(deal),
     }
     ctx.update(_deal_parent_context(deal))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
@@ -1734,7 +1747,7 @@ def _lead_form_page(request, user, lead=None, form=None, form_tags=None, error=N
         "services": list_services(active_only=True),
         "stages": pipeline_stages.list_stages(),
         "partners": list_partners(),
-        "lost_reasons": list_lost_reasons(active_only=True),
+        "lost_reasons": _lost_reason_choices(lead),
         "lead_service_slug": _lead_service_slug(lead),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
     }, status_code=status_code)
@@ -1979,6 +1992,7 @@ async def lost_reasons_list(request: Request, user=Depends(require_login)):
 async def new_lost_reason_submit(
     request: Request,
     name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
+    is_disqualification: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
@@ -1986,7 +2000,10 @@ async def new_lost_reason_submit(
     if not (name or "").strip():
         return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
     _created, error = create_lost_reason(
-        name, triggers_nurture=bool(triggers_nurture), active=bool(active),
+        name,
+        triggers_nurture=bool(triggers_nurture),
+        active=bool(active),
+        is_disqualification=bool(is_disqualification),
     )
     if error:
         return _lost_reasons_page(
@@ -1999,6 +2016,7 @@ async def new_lost_reason_submit(
 async def edit_lost_reason_submit(
     request: Request, reason_id: int,
     name: str = Form(""), triggers_nurture: str = Form(""), active: str = Form(""),
+    is_disqualification: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
@@ -2006,7 +2024,11 @@ async def edit_lost_reason_submit(
     if not (name or "").strip():
         return _lost_reasons_page(request, user, error="Name is required.", status_code=400)
     _updated, error = update_lost_reason(
-        reason_id, name=name, triggers_nurture=bool(triggers_nurture), active=bool(active),
+        reason_id,
+        name=name,
+        triggers_nurture=bool(triggers_nurture),
+        active=bool(active),
+        is_disqualification=bool(is_disqualification),
     )
     if error:
         return _lost_reasons_page(

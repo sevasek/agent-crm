@@ -122,12 +122,19 @@ def annotate_deal(deal, today=None, won_stage_keys=None, closed_stage_keys=None)
     annotated["action_date"] = action_date
     annotated["due_status"] = status
     annotated["days_overdue"] = days_overdue
+    if "outcome" not in annotated:
+        from app.services.deal_outcome import deal_outcome
+        outcome = deal_outcome(annotated, won_stage_keys=won_stage_keys)
+        annotated["outcome"] = outcome
+        annotated["is_disqualified"] = outcome == "disqualified"
     return annotated
 
 
 def annotate_deals(deals, today=None):
     today = today or operator_today()
     won = pipeline_stages.won_stage_keys()
+    from app.services.deal_outcome import attach_outcomes
+    attach_outcomes(deals, won_stage_keys=won)
     return [annotate_deal(d, today=today, won_stage_keys=won) for d in deals]
 
 

@@ -16,7 +16,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # _apply_additive_columns will NOT update it. For deployed DBs add
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place.
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 class SchemaVersionError(RuntimeError):
@@ -587,6 +587,10 @@ LOST_REASON_SEEDS = (
     ("Lost stage (migrated)", 0),
 )
 
+# Exact name. A live database may already have this row (sevasek's is id 8).
+# migrate_012 inserts it only when missing, then sets the flag.
+DISQUALIFIED_LOST_REASON = "Disqualified"
+
 _FK_CHECK_TABLES = ("deals", "activities", "delegated_tasks", "deal_tags")
 
 _DEALS_COPY_COLUMNS = (
@@ -924,6 +928,34 @@ def migrate_011(db) -> None:
     )
 
 
+def migrate_012(db) -> None:
+    """Flag disqualifying lost reasons and seed Disqualified.
+
+    Idempotent. A database that already has a lost reason named exactly
+    "Disqualified" keeps that row (INSERT OR IGNORE by name); the flag is
+    then set. Other reasons stay at 0. Deals are not rewritten.
+    """
+    _add_column_if_missing(
+        db,
+        "lost_reasons",
+        "is_disqualification",
+        "is_disqualification INTEGER NOT NULL DEFAULT 0",
+    )
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    db.execute(
+        """INSERT OR IGNORE INTO lost_reasons
+               (name, triggers_nurture, active, is_disqualification, created_at, updated_at)
+           VALUES (?, 0, 1, 1, ?, ?)""",
+        (DISQUALIFIED_LOST_REASON, now, now),
+    )
+    db.execute(
+        """UPDATE lost_reasons
+           SET is_disqualification = 1, updated_at = ?
+           WHERE name = ? AND is_disqualification = 0""",
+        (now, DISQUALIFIED_LOST_REASON),
+    )
+
+
 # version number -> migration applied when moving *to* that version
 MIGRATIONS = {
     1: migrate_001,
@@ -937,6 +969,7 @@ MIGRATIONS = {
     9: migrate_009,
     10: migrate_010,
     11: migrate_011,
+    12: migrate_012,
 }
 
 

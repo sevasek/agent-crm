@@ -11,6 +11,18 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ## [Unreleased]
 
+### Added
+
+- Lost reasons have an `is_disqualification` flag, editable on Lost reasons
+  and via `create_lost_reason` / `update_lost_reason`. A deal lost with that
+  reason is reported as disqualified on the deal page, deal lists, and MCP
+  payloads (`outcome` of `open` / `won` / `lost` / `disqualified`, plus
+  `is_disqualified`). The value comes from `deal_outcome` in
+  `app/services/deal_outcome.py` and is not stored. A Disqualified reason
+  is seeded idempotently (insert-or-ignore by name, then set the flag).
+  `mark_lost` can change the reason on an already-lost deal and keeps
+  `closed_at`. Part of #154.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added

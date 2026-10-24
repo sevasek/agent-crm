@@ -50,7 +50,9 @@ def resolve_lost_reason(lost_reason_id=None, lost_reason=None):
     return None
 
 
-def create_lost_reason(name: str, *, triggers_nurture=False, active=True):
+def create_lost_reason(
+    name: str, *, triggers_nurture=False, active=True, is_disqualification=False,
+):
     cleaned = sanitize_text(name or "", max_len=80)
     if not cleaned:
         return None, "name_required"
@@ -59,9 +61,17 @@ def create_lost_reason(name: str, *, triggers_nurture=False, active=True):
         with get_db() as db:
             db.execute(
                 """INSERT INTO lost_reasons
-                       (name, triggers_nurture, active, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (cleaned, int(bool(triggers_nurture)), int(bool(active)), now, now),
+                       (name, triggers_nurture, active, is_disqualification,
+                        created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    cleaned,
+                    int(bool(triggers_nurture)),
+                    int(bool(active)),
+                    int(bool(is_disqualification)),
+                    now,
+                    now,
+                ),
             )
             db.commit()
             reason_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -74,7 +84,7 @@ def update_lost_reason(reason_id: int, **fields):
     current = get_lost_reason(reason_id)
     if not current:
         return None, "not_found"
-    allowed = {"name", "triggers_nurture", "active"}
+    allowed = {"name", "triggers_nurture", "active", "is_disqualification"}
     updates = {k: v for k, v in fields.items() if k in allowed and v is not None}
     if "name" in updates:
         name = sanitize_text(updates["name"] or "", max_len=80)
@@ -85,6 +95,8 @@ def update_lost_reason(reason_id: int, **fields):
         updates["triggers_nurture"] = int(bool(updates["triggers_nurture"]))
     if "active" in updates:
         updates["active"] = int(bool(updates["active"]))
+    if "is_disqualification" in updates:
+        updates["is_disqualification"] = int(bool(updates["is_disqualification"]))
     if not updates:
         return current, None
     updates["updated_at"] = _now()

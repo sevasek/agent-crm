@@ -120,7 +120,7 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
     assert conn.execute("SELECT COUNT(*) FROM stage_automations").fetchone()[0] == 0
     deal_cols = {row["name"] for row in conn.execute("PRAGMA table_info(deals)")}
     assert {"type", "active", "lost_reason_id", "company_name"} <= deal_cols
-    assert conn.execute("SELECT COUNT(*) FROM lost_reasons").fetchone()[0] == 7
+    assert conn.execute("SELECT COUNT(*) FROM lost_reasons").fetchone()[0] == 8
     user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
     assert "session_version" in user_cols
     conn.close()

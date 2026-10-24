@@ -5,6 +5,7 @@ import sqlite3
 import pytest
 
 from app.database import (
+    DISQUALIFIED_LOST_REASON,
     LOST_REASON_SEEDS,
     SCHEMA_VERSION,
     get_db,
@@ -93,7 +94,7 @@ def test_schema_7_fixture_preserves_ids_and_backfills_lost(tmp_path, monkeypatch
         assert null_closed["closed_at"] == sample["null_closed_updated_at"]
 
         names = {row[0] for row in conn.execute("SELECT name FROM lost_reasons")}
-        assert names == {name for name, _nurture in LOST_REASON_SEEDS}
+        assert names == {name for name, _nurture in LOST_REASON_SEEDS} | {DISQUALIFIED_LOST_REASON}
 
         for table in ("deals", "activities", "delegated_tasks", "deal_tags"):
             assert conn.execute(f"PRAGMA foreign_key_check({table})").fetchall() == []

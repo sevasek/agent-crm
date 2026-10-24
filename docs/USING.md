@@ -11,7 +11,7 @@ A **lead** is someone you might contact who is not confirmed yet. A name and a p
 
 A **deal** is a lead you have decided to pursue. It belongs to one partner and one service, and it moves through the pipeline. In the database this is called an opportunity. On screen it is a deal.
 
-**Lost** means you stopped. You pick a reason from Lost reasons. The deal leaves the open board. You can bring it back if that was a mistake.
+**Lost** means you stopped. You pick a reason from Lost reasons. The deal leaves the open board. You can bring it back if that was a mistake. A reason can be a disqualification (the wrong kind of business, too small, out of area). That deal shows as disqualified instead of lost. You can change the reason later; the date it closed stays.
 
 ## The screens
 
@@ -24,7 +24,7 @@ A **deal** is a lead you have decided to pursue. It belongs to one partner and o
 - **Stages** — the columns on the board, and what each one does.
 - **Offers** — the price and the short pitch you use on a call.
 - **Automations** — optional. When a deal enters a stage, the CRM can create a task or a follow-on deal. A new install has none of these.
-- **Lost reasons** — the list you pick from when a deal is lost. "Not now" can also notify your nurture tool, if you have set one up.
+- **Lost reasons** — the list you pick from when a deal is lost. "Not now" can also notify your nurture tool, if you have set one up. Tick Disqualification when that reason should show as disqualified rather than lost. A new install includes a Disqualified reason with that tick on.
 - **ICP** — fit rules. Each matching rule adds the points you gave it. There is no pass mark. You, or your agent, decide.
 - **Settings** — your password and the keys an agent or an import uses.
 

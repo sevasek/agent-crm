@@ -106,6 +106,7 @@
         </ul>
     </div>
     {% endif %}
+    {% include "admin/_campaign_links.html" %}
     <div class="form-row">
         <label for="tags">Tags</label>
         <input type="text" id="tags" name="tags"
@@ -129,7 +130,7 @@
         <select id="lost_reason" name="lost_reason" required>
             <option value="">— select —</option>
             {% for r in lost_reasons %}
-            <option value="{{ r.name }}">{{ r.name }}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
+            <option value="{{ r.name }}">{{ r.name }}{% if r.is_disqualification %} (disqualification){% endif %}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
             {% endfor %}
         </select>
     </div>
@@ -140,8 +141,27 @@
     <button type="submit">Mark lost</button>
 </form>
 {% elif deal and not deal.active %}
-<p>This opportunity is lost{% if deal.lost_reason %} ({{ deal.lost_reason.name }}){% endif %}.</p>
+<p>This opportunity is {{ "disqualified" if deal.outcome == "disqualified" else "lost" }}{% if deal.lost_reason %} ({{ deal.lost_reason.name }}){% endif %}.</p>
 {% if not deal.merged_into_id %}
+<h2>Change lost reason</h2>
+<form method="post" action="/crm/deals/{{ deal.id }}/lost">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="lost_reason">Lost reason</label>
+        <select id="lost_reason" name="lost_reason" required>
+            <option value="">— select —</option>
+            {% for r in lost_reasons %}
+            <option value="{{ r.name }}" {% if deal.lost_reason and deal.lost_reason.name == r.name %}selected{% endif %}>{{ r.name }}{% if r.is_disqualification %} (disqualification){% endif %}{% if r.triggers_nurture %} (starts nurture){% endif %}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="form-row">
+        <label for="lost_note">Note</label>
+        <textarea id="lost_note" name="note"></textarea>
+    </div>
+    <p class="muted">Changing the reason keeps the date this opportunity closed.</p>
+    <button type="submit">Update lost reason</button>
+</form>
 <form method="post" action="/crm/deals/{{ deal.id }}/restore">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit">Restore</button>

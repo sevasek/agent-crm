@@ -189,10 +189,13 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
     # LEFT JOIN so a lead with a null partner/service is not dropped (§5.8).
     query = """
         SELECT deals.*, partners.name AS partner_name, services.name AS service_name,
-               services.slug AS service_slug
+               services.slug AS service_slug,
+               lost_reasons.name AS lost_reason_name,
+               lost_reasons.is_disqualification AS is_disqualification
         FROM deals
         LEFT JOIN partners ON partners.id = deals.partner_id
         LEFT JOIN services ON services.id = deals.service_id
+        LEFT JOIN lost_reasons ON lost_reasons.id = deals.lost_reason_id
         WHERE 1=1
     """
     params = []
@@ -242,7 +245,9 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
     with get_db() as db:
         rows = db.execute(query, params).fetchall()
         deals = [dict(r) for r in rows]
-    return attach_tags(deals)
+    deals = attach_tags(deals)
+    from app.services.deal_outcome import attach_outcomes
+    return attach_outcomes(deals)
 
 
 def validate_parent_link(deal_id, parent_deal_id, partner_id):
@@ -357,16 +362,37 @@ def update_deal_fields(deal_id: int, **fields):
         return cursor.rowcount > 0
 
 
+def _lost_reason_was_supplied(lost_reason_id, lost_reason) -> bool:
+    if lost_reason_id not in (None, "", 0, "0"):
+        return True
+    return bool(lost_reason)
+
+
 def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
-    """Archive a lead or opportunity. Returns (deal, None) or (None, error)."""
+    """Archive a lead or opportunity. Returns (deal, None) or (None, error).
+
+    A second call with a different reason updates `lost_reason_id` and leaves
+    `closed_at` as it was. The same reason returns `already_lost`. An empty
+    note on that change keeps the existing note. Nurture runs only on the
+    first archive, not when the reason alone changes.
+    """
     from app.services.lost_reasons import resolve_lost_reason
 
     deal = get_deal(deal_id)
     if not deal:
         return None, "not_found"
-    if not deal.get("active", 1):
-        return None, "already_lost"
-    reason = resolve_lost_reason(lost_reason_id, lost_reason)
+    supplied = _lost_reason_was_supplied(lost_reason_id, lost_reason)
+    reason = resolve_lost_reason(lost_reason_id, lost_reason) if supplied else None
+    already = not deal.get("active", 1)
+    if already:
+        # A merged source keeps its Duplicate reason.
+        if not supplied or deal.get("merged_into_id"):
+            return None, "already_lost"
+        if not reason:
+            return None, "invalid_lost_reason"
+        if deal.get("lost_reason_id") == reason["id"]:
+            return None, "already_lost"
+        return _change_lost_reason(deal, reason, note)
     if not reason:
         return None, "invalid_lost_reason"
     now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
@@ -380,10 +406,11 @@ def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
             (reason["id"], note_text, now, now, deal_id),
         )
         db.commit()
+    verb = "disqualified" if reason.get("is_disqualification") else "lost"
     log_activity(
         deal.get("partner_id"),
         "system",
-        f"Marked lost: {reason['name']}" + (f" — {note_text}" if note_text else ""),
+        f"Marked {verb}: {reason['name']}" + (f" — {note_text}" if note_text else ""),
         deal_id=deal_id,
     )
     nurture_result = None
@@ -413,6 +440,34 @@ def mark_lost(deal_id: int, *, lost_reason_id=None, lost_reason=None, note=""):
     if nurture_result:
         updated["nurture"] = nurture_result
     return updated, None
+
+
+def _change_lost_reason(deal, reason, note):
+    """Replace the reason on an already-lost deal. `closed_at` stays put."""
+    from app.services.lost_reasons import get_lost_reason
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    note_text = sanitize_text(note or "", max_len=2000, allow_newlines=True) or None
+    if note_text:
+        sql = """UPDATE deals
+                 SET lost_reason_id = ?, lost_note = ?, updated_at = ?
+                 WHERE id = ?"""
+        params = (reason["id"], note_text, now, deal["id"])
+    else:
+        sql = """UPDATE deals
+                 SET lost_reason_id = ?, updated_at = ?
+                 WHERE id = ?"""
+        params = (reason["id"], now, deal["id"])
+    with get_db() as db:
+        db.execute(sql, params)
+        db.commit()
+    previous = get_lost_reason(deal["lost_reason_id"]) if deal.get("lost_reason_id") else None
+    previous_name = previous["name"] if previous else "none"
+    body = f"Lost reason changed from {previous_name} to {reason['name']}"
+    if note_text:
+        body += f" — {note_text}"
+    log_activity(deal.get("partner_id"), "system", body, deal_id=deal["id"])
+    return get_deal(deal["id"]), None
 
 
 def restore_deal(deal_id: int):
@@ -542,7 +597,7 @@ def set_deal_stage(deal_id: int, new_stage: str, position=None) -> bool:
 
     log_activity(deal["partner_id"], "system", stage_changed_body(old_stage, new_stage), deal_id=deal_id)
 
-    if stage_meta["is_lost"]:
+    if stage_meta["is_lost"] and deal.get("active", 1):
         marked, lost_error = mark_lost(deal_id, lost_reason="Lost stage (migrated)")
         if lost_error and lost_error not in ("already_lost",):
             logger.warning("is_lost shim failed for deal %s: %s", deal_id, lost_error)
@@ -621,9 +676,10 @@ def record_call_outcome(deal_id: int, outcome: str, note: str = "") -> bool:
     log_activity(deal["partner_id"], "call", body, deal_id=deal_id)
 
     if outcome == "not_interested":
-        marked, lost_error = mark_lost(deal_id, lost_reason="Not a fit", note=note)
-        if lost_error and lost_error not in ("already_lost",):
-            logger.warning("not_interested mark_lost failed for deal %s: %s", deal_id, lost_error)
+        if deal.get("active", 1):
+            marked, lost_error = mark_lost(deal_id, lost_reason="Not a fit", note=note)
+            if lost_error and lost_error not in ("already_lost",):
+                logger.warning("not_interested mark_lost failed for deal %s: %s", deal_id, lost_error)
         return True
 
     if target_stage and target_stage != deal["stage"]:

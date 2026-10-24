@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Campaigns — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
+{% block content %}
+<h1>Campaigns</h1>
+<p class="muted">A campaign is the shared pitch for a set of deals. Deals join it with the tag <span class="pill pill-tag">campaign:&lt;slug&gt;</span>.</p>
+<p><a class="btn" href="/crm/campaigns/new">New campaign</a></p>
+{% if not rows %}
+<p class="muted">No campaigns yet.</p>
+{% else %}
+<div class="table-scroll">
+<table>
+    <tr>
+        <th>Name</th>
+        <th>Status</th>
+        <th>Deadline</th>
+        <th>% complete</th>
+        <th>Pace</th>
+        <th>Win/loss</th>
+    </tr>
+    {% for row in rows %}
+    <tr>
+        <td><a href="/crm/campaigns/{{ row.campaign.id }}">{{ row.campaign.name }}</a></td>
+        <td><span class="pill">{{ row.campaign.status }}</span></td>
+        <td>{{ row.campaign.deadline or "—" }}</td>
+        <td><span{% if row.summary.pct_title %} title="{{ row.summary.pct_title }}"{% endif %}>{{ row.summary.pct_complete|points }}</span></td>
+        <td>
+            {% if row.summary.pace %}
+            <span class="pill pill-pace pill-pace-{{ row.summary.pace|replace('_', '-') }}"{% if row.summary.pace_title %} title="{{ row.summary.pace_title }}"{% endif %}>{{ pace_labels.get(row.summary.pace, row.summary.pace) }}</span>
+            {% else %}
+            <span class="muted"{% if row.summary.pace_title %} title="{{ row.summary.pace_title }}"{% endif %}>—</span>
+            {% endif %}
+        </td>
+        <td><span{% if row.summary.win_loss_title %} title="{{ row.summary.win_loss_title }}"{% endif %}>{{ row.summary.win_loss_label }}</span></td>
+    </tr>
+    {% endfor %}
+</table>
+</div>
+{% endif %}
+{% endblock %}

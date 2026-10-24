@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+{% block title %}{{ campaign.name }} — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
+{% block content %}
+{% macro cell(node) %}
+<span{% if node|hover %} title="{{ node|hover }}"{% endif %}>{{ node|metric }}</span>
+{% endmacro %}
+{% macro pct_cell(node) %}
+<span{% if node|hover %} title="{{ node|hover }}"{% endif %}>{{ node|points }}</span>
+{% endmacro %}
+
+<h1>{{ campaign.name }} <span class="pill">{{ campaign.status }}</span></h1>
+<p>
+    <a class="btn" href="/actions/calls?campaign={{ campaign.slug }}&include_new=1">Start calls</a>
+    <a class="btn btn-secondary" href="/crm/campaigns/{{ campaign.id }}/edit">Edit</a>
+    <a class="btn btn-secondary" href="/crm/campaigns">All campaigns</a>
+</p>
+<p class="muted">Tag <span class="pill pill-tag">{{ campaign.tag }}</span>
+    {% if campaign.channel %} · {{ campaign.channel }}{% endif %}
+    {% if campaign.start_date %} · starts {{ campaign.start_date }}{% endif %}
+    {% if campaign.deadline %} · deadline {{ campaign.deadline }}{% endif %}
+</p>
+
+<h2>Shared pitch</h2>
+<p class="muted">These fields are the same for every lead. Notes about one lead stay on that lead.</p>
+{% if campaign.audience %}<p><strong>Audience.</strong> {{ campaign.audience }}</p>{% endif %}
+<p>
+    {% if campaign.service_id %}<a href="/definitions/services">{{ campaign.service_name }}</a>{% endif %}
+    {% if campaign.service_id and campaign.offer_id %} · {% endif %}
+    {% if campaign.offer_id %}{{ campaign.offer_name }}{% endif %}
+    {% if not campaign.service_id and not campaign.offer_id %}<span class="muted">No service or offer.</span>{% endif %}
+</p>
+{% if campaign.angle %}
+<p><strong>Angle.</strong></p>
+<div class="campaign-script">{{ campaign.angle }}</div>
+{% endif %}
+{% if campaign.opener %}
+<p><strong>Opener / script.</strong></p>
+<div class="campaign-script">{{ campaign.opener }}</div>
+{% endif %}
+
+{% set results = metrics.results if metrics.results is mapping else {} %}
+{% set win = metrics.win_loss if metrics.win_loss is mapping else {} %}
+{% set window = metrics.window if metrics.window is mapping else {} %}
+{% set targets = metrics.targets if metrics.targets is mapping else {} %}
+
+<h2>Results</h2>
+{% if results.by_stage is mapping and results.by_stage.value %}
+<p>
+    {% for key, count in results.by_stage.value.items() %}
+    <span class="pill" title="{{ results.by_stage|hover }}">{{ stage_labels.get(key, key) }} {{ count }}</span>
+    {% endfor %}
+</p>
+{% endif %}
+<div class="table-scroll">
+<table>
+    <tr><th></th><th>Count</th></tr>
+    <tr><td>Deals</td><td>{{ cell(results.get('deals')) }}</td></tr>
+    <tr><td>Leads</td><td>{{ cell(results.get('leads')) }}</td></tr>
+    <tr><td>Contacted</td><td>{{ cell(results.get('contacted')) }}</td></tr>
+    <tr><td>Not yet touched</td><td>{{ cell(results.get('not_touched')) }}</td></tr>
+    <tr><td>Contacts</td><td>{{ cell(results.get('contacts')) }}</td></tr>
+    <tr><td>Conversations</td><td>{{ cell(results.get('conversations')) }}</td></tr>
+    <tr><td>Advanced</td><td>{{ cell(results.get('advanced')) }}</td></tr>
+    <tr><td>Open</td><td>{{ cell(results.get('open')) }}</td></tr>
+    <tr><td>Won</td><td>{{ cell(results.get('won')) }}</td></tr>
+    <tr><td>Lost</td><td>{{ cell(results.get('lost')) }}</td></tr>
+    <tr><td>Disqualified</td><td>{{ cell(results.get('disqualified')) }}</td></tr>
+    <tr><td>Won value</td><td>{{ cell(results.get('won_value')) }}</td></tr>
+    <tr><td>Lost value</td><td>{{ cell(results.get('lost_value')) }}</td></tr>
+    <tr><td>Disqualified value</td><td>{{ cell(results.get('disqualified_value')) }}</td></tr>
+</table>
+</div>
+<p class="muted">Leads leave out disqualified deals. Contacts, conversations, and advanced count events.</p>
+
+<h2>Win/loss</h2>
+<p>
+    {% set ratio = win.get('ratio') %}
+    {% if ratio is mapping and ratio.value %}
+    <span title="{{ ratio|hover }}">{{ ratio.value }}</span>
+    {% else %}
+    <span{% if ratio|hover %} title="{{ ratio|hover }}"{% endif %}>{{ ratio.note if ratio is mapping and ratio.note else "no closed deals" }}</span>
+    {% endif %}
+    {% set rate = win.get('win_rate') %}
+    {% if rate is mapping and rate.value is not none %}
+    · <span title="{{ rate|hover }}">{{ rate|points }} win rate</span>
+    {% endif %}
+</p>
+<p class="muted">
+    Open {{ cell(win.get('open')) }}.
+    Disqualified {{ cell(win.get('disqualified')) }}
+    ({% set dq = win.get('disqualification_rate') %}{% if dq is mapping and dq.value is not none %}{{ pct_cell(dq) }} of deals{% else %}—{% endif %}).
+    Won value {{ cell(win.get('won_value')) }},
+    lost value {{ cell(win.get('lost_value')) }}.
+</p>
+{% if win.lost_by_reason is mapping and win.lost_by_reason.value %}
+<table>
+    <tr><th>Lost reason</th><th>Deals</th></tr>
+    {% for reason in win.lost_by_reason.value %}
+    <tr>
+        <td>{{ reason.reason or "—" }}</td>
+        <td><span title="{{ win.lost_by_reason|hover }}">{{ reason.count }}</span></td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
+<h2>Pacing</h2>
+{% if window.state == 'no_deadline' or window.state == 'no_start' %}
+<p class="muted">No full window, so required rates and the projection stay blank. Actuals are still shown.</p>
+{% elif window.deadline_passed %}
+<p class="muted">The deadline has passed. This is the result against the target, with no required rate and no projection.</p>
+{% elif window.state == 'zero_length' %}
+<p class="muted">The deadline is before the start, so rates and the projection stay blank.</p>
+{% elif window.not_started %}
+<p class="muted">The campaign has not started. Required rates use the whole window. There is no actual rate yet.</p>
+{% endif %}
+<p>
+    Today {{ window.today or "—" }}
+    {% if window.timezone %} ({{ window.timezone }}){% endif %}.
+    Elapsed {{ cell(window.get('days_elapsed')) }} days,
+    remaining {{ cell(window.get('days_remaining')) }} days,
+    window {{ cell(window.get('days_total')) }} days
+    ({{ pct_cell(window.get('percent_elapsed')) }} of the window).
+</p>
+{% if targets %}
+<div class="table-scroll">
+<table>
+    <tr>
+        <th>Target</th>
+        <th>Actual</th>
+        <th>Remaining</th>
+        <th>% complete</th>
+        <th>Required / week</th>
+        <th>Required / month</th>
+        <th>Required / year</th>
+        <th>Actual / week</th>
+        <th>Actual / month</th>
+        <th>Actual / year</th>
+        <th>Pace</th>
+        <th>Projected</th>
+    </tr>
+    {% for key, label in target_labels %}
+    {% if key in targets %}
+    {% set row = targets[key] %}
+    {% set required = row.required_rate if row.required_rate is mapping else {} %}
+    {% set actual_rate = row.actual_rate if row.actual_rate is mapping else {} %}
+    <tr>
+        <td>{{ label }} <span class="muted">({{ cell(row.target) }})</span></td>
+        <td>{{ cell(row.actual) }}</td>
+        <td>{{ cell(row.remaining) }}</td>
+        <td>{{ pct_cell(row.percent_complete) }}</td>
+        <td>{{ cell(required.get('week')) }}</td>
+        <td>{{ cell(required.get('month')) }}</td>
+        <td>{{ cell(required.get('year')) }}</td>
+        <td>{{ cell(actual_rate.get('week')) }}</td>
+        <td>{{ cell(actual_rate.get('month')) }}</td>
+        <td>{{ cell(actual_rate.get('year')) }}</td>
+        <td>
+            {% if row.status %}
+            <span class="pill pill-pace pill-pace-{{ row.status|replace('_', '-') }}"{% if row.status_inputs %} title="percent complete = {{ row.status_inputs.percent_complete }}, time elapsed = {{ row.status_inputs.percent_elapsed }}"{% endif %}>{{ pace_labels.get(row.status, row.status) }}</span>
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+        </td>
+        <td>{{ cell(row.projection) }}</td>
+    </tr>
+    {% endif %}
+    {% endfor %}
+</table>
+</div>
+{% else %}
+<p class="muted">No targets set. Results and win/loss are above.</p>
+{% endif %}
+
+<h2>Period breakdown</h2>
+<p>
+    <a class="btn{% if period != 'week' %} btn-secondary{% endif %}" href="/crm/campaigns/{{ campaign.id }}?period=week">Week</a>
+    <a class="btn{% if period != 'month' %} btn-secondary{% endif %}" href="/crm/campaigns/{{ campaign.id }}?period=month">Month</a>
+    <a class="btn{% if period != 'year' %} btn-secondary{% endif %}" href="/crm/campaigns/{{ campaign.id }}?period=year">Year</a>
+</p>
+<p class="muted">Weeks start on Monday. Dates use {{ window.timezone or "UTC" }}.</p>
+{% set periods = metrics.periods if metrics.periods is mapping else none %}
+{% if periods and periods.rows %}
+<div class="table-scroll">
+<table>
+    <tr>
+        <th>Period</th>
+        {% for key, label in target_labels %}
+        {% if key in targets %}
+        <th>{{ label }} actual</th>
+        <th>{{ label }} required</th>
+        <th>{{ label }} cumulative</th>
+        <th>{{ label }} cumulative target</th>
+        {% endif %}
+        {% endfor %}
+        <th>Won</th>
+        <th>Lost</th>
+        <th>Disqualified</th>
+        <th>Win rate</th>
+    </tr>
+    {% for row in periods.rows %}
+    {% set actuals = row.actuals if row.actuals is mapping else {} %}
+    {% set required = row.required if row.required is mapping else {} %}
+    {% set cumulative = row.cumulative_actual if row.cumulative_actual is mapping else {} %}
+    {% set cumulative_target = row.cumulative_target if row.cumulative_target is mapping else {} %}
+    <tr>
+        <td>{{ row.key }}{% if row.start %} <span class="muted">{{ row.start }} – {{ row.end }}</span>{% endif %}</td>
+        {% for key, label in target_labels %}
+        {% if key in targets %}
+        <td>{{ cell(actuals.get(key)) }}</td>
+        <td>{{ cell(required.get(key)) }}</td>
+        <td>{{ cell(cumulative.get(key)) }}</td>
+        <td>{{ cell(cumulative_target.get(key)) }}</td>
+        {% endif %}
+        {% endfor %}
+        <td>{{ cell(row.won) }}</td>
+        <td>{{ cell(row.lost) }}</td>
+        <td>{{ cell(row.disqualified) }}</td>
+        <td>
+            {% if row.win_rate is mapping and row.win_rate.value is not none %}
+            {{ pct_cell(row.win_rate) }}
+            {% else %}
+            <span{% if row.win_rate|hover %} title="{{ row.win_rate|hover }}"{% endif %}>{{ row.win_rate.note if row.win_rate is mapping and row.win_rate.note else "no closed deals" }}</span>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+</div>
+{% set undated = periods.undated if periods.undated is mapping else {} %}
+{% if undated.values()|sum %}
+<p class="muted">Undated, not inside a period:
+    {% for key, count in undated.items() if count %}{{ key }} {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}.
+    Overall actual is the last cumulative actual plus these.
+</p>
+{% endif %}
+{% else %}
+<p class="muted">No periods to show.</p>
+{% endif %}
+
+<h2>Deals</h2>
+{% if not deals %}
+<p class="muted">No deals carry {{ campaign.tag }} yet. Add that tag on a lead or a deal.</p>
+{% else %}
+<div class="table-scroll">
+<table>
+    <tr><th>Name</th><th>Type</th><th>Stage</th><th>Outcome</th><th>Value</th><th></th></tr>
+    {% for deal in deals %}
+    <tr>
+        <td>
+            {% if deal.type == 'lead' %}
+            <a href="/crm/leads/{{ deal.id }}">{{ deal.display_name }}</a>
+            {% else %}
+            <a href="/crm/deals/{{ deal.id }}/edit">{{ deal.display_name }}</a>
+            {% endif %}
+        </td>
+        <td>{% set record = deal %}{% include "admin/_record_badges.html" %}</td>
+        <td><span class="pill">{{ deal.stage }}</span></td>
+        <td>{{ deal.outcome }}</td>
+        <td>{% if deal.value_estimate %}${{ "%.0f"|format(deal.value_estimate) }}{% endif %}</td>
+        <td>
+            {% if deal.type == 'opportunity' and deal.active and deal.partner_id and deal.service_id %}
+            <a href="/actions/deals/{{ deal.id }}/call">Call</a>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+</div>
+{% endif %}
+{% endblock %}

@@ -452,7 +452,9 @@ def get_lead(lead_id: int, *, include_extras=True):
         return None
     lead["tags"] = tags_for_deal(lead_id)
     if not include_extras:
-        return lead
+        if lead.get("lost_reason_id") and not isinstance(lead.get("lost_reason"), dict):
+            lead["lost_reason"] = get_lost_reason(lead["lost_reason_id"])
+        return _with_outcome(lead)
     activities = list_activities_for_deal(lead_id, research_first=True)
     research_count, last_researched = _research_stats(lead_id)
     duplicates, _err = find_duplicates(lead_id=lead_id)
@@ -472,6 +474,12 @@ def get_lead(lead_id: int, *, include_extras=True):
     lead["partner"] = partner
     if lead.get("lost_reason_id"):
         lead["lost_reason"] = get_lost_reason(lead["lost_reason_id"])
+    return _with_outcome(lead)
+
+
+def _with_outcome(lead):
+    from app.services.deal_outcome import attach_outcomes
+    attach_outcomes([lead])
     return lead
 
 
@@ -542,7 +550,9 @@ def list_leads(*, query="", owner="", service_slug="", tags=None, source_prefix=
         rows.sort(key=lambda d: (d.get("last_researched_at") or "", d["id"]), reverse=True)
     else:
         rows.sort(key=lambda d: (d.get("updated_at") or "", d["id"]), reverse=True)
-    return rows[:limit]
+    rows = rows[:limit]
+    from app.services.deal_outcome import attach_outcomes
+    return attach_outcomes(rows)
 
 
 def _copy_lead_to_partner(partner, lead):

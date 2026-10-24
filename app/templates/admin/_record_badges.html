@@ -1,6 +1,8 @@
 {% if record.get("type") %}
 <span class="pill pill-{{ record.type }}">{{ record.type }}</span>
 {% endif %}
-{% if record.get("active") == 0 %}
+{% if record.outcome == "disqualified" or record.is_disqualified %}
+<span class="pill pill-disqualified">disqualified</span>
+{% elif record.outcome == "lost" or record.get("active") == 0 %}
 <span class="pill pill-lost">lost</span>
 {% endif %}

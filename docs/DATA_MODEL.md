@@ -21,15 +21,18 @@ Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguou
 | **Conversion** | The operation that changes a lead into an opportunity. The record keeps its `id`. Conversion sets `type = 'opportunity'` and `date_conversion`. |
 | **Open** | A deal record with `active = 1` that is not in an `is_won` stage. |
 | **Won** | An opportunity in a stage with `is_won = 1`. |
-| **Lost** | A deal record with `active = 0` and a `lost_reason_id`. Lost is not a stage. |
+| **Lost** | A deal record with `active = 0` whose lost reason is not a disqualification. Lost is not a stage. |
+| **Disqualified** | A deal record with `active = 0` whose lost reason has `is_disqualification = 1`. Reported as disqualified, not lost. |
+| **Outcome** | Derived, not stored. `deal_outcome` in `app/services/deal_outcome.py` returns `open`, `won`, `lost`, or `disqualified` from `active`, the stage's `is_won` flag, and the lost reason's current `is_disqualification` flag. |
 | **Lost reason** | One row in `lost_reasons`. Operator configuration. |
+| **Campaign** | One row in `campaigns`. The shared pitch for a set of deals. A deal is in it when the deal carries the tag `campaign:<slug>`. |
 | **Merged** | A lost deal record with `merged_into_id` set. The CRM does not delete merged records. |
 | **Research note** | An `activities` row with `type = 'research'`. |
 | **Fit score** | The sum of weights of the matching `icp_criteria`. A lead scores from its own columns. An opportunity scores from the partner. |
 | **Conversion readiness** | Missing data that conversion needs. Information, not a gate. |
 | **Customer** | A partner with one or more won opportunities. Calculated, not stored. |
 
-Other tables: `services` (catalogue), `deal_tags`, `activities`,
+Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `activities`,
 `pipeline_stages`, `offers`, `icp_criteria`, `delegated_tasks`,
 `stage_automations`, `users`, `api_keys`, OAuth tables, `app_install`.
 
@@ -106,7 +109,7 @@ opportunity needs both.
 | `next_action` | TEXT | What to do next. |
 | `next_action_date` | TEXT | ISO date. Drives due and overdue flags and the daily follow-up check. |
 | `created_at`, `updated_at` | TEXT | |
-| `closed_at` | TEXT | Set when an opportunity enters `is_won`, or when any deal record is marked lost. Cleared on restore. |
+| `closed_at` | TEXT | Set when an opportunity enters `is_won`, or when any deal record is first marked lost. Cleared on restore. Left unchanged when `mark_lost` only changes the lost reason. |
 | `offer_id` | INTEGER | FK to `offers(id)`. Defaults to the default offer on create. |
 | `owner_key` | TEXT | Owner slug. |
 | `external_ref` | TEXT | Caller's own id, for example from a source system. A value that is a `campaign:` tag slug is copied onto a tag the first time `deal_tags` is created; the ref itself is left unchanged. |
@@ -120,7 +123,7 @@ opportunity needs both.
 | `priority` | INTEGER NOT NULL DEFAULT 0 | 0–3. |
 | `expected_close` | TEXT | ISO date. |
 | `date_conversion` | TEXT | Set once by `convert_lead`. |
-| `active` | INTEGER NOT NULL DEFAULT 1 | 0 = lost. |
+| `active` | INTEGER NOT NULL DEFAULT 1 | 0 = closed without a win (lost or disqualified). Outcome says which. |
 | `lost_reason_id` | INTEGER | FK to `lost_reasons(id)`. Required when `active = 0`. |
 | `lost_note` | TEXT | Free text for the loss. |
 | `merged_into_id` | INTEGER | FK to `deals(id)`. Set by `merge_leads` on the source. |
@@ -129,9 +132,34 @@ opportunity needs both.
 `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false`.
 Leads never appear in a pipeline stage column.
 
+### `campaigns`
+
+The shared pitch for a planned outbound push: who it is for, which service or offer it leads to, the angle, and the opener. Lead-specific notes stay on the deal timeline. A new install has no campaigns. Rows appear when someone creates one, or when migration 13 backfills a row for each distinct `campaign:` tag already on a deal. Migration 12 is the disqualification flag on lost reasons.
+
+Membership is the tag, not a `campaign_id` column. A deal can be in more than one campaign, and the call queue, ingest, and deal list already filter on `campaign:<slug>`. A second id would be another list that can drift from those tags. The slug is the part after `campaign:`. Renaming the slug rewrites that tag on every linked deal. A tag with no campaign row is just a tag until a campaign with that slug exists; creating the row links the deals without a further write.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `name` | TEXT NOT NULL | |
+| `slug` | TEXT UNIQUE NOT NULL | Lowercase tag body. The deal tag is `campaign:<slug>`. |
+| `audience` | TEXT | Who the campaign is for. |
+| `service_id` | INTEGER | FK to `services(id)`. Optional. |
+| `offer_id` | INTEGER | FK to `offers(id)`. Optional. If the offer belongs to a service and `service_id` is empty, the service is filled in. An offer for a different service is rejected. |
+| `angle` | TEXT | Shared angle. Not a note about one lead. |
+| `opener` | TEXT | Shared opener or call script. |
+| `channel` | TEXT | `phone`, `email`, or `text`. Blank is allowed. |
+| `status` | TEXT NOT NULL DEFAULT 'draft' | `draft`, `active`, `paused`, or `completed`. Backfilled rows are `active`. |
+| `start_date`, `deadline` | TEXT | ISO dates (`YYYY-MM-DD`). Both optional. Deadline before the start date is rejected. |
+| `target_leads`, `target_contacts`, `target_conversations`, `target_advanced`, `target_won` | INTEGER | Optional counts. Blank means the target is not set. |
+| `target_won_value` | REAL | Optional. |
+| `created_at`, `updated_at` | TEXT | ISO timestamps. |
+
+Results, win/loss, pacing, and the period breakdown are calculated, not stored. The page and the MCP tools call the same function. Disqualified deals are left out of win/loss when a deal's outcome is `disqualified`. Until that outcome exists, a lost deal counts as lost.
+
 ### `deal_tags`
 
-Labels on a deal. A campaign is a tag, not a separate table. A deal has many tags and a tag covers many deals.
+Labels on a deal. A campaign link is the tag `campaign:<slug>` (see `campaigns`). A deal has many tags and a tag covers many deals.
 
 | Column | Type | Notes |
 |---|---|---|
@@ -155,13 +183,21 @@ Operator configuration, seeded once like pipeline stages.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `name` | TEXT UNIQUE NOT NULL | |
-| `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | `mark_lost` with this reason posts the nurture webhook. |
+| `triggers_nurture` | INTEGER NOT NULL DEFAULT 0 | `mark_lost` with this reason posts the nurture webhook. A later reason change does not post it again. |
+| `is_disqualification` | INTEGER NOT NULL DEFAULT 0 | Deals lost with this reason are reported as disqualified. The flag is read when outcome is derived, so changing it changes those deals' outcome without rewriting them. |
 | `active` | INTEGER NOT NULL DEFAULT 1 | Inactive reasons stay on old records but leave pickers. |
 | `created_at`, `updated_at` | TEXT | |
 
 Seed names: "Not a fit", "No budget", "Not now" (`triggers_nurture = 1`),
-"No response", "Lost to competitor", "Duplicate", "Lost stage (migrated)".
-Managed at `/lost-reasons` (and `/admin/lost-reasons`) and via MCP.
+"No response", "Lost to competitor", "Duplicate", "Lost stage (migrated)",
+and "Disqualified" (`is_disqualification = 1`). The Disqualified row is
+inserted with `INSERT OR IGNORE` on its name, then the flag is set, so a
+reason already created by hand with that exact name is kept.
+Managed at `/definitions/lost-reasons` (and `/admin/lost-reasons`) and via MCP.
+
+`mark_lost` on a deal that is already lost, with a different reason, updates
+`lost_reason_id` and logs an activity. `closed_at` stays. The same reason
+returns `already_lost`. An empty note on that change leaves `lost_note` as it was.
 
 ### `activities`
 
@@ -336,6 +372,115 @@ Both scores are formulas computed at query time, not stored columns.
 | Recency | 20 | Days since the deal last entered the stage: 7 or fewer = 20, up to 14 = 15, up to 30 = 10, up to 60 = 5, older or unknown = 0. |
 
 The queue shows the top 10. **Fit score** is the `icp_criteria` sum above.
+
+## Campaign metrics
+
+`app/services/campaign_metrics.py` is a pure function,
+`compute_campaign_metrics(campaign, deals, events, today, tz, period=None)`.
+It does not read the database or the clock. The caller passes the campaign
+window and targets, the deals (each already labelled `open`, `won`, `lost`,
+or `disqualified`), and dated events. Every number comes back with the
+formula and the inputs that produced it, so a screen can show them on hover.
+`value` is `None` when the figure does not exist. It is never a stand-in zero.
+
+Rates use a fixed length: a week is 7 days, a month is 30 days, a year is
+365 days. That is not a calendar month. The period table is separate and
+uses real calendar weeks (Monday start), months, and years in `tz`.
+
+### Window
+
+`days_total = (deadline - start_date).days + 1`. Both dates count. A start
+of 1 September and a deadline of 30 September is 30 days. The day after the
+deadline, the campaign has ended.
+
+Days elapsed are the calendar days before today that sit inside the window,
+so the start date itself has elapsed 0 and today still counts as a day
+remaining. Elapsed + remaining = total. Time percent is
+`days_elapsed / days_total * 100`.
+
+| Situation | What is reported |
+|---|---|
+| No start date | Actuals only. No rates, no time percent, no projection. |
+| No deadline | Actuals, and the actual rate once at least one day has elapsed. No required rate, no time percent, no projection. |
+| Deadline before the start | Zero-length window. Actuals only. No divide-by-zero. |
+| Start and deadline on the same day | A one-day campaign, not a zero-length window. |
+| Today before the start | Elapsed 0, time percent 0. Required rate is the full target spread over the whole window. No actual rate yet. |
+| Today inside the window, including the deadline | Required rate uses the days still left, including today. |
+| Today after the deadline | Final percent against the target. Actual rate uses the whole window. No required rate and no projection. |
+
+Worked example: start 1 September 2026, deadline 30 September 2026, today
+16 September 2026. Total 30, elapsed 15, remaining 15, time percent 50.
+
+### Actuals
+
+| Target | Actual |
+|---|---|
+| Leads | Deals whose outcome is not disqualified. Open, won, and lost all count. |
+| Contacts | Events typed `contact`, `contacts`, or `contact_made`. |
+| Conversations | Events typed `conversation` or `conversations`. |
+| Advanced | Events typed `advanced` or `advance`. |
+| Won | Deals with outcome `won`. |
+| Won value | Sum of `value` on won deals. A missing value counts as 0. |
+
+Contact, conversation, and advanced targets count events, not unique deals.
+A deal is contacted when any of those events names its id. Everyone else is
+not yet touched.
+
+Naive event timestamps are UTC, then converted to `tz`. A date-only value is
+that calendar date and is not shifted. Campaign start, deadline, and `today`
+are calendar dates: a naive datetime keeps its date part.
+
+### Win/loss
+
+Closed deals are won and lost only. Disqualified deals are excluded from the
+ratio and the win rate, and so are open deals.
+
+- Ratio is `won : lost`, unreduced (`3 : 9`).
+- Win rate is `won / (won + lost) * 100`.
+- When `won + lost` is 0, both are `None` with note `no closed deals`. A run
+  of losses and no wins is a real 0%, not that note.
+- Disqualification rate is `disqualified / deals * 100` over every deal
+  passed in. No deals at all is `None` with note `no leads`.
+- Lost deals are grouped by `lost_reason`. Disqualified deals are not in
+  that group. Won value and lost value are separate sums.
+
+### Pacing
+
+For each target that is set (a missing target is skipped; `0` is a real
+target and has no percent complete):
+
+- Remaining is `target - actual` (negative once the target is passed).
+- Percent complete is `actual / target * 100`.
+- Required rate is `remaining / days_remaining * 7` (or 30, or 365).
+- Actual rate is `actual / days_elapsed * 7` (or 30, or 365).
+- Projection is `actual / days_elapsed * days_total`, and only while the
+  window is still open and at least one day has elapsed.
+- Status is ahead when percent complete is above the time percent, behind
+  when it is below, on track when they match. `pacing_status` is behind if
+  any target is behind, ahead if every comparable target is ahead, and on
+  track in between.
+
+Continuing the example, target 30 leads and actual 10: remaining 20, percent
+complete `10 / 30 * 100`, required per week `20 / 15 * 7`, required per month 40,
+required per year `20 / 15 * 365`, actual per week `10 / 15 * 7`, projection
+20, status behind.
+
+### Period breakdown
+
+`period` is `week`, `month`, or `year`. Omit it and `periods` is `None`.
+
+Each row is a whole calendar period. Its required figure is
+`target * overlap_days / window_days`, so a week that only partly sits in
+the window is prorated and the rows add back to the target. The cumulative
+target is that same straight line at the end of the period. The cumulative
+actual adds the period actuals. Undated rows are listed beside the table
+and are not inside a period; overall actual = last cumulative actual +
+undated.
+
+Lead counts in a period use `created_at` and skip disqualified deals. Won,
+lost, disqualified, and the period win rate use `closed_at`. A period with
+no won or lost deals has win rate `None` and note `no closed deals`, even
+if someone was disqualified that period.
 
 ## Follow-ups
 

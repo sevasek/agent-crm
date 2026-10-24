@@ -66,6 +66,12 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
     }
     assert refs[1] == "campaign:example-2026-09"
     assert refs[4] == "Campaign:Winback-2026"
+    campaigns = {
+        row["slug"]: (row["name"], row["status"])
+        for row in conn.execute("SELECT slug, name, status FROM campaigns")
+    }
+    assert campaigns["example-2026-09"] == ("Example 2026 09", "active")
+    assert campaigns["winback-2026"] == ("Winback 2026", "active")
     assert refs[5] == "success-agent:example-client"
 
     children = {
@@ -120,7 +126,7 @@ def test_legacy_upgrade_preserves_rows_and_creates_campaign_tags(tmp_path, monke
     assert conn.execute("SELECT COUNT(*) FROM stage_automations").fetchone()[0] == 0
     deal_cols = {row["name"] for row in conn.execute("PRAGMA table_info(deals)")}
     assert {"type", "active", "lost_reason_id", "company_name"} <= deal_cols
-    assert conn.execute("SELECT COUNT(*) FROM lost_reasons").fetchone()[0] == 7
+    assert conn.execute("SELECT COUNT(*) FROM lost_reasons").fetchone()[0] == 8
     user_cols = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
     assert "session_version" in user_cols
     conn.close()

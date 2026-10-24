@@ -29,15 +29,23 @@ DUE_GATE_PREFIX = "due-gate:"
 logger = logging.getLogger(__name__)
 
 
-def operator_today():
-    """Calendar date in the operator timezone — not UTC, not the host cron's TZ."""
+def operator_zone():
+    """Operator timezone from `TZ`. Invalid or missing values fall back to UTC.
+
+    Campaign pacing and the follow-up gate both use this, so "today" is the
+    same calendar on both.
+    """
     name = os.getenv("TZ", "UTC")
     try:
-        tz = ZoneInfo(name)
+        return ZoneInfo(name)
     except (ZoneInfoNotFoundError, Exception):
-        logger.warning("Invalid TZ %r; using UTC for the staleness gate", name)
-        tz = ZoneInfo("UTC")
-    return datetime.now(tz).date()
+        logger.warning("Invalid TZ %r; using UTC", name)
+        return ZoneInfo("UTC")
+
+
+def operator_today():
+    """Calendar date in the operator timezone — not UTC, not the host cron's TZ."""
+    return datetime.now(operator_zone()).date()
 
 
 def parse_action_date(value):
@@ -122,12 +130,19 @@ def annotate_deal(deal, today=None, won_stage_keys=None, closed_stage_keys=None)
     annotated["action_date"] = action_date
     annotated["due_status"] = status
     annotated["days_overdue"] = days_overdue
+    if "outcome" not in annotated:
+        from app.services.deal_outcome import deal_outcome
+        outcome = deal_outcome(annotated, won_stage_keys=won_stage_keys)
+        annotated["outcome"] = outcome
+        annotated["is_disqualified"] = outcome == "disqualified"
     return annotated
 
 
 def annotate_deals(deals, today=None):
     today = today or operator_today()
     won = pipeline_stages.won_stage_keys()
+    from app.services.deal_outcome import attach_outcomes
+    attach_outcomes(deals, won_stage_keys=won)
     return [annotate_deal(d, today=today, won_stage_keys=won) for d in deals]
 
 

@@ -109,8 +109,9 @@ def test_mark_lost_and_restore_and_i2(db):
     assert lost["active"] == 0
     assert lost["lost_note"] == "Out of area"
     assert lost["closed_at"]
-    _, error = mark_lost(lead["id"], lost_reason="No budget")
+    _, error = mark_lost(lead["id"], lost_reason="Not a fit")
     assert error == "already_lost"
+    assert get_deal(lead["id"])["closed_at"] == lost["closed_at"]
     restored, error = restore_deal(lead["id"])
     assert error is None
     assert restored["active"] == 1

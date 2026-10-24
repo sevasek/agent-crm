@@ -280,6 +280,7 @@ def create_lost_reason_tool(arguments):
         name,
         triggers_nurture=bool(as_bool(arguments.get("triggers_nurture"), default=False)),
         active=as_bool(arguments.get("active"), default=True),
+        is_disqualification=bool(as_bool(arguments.get("is_disqualification"), default=False)),
     )
     if fail:
         return _lead_err(fail)
@@ -297,6 +298,8 @@ def update_lost_reason_tool(arguments):
         fields["triggers_nurture"] = as_bool(arguments.get("triggers_nurture"))
     if "active" in arguments:
         fields["active"] = as_bool(arguments.get("active"))
+    if "is_disqualification" in arguments:
+        fields["is_disqualification"] = as_bool(arguments.get("is_disqualification"))
     reason, fail = update_lost_reason(reason_id, **fields)
     if fail:
         return _lead_err(fail)
@@ -472,7 +475,12 @@ LEAD_TOOLS = [
     },
     {
         "name": "mark_lost",
-        "description": "Archive a lead or opportunity with a lost reason. Lost is not a stage.",
+        "description": (
+            "Archive a lead or opportunity with a lost reason. Lost is not a stage. "
+            "Call again with a different reason to change it; closed_at stays. "
+            "The same reason returns already_lost. A reason with is_disqualification "
+            "is reported as outcome disqualified, not lost."
+        ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
@@ -528,7 +536,10 @@ LEAD_TOOLS = [
     },
     {
         "name": "create_lost_reason",
-        "description": "Add a lost reason.",
+        "description": (
+            "Add a lost reason. Set is_disqualification when deals lost with "
+            "this reason should be reported as disqualified, not lost."
+        ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
@@ -537,6 +548,7 @@ LEAD_TOOLS = [
                 "name": {"type": "string"},
                 "triggers_nurture": {"type": "boolean"},
                 "active": {"type": "boolean"},
+                "is_disqualification": {"type": "boolean"},
             },
         },
         "annotations": {"title": "Create lost reason", **_RW, "idempotentHint": False},
@@ -544,7 +556,10 @@ LEAD_TOOLS = [
     },
     {
         "name": "update_lost_reason",
-        "description": "Change a lost reason's name, triggers_nurture, or active flag.",
+        "description": (
+            "Change a lost reason's name, triggers_nurture, active, or "
+            "is_disqualification flag. Outcome is derived from the current flag."
+        ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
@@ -554,6 +569,7 @@ LEAD_TOOLS = [
                 "name": {"type": "string"},
                 "triggers_nurture": {"type": "boolean"},
                 "active": {"type": "boolean"},
+                "is_disqualification": {"type": "boolean"},
             },
         },
         "annotations": {"title": "Update lost reason", **_RW, "idempotentHint": True},

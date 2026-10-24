@@ -11,7 +11,7 @@ A **lead** is someone you might contact who is not confirmed yet. A name and a p
 
 A **deal** is a lead you have decided to pursue. It belongs to one partner and one service, and it moves through the pipeline. In the database this is called an opportunity. On screen it is a deal.
 
-**Lost** means you stopped. You pick a reason from Lost reasons. The deal leaves the open board. You can bring it back if that was a mistake.
+**Lost** means you stopped. You pick a reason from Lost reasons. The deal leaves the open board. You can bring it back if that was a mistake. A reason can be a disqualification (the wrong kind of business, too small, out of area). That deal shows as disqualified instead of lost. You can change the reason later; the date it closed stays.
 
 ## The screens
 
@@ -20,11 +20,12 @@ A **deal** is a lead you have decided to pursue. It belongs to one partner and o
 - **Pipeline** — the board. Drag a deal from one column to another.
 - **Deals** — the same deals as a list. Due and overdue follow-ups show here.
 - **Leads** — people you are still researching. Open a lead to add notes, or turn it into a deal when you want to pursue it.
+- **Campaigns** — a planned push with one audience, one offer, and one opener. Deals and leads join a campaign when they have its tag (`campaign:` plus the slug). The list shows status, deadline, how much of the target is done, whether the pace is ahead or behind, and win/loss. Open a campaign to read the script, the counts, and the deals. Start calls from there to phone the campaign. Notes about one lead stay on that lead. The period table can be grouped by week, month, or year. Hover a number to see what went into it. Weeks start on Monday, and the dates use the timezone chosen when the CRM was installed.
 - **Services** — what you sell.
 - **Stages** — the columns on the board, and what each one does.
 - **Offers** — the price and the short pitch you use on a call.
 - **Automations** — optional. When a deal enters a stage, the CRM can create a task or a follow-on deal. A new install has none of these.
-- **Lost reasons** — the list you pick from when a deal is lost. "Not now" can also notify your nurture tool, if you have set one up.
+- **Lost reasons** — the list you pick from when a deal is lost. "Not now" can also notify your nurture tool, if you have set one up. Tick Disqualification when that reason should show as disqualified rather than lost. A new install includes a Disqualified reason with that tick on.
 - **ICP** — fit rules. Each matching rule adds the points you gave it. There is no pass mark. You, or your agent, decide.
 - **Settings** — your password and the keys an agent or an import uses.
 

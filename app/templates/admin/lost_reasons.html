@@ -3,17 +3,18 @@
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
 <h1>Lost reasons</h1>
-<p class="muted">A reason a lead or opportunity can be marked lost.</p>
+<p class="muted">A reason a lead or opportunity can be marked lost. A disqualification is reported as disqualified, not as a sales loss.</p>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
 <table>
     <tr>
-        <th>Name</th><th>Triggers nurture</th><th>Active</th><th></th>
+        <th>Name</th><th>Triggers nurture</th><th>Disqualification</th><th>Active</th><th></th>
     </tr>
     {% for r in reasons %}
     <form id="reason-edit-{{ r.id }}" method="post" action="/definitions/lost-reasons/{{ r.id }}/edit"></form>
     <tr>
         <td><input type="text" name="name" value="{{ r.name }}" form="reason-edit-{{ r.id }}" aria-label="Name"></td>
         <td><input type="checkbox" name="triggers_nurture" form="reason-edit-{{ r.id }}" aria-label="Triggers nurture" {% if r.triggers_nurture %}checked{% endif %}></td>
+        <td><input type="checkbox" name="is_disqualification" form="reason-edit-{{ r.id }}" aria-label="Disqualification" {% if r.is_disqualification %}checked{% endif %}></td>
         <td><input type="checkbox" name="active" form="reason-edit-{{ r.id }}" aria-label="Active" {% if r.active %}checked{% endif %}></td>
         <td>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="reason-edit-{{ r.id }}">
@@ -21,7 +22,7 @@
         </td>
     </tr>
     {% else %}
-    <tr><td colspan="4" class="muted">No lost reasons yet.</td></tr>
+    <tr><td colspan="5" class="muted">No lost reasons yet.</td></tr>
     {% endfor %}
 </table>
 
@@ -34,6 +35,7 @@
     </div>
     <div class="form-row">
         <label><input type="checkbox" name="triggers_nurture"> Triggers nurture</label>
+        <label><input type="checkbox" name="is_disqualification"> Disqualification</label>
         <label><input type="checkbox" name="active" checked> Active</label>
     </div>
     <button type="submit">Add lost reason</button>

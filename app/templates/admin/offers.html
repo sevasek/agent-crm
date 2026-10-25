@@ -97,7 +97,7 @@
 {% for o in offers %}
 <form method="post" action="/definitions/offers/{{ o.id }}/delete" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn-secondary" onclick="return confirm('Delete this offer?')">Delete {{ o.name }}</button>
+    <button type="submit" class="btn-secondary" data-confirm="Delete this offer?">Delete {{ o.name }}</button>
 </form>
 {% endfor %}
 {% endblock %}

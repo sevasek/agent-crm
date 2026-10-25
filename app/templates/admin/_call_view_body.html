@@ -15,7 +15,7 @@
         {% if partner.phone is dialable %}
         <a href="{{ partner.phone|tel_href }}" class="btn btn-tel btn-tel-big"
            aria-label="Call {{ partner.name }} at {{ partner.phone }}"
-           onclick="logCallTap('/actions/deals/{{ deal.id }}/call-tel', '{{ csrf_token }}')">Call {{ partner.phone }}</a>
+           data-call-tap="/actions/deals/{{ deal.id }}/call-tel" data-csrf="{{ csrf_token }}">Call {{ partner.phone }}</a>
         {% else %}
         <p class="muted">No phone number on file.</p>
         {% endif %}
@@ -49,7 +49,7 @@
     {% if offer_options %}
     <form method="post" action="/actions/deals/{{ deal.id }}/offer" class="stage-form">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <select name="offer_id" onchange="this.form.submit()">
+        <select name="offer_id" data-autosubmit>
             <option value="">— none —</option>
             {% for o in offer_options %}
             <option value="{{ o.id }}" {% if offer and offer.id == o.id %}selected{% endif %}>{{ o.name }}</option>
@@ -86,8 +86,7 @@
           hx-push-url="false">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input type="hidden" name="next" value="call_view">
-        <input type="text" name="note" placeholder="Note (optional)"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+        <input type="text" name="note" placeholder="Note (optional)">
         {% for key, label, _ in outcomes %}
         <button type="submit" name="outcome" value="{{ key }}"
                 class="btn-outcome btn-outcome-{{ key }}">{{ label }}</button>

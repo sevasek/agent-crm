@@ -7,7 +7,7 @@
     {% if partner.email %}{{ partner.email }} · {% endif %}
     {% if partner.phone is dialable %}
     <a href="{{ partner.phone|tel_href }}" class="btn-tel"
-       onclick="logCallTap('/contacts/partners/{{ partner.id }}/call-tel', '{{ csrf_token }}')">{{ partner.phone }}</a>
+       data-call-tap="/contacts/partners/{{ partner.id }}/call-tel" data-csrf="{{ csrf_token }}">{{ partner.phone }}</a>
     ·
     {% endif %}
     {% if partner.title %}{{ partner.title }}{% endif %}
@@ -107,7 +107,7 @@
     <p><a class="btn btn-secondary" href="/crm/deals/{{ d.id }}/edit">Edit deal</a></p>
     <form class="stage-form" method="post" action="/crm/deals/{{ d.id }}/stage">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <select name="stage" aria-label="Stage for deal #{{ d.id }}" onchange="this.form.submit()">
+        <select name="stage" aria-label="Stage for deal #{{ d.id }}" data-autosubmit>
             {% for s in stages %}
             <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
             {% endfor %}

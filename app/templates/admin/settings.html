@@ -40,7 +40,7 @@
 <form method="post" action="/settings/logout-everywhere">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn-secondary"
-        onclick="return confirm('Log out every other session on this account? This browser stays logged in.')">
+        data-confirm="Log out every other session on this account? This browser stays logged in.">
         Log out of all other sessions
     </button>
 </form>
@@ -58,7 +58,7 @@
     <p><strong>New key created.</strong> Copy it now — it won't be shown again.</p>
     <div class="api-key-value">
         <code id="new-api-key">{{ new_key }}</code>
-        <button type="button" class="btn-secondary" onclick="navigator.clipboard.writeText('{{ new_key }}')">Copy</button>
+        <button type="button" class="btn-secondary" data-copy-target="new-api-key">Copy</button>
     </div>
 </div>
 {% endif %}
@@ -74,7 +74,7 @@
         <td>
             <form method="post" action="/settings/api-keys/{{ k.id }}/delete" style="display:inline;">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-                <button type="submit" class="btn-secondary" onclick="return confirm('Revoke this key? Any bot using it will stop working.')">Revoke</button>
+                <button type="submit" class="btn-secondary" data-confirm="Revoke this key? Any bot using it will stop working.">Revoke</button>
             </form>
         </td>
     </tr>

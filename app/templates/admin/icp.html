@@ -84,7 +84,7 @@
 {% for c in criteria %}
 <form method="post" action="/definitions/icp/{{ c.id }}/delete" style="display:inline;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn-secondary" onclick="return confirm('Delete this criterion?')">Delete: {{ c.label or c.field }} ({{ c.operator }})</button>
+    <button type="submit" class="btn-secondary" data-confirm="Delete this criterion?">Delete: {{ c.label or c.field }} ({{ c.operator }})</button>
 </form>
 {% endfor %}
 {% endblock %}

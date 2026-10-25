@@ -10,14 +10,10 @@ function logCallTap(url, csrfToken) {
     navigator.sendBeacon(url, fd);
 }
 
-// CSP script-src 'self' blocks inline onclick. Templates still declare
-// onclick="logCallTap(...)" (tests assert that markup); this listener
-// reads the attribute and runs the same call.
+// CSP script-src 'self' blocks inline onclick, so tel links carry
+// data-call-tap="<log url>" data-csrf="<token>" instead.
 document.addEventListener("click", function (event) {
-    var link = event.target.closest && event.target.closest("a[onclick]");
+    var link = event.target.closest && event.target.closest("a[data-call-tap]");
     if (!link) return;
-    var handler = link.getAttribute("onclick") || "";
-    var match = handler.match(/^logCallTap\('([^']*)',\s*'([^']*)'\)/);
-    if (!match) return;
-    logCallTap(match[1], match[2]);
+    logCallTap(link.getAttribute("data-call-tap"), link.getAttribute("data-csrf") || "");
 });

@@ -19,7 +19,7 @@ def _qualified_deal(db, phone="0400 111 222"):
 def test_offers_settings_requires_login(client, db):
     resp = client.get("/definitions/offers", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fdefinitions%2Foffers"
 
 
 def test_create_offer_via_admin_form(logged_in_client, db):
@@ -86,7 +86,7 @@ def test_delete_unused_offer(logged_in_client, db):
 def test_icp_settings_requires_login(client, db):
     resp = client.get("/definitions/icp", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fdefinitions%2Ficp"
 
 
 def test_create_icp_criterion_via_admin_form(logged_in_client, db):

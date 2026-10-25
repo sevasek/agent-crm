@@ -70,7 +70,7 @@ def _deal(tags=None, *, phone="0400 111 222", stage="new", email=None, value=800
 def test_campaigns_page_requires_login(client):
     anonymous = client.get("/crm/campaigns", follow_redirects=False)
     assert anonymous.status_code == 303
-    assert anonymous.headers["location"] == "/auth/login"
+    assert anonymous.headers["location"] == "/auth/login?next=%2Fcrm%2Fcampaigns"
 
 
 def test_campaigns_nav_marks_the_current_page(logged_in_client):

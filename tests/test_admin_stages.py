@@ -8,7 +8,7 @@ from app.services import pipeline_stages
 def test_pipeline_board_requires_login(client, db):
     resp = client.get("/crm/pipeline", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fcrm%2Fpipeline"
 
 
 def test_pipeline_board_shows_columns_and_cards(logged_in_client, db):

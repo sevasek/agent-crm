@@ -170,7 +170,7 @@ def test_call_view_undialable_phone_shows_message_not_dial_button(logged_in_clie
 def test_call_view_requires_login(client, db):
     resp = client.get("/actions/deals/1/call", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Factions%2Fdeals%2F1%2Fcall"
 
 
 def test_call_view_missing_deal_redirects(logged_in_client, db):

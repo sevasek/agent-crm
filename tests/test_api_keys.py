@@ -67,7 +67,7 @@ def test_settings_key_does_not_authorize_mcp(client, db, monkeypatch):
 def test_settings_page_requires_login(client):
     resp = client.get("/settings", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fsettings"
 
 
 def test_create_and_revoke_api_key_via_settings_page(logged_in_client):

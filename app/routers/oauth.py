@@ -25,6 +25,7 @@ from app.services.auth import (
 )
 from app.services.client_ip import get_client_ip
 from app.services import mcp_oauth
+from app.services.security_headers import csp_allowing_form_redirect
 
 router = APIRouter(tags=["mcp-oauth"])
 templates = Jinja2Templates(directory="app/templates")
@@ -184,7 +185,7 @@ async def oauth_authorize_page(request: Request):
     logged_in = bool(get_current_user(request))
     if not error and not logged_in:
         return RedirectResponse(_login_url(request), status_code=302)
-    return templates.TemplateResponse(request, "auth/mcp_authorize.html", {
+    response = templates.TemplateResponse(request, "auth/mcp_authorize.html", {
         "request": request,
         "error": error,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
@@ -194,6 +195,11 @@ async def oauth_authorize_page(request: Request):
         "logged_in": logged_in,
         "login_url": _login_url(request),
     }, status_code=400 if error else 200)
+    if not error:
+        # Allow access POSTs here and 302s to the registered redirect_uri;
+        # without its origin in form-action the browser blocks that redirect.
+        response.headers["Content-Security-Policy"] = csp_allowing_form_redirect(form["redirect_uri"])
+    return response
 
 
 @router.post("/oauth/authorize")

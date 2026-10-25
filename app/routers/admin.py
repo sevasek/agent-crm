@@ -407,6 +407,7 @@ async def partner_detail(request: Request, partner_id: int, user=Depends(require
     return templates.TemplateResponse(request, "admin/partner_detail.html", {
         "request": request, "user": user, "partner": partner,
         "children": get_children(partner_id) if partner["is_company"] else [],
+        "company": get_partner(partner["parent_id"]) if partner["parent_id"] else None,
         "deals": annotate_deals(list_deals(partner_id=partner_id)),
         "activities": activities,
         "services": list_services(active_only=True),

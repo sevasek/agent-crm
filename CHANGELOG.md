@@ -43,6 +43,11 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   behind it.
 - Campaigns. A `campaigns` record holds the shared pitch (audience, service or offer, angle, opener, channel, status, dates, and optional targets). Deals join through the existing `campaign:<slug>` tag, so tags already in the database become campaign rows on upgrade (migration 13, after the disqualification flag in migration 12). The CRM nav has a Campaigns list and a detail page (results, win/loss, pacing, and a week/month/year breakdown). Deal and lead pages link back. `list_campaigns`, `get_campaign`, `create_campaign`, and `update_campaign` are MCP tools, and `get_call_queue` accepts a campaign. Closes #154.
 
+### Fixed
+
+- A person's partner page now shows the company they belong to (their
+  `parent_id`), as a link after their title.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added

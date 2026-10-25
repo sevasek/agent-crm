@@ -11,6 +11,7 @@
     ·
     {% endif %}
     {% if partner.title %}{{ partner.title }}{% endif %}
+    {% if company %}{% if partner.title %} at {% endif %}<a href="/contacts/partners/{{ company.id }}">{{ company.name }}</a>{% endif %}
 </p>
 <p class="muted">
     {% if partner.industry %}{{ partner.industry }} · {% endif %}

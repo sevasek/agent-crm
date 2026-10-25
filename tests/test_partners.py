@@ -313,3 +313,20 @@ def test_update_partner_profile_extras(db):
     assert partner["industry"] == "Retail"
     assert partner["team_size"] == 7
     assert partner["preferred_channel"] == "email"
+
+
+def test_partner_detail_links_person_to_company(logged_in_client):
+    company_id = create_partner("Acme Retail", is_company=True)
+    person_id = create_partner("Jane Doe", parent_id=company_id, title="Director")
+    resp = logged_in_client.get(f"/contacts/partners/{person_id}")
+    assert resp.status_code == 200
+    assert "Director" in resp.text
+    assert f' at <a href="/contacts/partners/{company_id}">Acme Retail</a>' in resp.text
+
+
+def test_partner_detail_links_company_without_title(logged_in_client):
+    company_id = create_partner("Acme Retail", is_company=True)
+    person_id = create_partner("Jane Doe", parent_id=company_id)
+    resp = logged_in_client.get(f"/contacts/partners/{person_id}")
+    assert f'<a href="/contacts/partners/{company_id}">Acme Retail</a>' in resp.text
+    assert " at <a" not in resp.text

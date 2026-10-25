@@ -24,6 +24,7 @@ from app.database import (
     migrate_011,
     migrate_012,
     migrate_013,
+    migrate_014,
     row_to_dict,
 )
 
@@ -96,8 +97,8 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 13
-    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}
+    assert SCHEMA_VERSION == 14
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
@@ -111,6 +112,7 @@ def test_schema_version_is_only_applied_via_numbered_migration():
     assert MIGRATIONS[11] is migrate_011
     assert MIGRATIONS[12] is migrate_012
     assert MIGRATIONS[13] is migrate_013
+    assert MIGRATIONS[14] is migrate_014
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -444,7 +446,7 @@ def _build_v11(tmp_path, monkeypatch, *, disqualified):
 
 def _assert_v13(tmp_path, deals_before, reasons_before):
     with get_db() as conn:
-        assert get_user_version(conn) == SCHEMA_VERSION == 13
+        assert get_user_version(conn) == SCHEMA_VERSION
         rows = conn.execute("SELECT id, name, is_disqualification FROM lost_reasons").fetchall()
         assert [r["is_disqualification"] for r in rows if r["name"] == "Disqualified"] == [1]
         assert all(r["is_disqualification"] == 0 for r in rows if r["name"] != "Disqualified")
@@ -462,7 +464,7 @@ def _assert_v13(tmp_path, deals_before, reasons_before):
         ]
         assert [dict(r) for r in conn.execute("SELECT * FROM deals ORDER BY id")] == deals_before
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
-    pre = list((tmp_path / "backups").glob("pre-migrate-v11-to-v13-*.db"))
+    pre = list((tmp_path / "backups").glob(f"pre-migrate-v11-to-v{SCHEMA_VERSION}-*.db"))
     assert pre, "expected an online backup before migrating a live v11 DB"
 
 
@@ -498,6 +500,48 @@ def test_migrate_012_and_013_again_are_no_ops(tmp_path, monkeypatch):
         assert snapshot(conn) == before
 
 
+def test_init_db_migrates_v13_expires_never_changed_passwords(tmp_path, monkeypatch):
+    """A v13 user on session_version 0 never changed their password, which
+    may be the one-time one. It gets the one-time window from the upgrade;
+    a user who has changed theirs is left alone."""
+    from datetime import datetime, timedelta, timezone
+
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    monkeypatch.setenv("ONE_TIME_PASSWORD_TTL_HOURS", "24")
+    with get_db() as db:
+        for step in (migrate_001, migrate_002, migrate_003, migrate_004,
+                     migrate_005, migrate_006, migrate_007, migrate_008,
+                     migrate_009, migrate_010, migrate_011, migrate_012,
+                     migrate_013):
+            step(db)
+        db.execute(
+            """INSERT INTO users (email, name, password_hash, session_version)
+               VALUES ('otp@example.com', 'OTP', 'h1', 0),
+                      ('own@example.com', 'Own', 'h2', 3)"""
+        )
+        db.execute("PRAGMA user_version = 13")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        rows = {r["email"]: dict(r) for r in conn.execute("SELECT * FROM users")}
+    assert rows["own@example.com"]["password_expires_at"] is None
+    expires = datetime.strptime(rows["otp@example.com"]["password_expires_at"], "%Y-%m-%d %H:%M:%S")
+    assert timedelta(hours=23) < expires.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc) <= timedelta(hours=24)
+    assert rows["otp@example.com"]["password_hash"] == "h1"
+    assert rows["own@example.com"]["password_hash"] == "h2"
+    with get_db() as conn:
+        migrate_014(conn)  # column exists: no second reset of the window
+        conn.commit()
+        again = conn.execute(
+            "SELECT password_expires_at FROM users WHERE email = 'otp@example.com'"
+        ).fetchone()[0]
+    assert again == rows["otp@example.com"]["password_expires_at"]
+
+
 # Schema version -> a test that upgrades a populated database into it.
 UPGRADE_TESTS = {
     1: test_init_db_migrates_legacy_version_0,
@@ -508,6 +552,7 @@ UPGRADE_TESTS = {
     9: test_init_db_migrates_v8_adds_board_position,
     12: test_init_db_migrates_v11_keeps_handmade_disqualified,
     13: test_init_db_migrates_v11_seeds_disqualified,
+    14: test_init_db_migrates_v13_expires_never_changed_passwords,
 }
 # Shipped before this guard with no upgrade test of their own. Never add to it.
 GRANDFATHERED = frozenset({2, 6, 8, 10, 11})

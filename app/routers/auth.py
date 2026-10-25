@@ -9,8 +9,9 @@ from itsdangerous import URLSafeTimedSerializer
 
 from app.database import get_db, get_install_id
 from app.services.auth import (
-    authenticate_user, generate_csrf_token, validate_csrf_token,
-    check_rate_limit, get_rate_limit_key, should_use_secure_cookies,
+    check_login, generate_csrf_token, validate_csrf_token,
+    check_rate_limit, get_rate_limit_key, password_change_required,
+    should_use_secure_cookies,
 )
 from app.services.client_ip import get_client_ip
 
@@ -113,6 +114,10 @@ def get_current_user(request: Request):
     return None
 
 
+PASSWORD_CHANGE_URL = "/settings#password"
+PASSWORD_CHANGE_ROUTES = {("GET", "/settings"), ("POST", "/settings/password")}
+
+
 def require_login(request: Request):
     user = get_current_user(request)
     if not user:
@@ -125,6 +130,9 @@ def require_login(request: Request):
             if next_url:
                 location = f"/auth/login?{urlencode({'next': next_url})}"
         raise HTTPException(status_code=303, headers={"Location": location})
+    if password_change_required(user) and (request.method, request.url.path) not in PASSWORD_CHANGE_ROUTES:
+        # A one-time password only gets as far as choosing a real one.
+        raise HTTPException(status_code=303, headers={"Location": PASSWORD_CHANGE_URL})
     return user
 
 
@@ -185,9 +193,15 @@ async def login_submit(
             "csrf_token": generate_csrf_token(), "next": next,
         }, status_code=400)
 
-    user = authenticate_user(email, password)
+    user, login_error = check_login(email, password)
+    if login_error:
+        return templates.TemplateResponse(request, "auth/login.html", {
+            "request": request, "error": login_error,
+            "csrf_token": generate_csrf_token(), "next": next,
+        }, status_code=403)
     if user:
-        response = RedirectResponse(next or DEFAULT_LANDING, status_code=303)
+        landing = PASSWORD_CHANGE_URL if password_change_required(user) else next or DEFAULT_LANDING
+        response = RedirectResponse(landing, status_code=303)
         clear_session_cookie(response)
         set_session_cookie(response, user["id"], user["session_version"])
         return response

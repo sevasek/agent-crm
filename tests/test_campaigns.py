@@ -1,7 +1,7 @@
 """Campaign records, the metrics adapter, the pages, and the MCP tools."""
 from datetime import date
 
-from app.database import get_db, get_user_version, init_db, migrate_001, migrate_002
+from app.database import SCHEMA_VERSION, get_db, get_user_version, init_db, migrate_001, migrate_002
 from app.database import migrate_003, migrate_004, migrate_005, migrate_006, migrate_007
 from app.database import migrate_008, migrate_009, migrate_010, migrate_011
 from app.mcp.tools import TOOLS
@@ -466,7 +466,7 @@ def test_v11_database_backfills_campaign_rows(tmp_path, monkeypatch):
         conn.commit()
     init_db()
     with get_db() as conn:
-        assert get_user_version(conn) == 13
+        assert get_user_version(conn) == SCHEMA_VERSION
         row = conn.execute(
             "SELECT name, status FROM campaigns WHERE slug = 'spring-2026'"
         ).fetchone()

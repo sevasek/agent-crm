@@ -210,4 +210,4 @@ def test_bootstrapped_user_can_log_in_over_http(db, monkeypatch):
             follow_redirects=False,
         )
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/contacts/partners"
+        assert resp.headers["location"] == "/settings#password"

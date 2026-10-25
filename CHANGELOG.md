@@ -11,6 +11,21 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ## [Unreleased]
 
+### Security
+
+- One-time passwords now expire. The bootstrap admin password
+  (`BOOTSTRAP_ADMIN_PASSWORD[_FILE]`) and the one `scripts/new-instance.sh`
+  generates used to keep working until someone changed them, so an
+  unchanged setup password stayed a live credential forever. They now stop
+  working `ONE_TIME_PASSWORD_TTL_HOURS` after being issued (default 24).
+  Until the password is changed, logging in only reaches the change-password
+  form: no CRM pages, API keys, or MCP OAuth approval.
+  `scripts/create_admin.py --reset <email>` issues a new one.
+  **Upgrade note:** migration 14 treats every user who has never changed
+  their password (`session_version` 0) as being on a one-time password, with
+  the window starting at the upgrade. Change it within 24 hours of deploying,
+  or reset it afterwards.
+
 ### Added
 
 - Lost reasons have an `is_disqualification` flag, editable on Lost reasons

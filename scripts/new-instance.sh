@@ -275,7 +275,9 @@ Instance ${NAME} is up.
   Admin email:  ${EMAIL}
   One-time password (shown once): ${OTP}
 
-Log in, then change the password. BOOTSTRAP_ADMIN_PASSWORD was not written
+Log in and change the password: the one-time password expires after
+ONE_TIME_PASSWORD_TTL_HOURS (default 24). If it lapses, reset it with
+scripts/create_admin.py --reset. BOOTSTRAP_ADMIN_PASSWORD was not written
 to the lasting .env.
 EOF
 print_caddy

@@ -120,6 +120,10 @@ stages and MCP keys are separate, and each endpoint refuses all requests until
 its key is set. Set `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_FILE`
 (preferred; wins over `BOOTSTRAP_ADMIN_PASSWORD`) once to create the first
 admin without shell access — the file is not visible in `docker inspect`.
+That first password is one-time: it must be changed at first login (until
+then the account can only reach the change-password form) and it expires
+after `ONE_TIME_PASSWORD_TTL_HOURS` (default 24). Reset a lapsed one with
+`scripts/create_admin.py --reset <email>`.
 `/health` checks that sqlite is writable and returns 503 if it is not, and
 also 503s (`{"status": "low_disk_space"}`) once free space on the DB's
 filesystem drops below `HEALTH_MIN_FREE_MB` (default 200), ahead of an
@@ -210,7 +214,8 @@ app to replicate `data/crm.db` to S3/GCS. It is not bundled and not required.
 `COMPOSE_PROJECT_NAME=crm-$NAME`, starts the stack with
 `docker-compose.port.yml` + `docker-compose.instance.yml`, waits for
 `/health`, creates the admin via `create_admin.py` (one-time password
-printed once — `BOOTSTRAP_ADMIN_PASSWORD` is not left in the env), and
+printed once, expiring after `ONE_TIME_PASSWORD_TTL_HOURS`, default 24 —
+`BOOTSTRAP_ADMIN_PASSWORD` is not left in the env), and
 prints a Caddy site block.
 
 `CRM_PORT` is interpolated as `127.0.0.1:${CRM_PORT:-8000}:8000`.

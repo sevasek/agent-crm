@@ -63,6 +63,10 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   `call-tap.js`, instead of regex-parsing the blocked attributes. A test
   fails if a template reintroduces an inline handler.
 
+### Changed
+
+- The CRM menu is ordered Campaigns, Leads, Pipeline, Deals.
+
 ## [1.0.0] - 2026-10-17
 
 ### Added

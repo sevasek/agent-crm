@@ -33,6 +33,13 @@ def test_pipeline_nav_marks_current_page(logged_in_client):
     assert 'href="/crm/pipeline">CRM</a>' in resp.text  # the group label itself must not also get aria-current
 
 
+def test_crm_nav_order(logged_in_client):
+    html = logged_in_client.get("/crm/pipeline").text
+    positions = [html.index(f'href="/crm/{path}"', html.index('>CRM</a>'))
+                 for path in ("campaigns", "leads", "pipeline", "deals")]
+    assert positions == sorted(positions)
+
+
 def test_leads_nav_marks_current_page(logged_in_client):
     resp = logged_in_client.get("/crm/leads")
     assert resp.status_code == 200

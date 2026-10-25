@@ -30,10 +30,10 @@
         <a href="/definitions/icp"{% if path == "/definitions/icp" or path.startswith("/definitions/icp/") %} aria-current="page"{% endif %}>ICP</a>
         {% elif path.startswith("/crm") %}
         <a class="nav-app-crm" href="/crm/pipeline">CRM</a>
+        <a href="/crm/campaigns"{% if path == "/crm/campaigns" or path.startswith("/crm/campaigns/") %} aria-current="page"{% endif %}>Campaigns</a>
+        <a href="/crm/leads"{% if path == "/crm/leads" or path.startswith("/crm/leads/") %} aria-current="page"{% endif %}>Leads</a>
         <a href="/crm/pipeline"{% if path == "/crm/pipeline" or path.startswith("/crm/pipeline/") %} aria-current="page"{% endif %}>Pipeline</a>
         <a href="/crm/deals"{% if path == "/crm/deals" or (path.startswith("/crm/deals/") and not path.endswith("/call")) %} aria-current="page"{% endif %}>Deals</a>
-        <a href="/crm/leads"{% if path == "/crm/leads" or path.startswith("/crm/leads/") %} aria-current="page"{% endif %}>Leads</a>
-        <a href="/crm/campaigns"{% if path == "/crm/campaigns" or path.startswith("/crm/campaigns/") %} aria-current="page"{% endif %}>Campaigns</a>
         {% endif %}
         <a class="right" href="/settings"{% if path == "/settings" or path.startswith("/settings/") %} aria-current="page"{% endif %}>Settings</a>
         <form class="topnav-logout" method="post" action="/auth/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token | default(request.state.csrf_token) }}"><button type="submit">Logout</button></form>

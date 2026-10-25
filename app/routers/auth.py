@@ -1,6 +1,6 @@
 import hashlib
 import os
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlencode, urlsplit
 
 from fastapi import APIRouter, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -116,7 +116,15 @@ def get_current_user(request: Request):
 def require_login(request: Request):
     user = get_current_user(request)
     if not user:
-        raise HTTPException(status_code=303, headers={"Location": "/auth/login"})
+        location = "/auth/login"
+        # Only a plain GET is safe to return to: replaying a POST after login
+        # is wrong, and an htmx GET is a fragment, not a page to land on.
+        if request.method == "GET" and "hx-request" not in request.headers:
+            query = request.url.query
+            next_url = safe_return_to(f"{request.url.path}?{query}" if query else request.url.path)
+            if next_url:
+                location = f"/auth/login?{urlencode({'next': next_url})}"
+        raise HTTPException(status_code=303, headers={"Location": location})
     return user
 
 

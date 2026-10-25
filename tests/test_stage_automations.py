@@ -432,7 +432,7 @@ def test_admin_create_rename_disable_delete(logged_in_client, db):
 def test_automations_page_requires_login(client, db):
     resp = client.get("/definitions/automations", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fdefinitions%2Fautomations"
 
 
 def test_mcp_lists_creates_updates_and_triggers(client, db, monkeypatch):

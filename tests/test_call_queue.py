@@ -228,7 +228,7 @@ def test_recency_breaks_ties_newer_first(db):
 def test_calls_page_requires_login(client):
     resp = client.get("/actions/calls", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Factions%2Fcalls"
 
 
 def test_calls_page_empty_state(logged_in_client):

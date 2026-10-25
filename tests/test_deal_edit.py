@@ -14,7 +14,7 @@ def _deal(db, **fields):
 def test_edit_deal_requires_login(client, db):
     resp = client.get("/crm/deals/1/edit", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fcrm%2Fdeals%2F1%2Fedit"
 
 
 def test_edit_deal_form_shows_existing_fields(logged_in_client, db):

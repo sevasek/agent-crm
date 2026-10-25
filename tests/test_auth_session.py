@@ -17,7 +17,7 @@ def test_untimed_session_cookie_is_rejected(client):
     client.cookies.set("session", token)
     resp = client.get("/crm/pipeline", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fcrm%2Fpipeline"
 
 
 def test_session_token_rejected_when_past_max_age(db):
@@ -35,7 +35,7 @@ def test_get_current_user_honors_session_max_age(client, monkeypatch):
     client.cookies.set("session", token)
     resp = client.get("/crm/pipeline", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fcrm%2Fpipeline"
 
 
 def test_session_cookie_max_age_matches_loads_constant():
@@ -180,7 +180,7 @@ def test_session_cookie_from_another_database_is_rejected(tmp_path, monkeypatch)
         c.cookies.set("session", token)
         resp = c.get("/crm/pipeline", follow_redirects=False)
         assert resp.status_code == 303
-        assert resp.headers["location"] == "/auth/login"
+        assert resp.headers["location"] == "/auth/login?next=%2Fcrm%2Fpipeline"
 
 
 def test_fresh_databases_get_distinct_install_ids(tmp_path, monkeypatch):
@@ -237,3 +237,45 @@ def test_login_keeps_encoded_query_in_return_to(client):
         "csrf_token": generate_csrf_token(), "next": next_url,
     }, follow_redirects=False)
     assert resp.headers["location"] == next_url
+
+
+def test_deep_link_returns_to_same_url_after_login(client):
+    from app.services.auth import generate_csrf_token
+
+    create_user("deep@example.com", "Deep", "password123")
+    deep_link = "/crm/pipeline?view=list&q=a%20b"
+    resp = client.get(deep_link, follow_redirects=False)
+    assert resp.status_code == 303
+    login_url = resp.headers["location"]
+    assert login_url == "/auth/login?next=%2Fcrm%2Fpipeline%3Fview%3Dlist%26q%3Da%2520b"
+    assert 'name="next"' in client.get(login_url).text
+    resp = client.post("/auth/login", data={
+        "email": "deep@example.com", "password": "password123",
+        "csrf_token": generate_csrf_token(), "next": deep_link,
+    }, follow_redirects=False)
+    assert resp.headers["location"] == deep_link
+
+
+def test_post_to_protected_route_redirects_to_bare_login(client):
+    resp = client.post("/contacts/partners/1/edit", data={}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/auth/login"
+
+
+def test_htmx_get_redirects_to_bare_login(client):
+    resp = client.get("/crm/pipeline", headers={"HX-Request": "true"}, follow_redirects=False)
+    assert resp.headers["location"] == "/auth/login"
+
+
+@pytest.mark.parametrize("path", ["//evil.example/crm", "/%2F%2Fevil.example"])
+def test_require_login_drops_unsafe_return_to(db, path):
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from app.routers.auth import require_login
+
+    request = Request({"type": "http", "method": "GET", "path": path,
+                       "query_string": b"", "headers": []})
+    with pytest.raises(HTTPException) as exc:
+        require_login(request)
+    assert exc.value.headers["Location"] == "/auth/login"

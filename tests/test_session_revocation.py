@@ -20,7 +20,7 @@ def test_bumping_session_version_invalidates_an_outstanding_cookie(client, db):
     bump_session_version(user_id)
     resp = client.get("/contacts/partners", follow_redirects=False)
     assert resp.status_code == 303
-    assert resp.headers["location"] == "/auth/login"
+    assert resp.headers["location"] == "/auth/login?next=%2Fcontacts%2Fpartners"
 
 
 def test_change_password_requires_correct_current_password(db):
@@ -66,7 +66,7 @@ def test_password_change_via_settings_keeps_current_session_but_logs_out_others(
     assert client.get("/contacts/partners").status_code == 200
     other_resp = other.get("/contacts/partners", follow_redirects=False)
     assert other_resp.status_code == 303
-    assert other_resp.headers["location"] == "/auth/login"
+    assert other_resp.headers["location"] == "/auth/login?next=%2Fcontacts%2Fpartners"
 
 
 def test_password_change_wrong_current_password_shows_error(logged_in_client):
@@ -99,4 +99,4 @@ def test_logout_everywhere_logs_out_other_sessions_but_not_current(client, db):
     assert client.get("/contacts/partners").status_code == 200
     other_resp = other.get("/contacts/partners", follow_redirects=False)
     assert other_resp.status_code == 303
-    assert other_resp.headers["location"] == "/auth/login"
+    assert other_resp.headers["location"] == "/auth/login?next=%2Fcontacts%2Fpartners"

@@ -540,6 +540,12 @@ def test_logged_out_authorize_redirects_to_login_and_back(client, db, monkeypatc
     assert registered["client_id"] in allow_page.text
     assert "the authorization code is sent to" in allow_page.text
     assert 'class="error"' not in allow_page.text
+    # Browsers apply form-action to the 302 off-site; 'self' alone blocks it.
+    form_action = next(
+        d.strip() for d in allow_page.headers["Content-Security-Policy"].split(";")
+        if d.strip().startswith("form-action")
+    )
+    assert form_action == "form-action 'self' http://127.0.0.1:9"
     allowed = client.post("/oauth/authorize", data={
         **_authorize_form(client, registered, redirect, challenge, api_key=""),
         "state": params["state"],
@@ -574,3 +580,14 @@ def test_logged_out_authorize_page_never_shows_key(client, db, monkeypatch):
 def test_env_key_fallback_still_authorizes(client, db, monkeypatch):
     # Setup-only route: no session, CRM_MCP_API_KEY posted as api_key.
     _handshake(client, monkeypatch)
+
+
+def test_authorize_error_page_keeps_default_form_action(client, db, monkeypatch):
+    _enable(monkeypatch)
+    page = client.get("/oauth/authorize", params={
+        "client_id": "nope", "redirect_uri": "https://evil.example/cb",
+        "code_challenge": "x", "code_challenge_method": "S256",
+    })
+    assert page.status_code == 400
+    assert page.headers["Content-Security-Policy"].endswith("form-action 'self'")
+    assert "evil.example" not in page.headers["Content-Security-Policy"]

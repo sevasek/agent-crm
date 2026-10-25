@@ -14,6 +14,7 @@ from app.routers import admin, auth, api, mcp, oauth
 from app.routers.auth import get_current_user, session_cookie_name
 from app.services.auth import generate_csrf_token, maybe_bootstrap_admin, should_use_secure_cookies
 from app.services.client_ip import warn_if_non_ip_trusted_proxies
+from app.services.security_headers import CONTENT_SECURITY_POLICY
 
 _health_db_warned = False
 _health_disk_warned = False
@@ -140,22 +141,6 @@ def compat_admin_redirect_target(rest_of_path: str, query: str = "") -> str:
 
 _STATE_CHANGING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Same-origin scripts and styles only. Vendored Pico, htmx, and Tom Select
-# live at /static/vendor/; call-tap.js / app.js replace inline <script> so
-# this does not need script-src 'unsafe-inline'. style-src still allows
-# 'unsafe-inline' for the handful of style="" attributes in templates.
-CONTENT_SECURITY_POLICY = (
-    "default-src 'self'; "
-    "script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; "
-    "font-src 'self'; "
-    "connect-src 'self'; "
-    "object-src 'none'; "
-    "base-uri 'self'; "
-    "frame-ancestors 'none'; "
-    "form-action 'self'"
-)
 HSTS_HEADER = "max-age=31536000; includeSubDomains"
 
 
@@ -239,7 +224,8 @@ def create_app() -> FastAPI:
         # Not no-referrer: that makes browsers send "Origin: null" on form POSTs,
         # which _cross_site_cookie_request rejects.
         response.headers["Referrer-Policy"] = "same-origin"
-        response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+        # setdefault: a route may widen the policy (see csp_allowing_form_redirect).
+        response.headers.setdefault("Content-Security-Policy", CONTENT_SECURITY_POLICY)
         if _production_intent():
             response.headers["Strict-Transport-Security"] = HSTS_HEADER
         return response

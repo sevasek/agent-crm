@@ -15,12 +15,13 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from app.routers.auth import get_current_user, get_session_cookie
+from app.routers.auth import PASSWORD_CHANGE_URL, get_current_user, get_session_cookie
 from app.services.auth import (
     check_rate_limit_retry,
     generate_csrf_token,
     get_rate_limit_key,
     oauth_rate_limit_identity,
+    password_change_required,
     validate_csrf_token,
 )
 from app.services.client_ip import get_client_ip
@@ -182,7 +183,10 @@ async def oauth_authorize_page(request: Request):
         "resource": params.get("resource") or "",
     }
     error, client_name = _validate_authorize_query(form)
-    logged_in = bool(get_current_user(request))
+    user = get_current_user(request)
+    if password_change_required(user):
+        return RedirectResponse(PASSWORD_CHANGE_URL, status_code=303)
+    logged_in = bool(user)
     if not error and not logged_in:
         return RedirectResponse(_login_url(request), status_code=302)
     response = templates.TemplateResponse(request, "auth/mcp_authorize.html", {
@@ -264,6 +268,8 @@ async def oauth_authorize_submit(
         }, status_code=400)
 
     user = get_current_user(request)
+    if password_change_required(user):
+        user = None
     if not mcp_oauth.operator_may_authorize(api_key, user):
         # Count only failed authorize attempts so a correct key after
         # guesses still works (same rule as login).

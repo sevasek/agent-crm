@@ -5,6 +5,7 @@ import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 import logging
+from datetime import datetime, timedelta, timezone
 
 IntegrityConflict = sqlite3.IntegrityError
 
@@ -17,7 +18,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place. Every new migration needs an upgrade test in
 # UPGRADE_TESTS (tests/test_database.py), or CI fails.
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 
 class SchemaVersionError(RuntimeError):
@@ -1008,6 +1009,37 @@ def migrate_013(db) -> None:
 
 
 # version number -> migration applied when moving *to* that version
+def one_time_password_expires_at() -> str:
+    """UTC expiry for a password the user did not choose, as CURRENT_TIMESTAMP
+    formats it. ONE_TIME_PASSWORD_TTL_HOURS (default 24) sets the window."""
+    try:
+        hours = float(os.getenv("ONE_TIME_PASSWORD_TTL_HOURS") or 24)
+    except ValueError:
+        hours = 24.0
+    if hours <= 0:
+        hours = 24.0
+    expires = datetime.now(timezone.utc) + timedelta(hours=hours)
+    return expires.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def migrate_014(db) -> None:
+    """Add users.password_expires_at: set while the password is a one-time one
+    (bootstrap env or a generated new-instance.sh password), NULL once the
+    user has chosen their own.
+
+    Before this, a one-time password never expired. A user still on
+    session_version 0 has never changed their password (a change bumps it),
+    so give them the same window from now: change it within
+    ONE_TIME_PASSWORD_TTL_HOURS of the upgrade, or reset it with
+    scripts/create_admin.py --reset.
+    """
+    if _add_column_if_missing(db, "users", "password_expires_at", "password_expires_at TEXT"):
+        db.execute(
+            "UPDATE users SET password_expires_at = ? WHERE session_version = 0",
+            (one_time_password_expires_at(),),
+        )
+
+
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
@@ -1022,6 +1054,7 @@ MIGRATIONS = {
     11: migrate_011,
     12: migrate_012,
     13: migrate_013,
+    14: migrate_014,
 }
 
 

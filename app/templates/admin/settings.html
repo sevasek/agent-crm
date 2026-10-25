@@ -2,6 +2,9 @@
 {% block title %}Settings — crm{% endblock %}
 {% block content %}
 <h1>Account settings</h1>
+{% if user.password_expires_at and not password_changed %}
+<p class="error" role="alert">You signed in with a one-time password. Choose your own password below to use the CRM. The one-time password stops working at {{ user.password_expires_at }} UTC.</p>
+{% endif %}
 <p class="muted">Settings is where you manage your password, currency, and the keys an agent or an import uses to connect. <a href="{{ help_url('settings') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 
 <h2>Regional settings</h2>
@@ -18,7 +21,7 @@
     <button type="submit">Save</button>
 </form>
 
-<h2>Password</h2>
+<h2 id="password">Password</h2>
 {% if password_error %}<p class="error">{{ password_error }}</p>{% endif %}
 {% if password_changed %}<p>Password changed. Other devices' sessions are now logged out.</p>{% endif %}
 <form method="post" action="/settings/password">

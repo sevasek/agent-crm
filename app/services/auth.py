@@ -11,7 +11,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-from app.database import get_db
+from app.database import get_db, one_time_password_expires_at
 
 logger = logging.getLogger(__name__)
 
@@ -36,16 +36,50 @@ def get_user_by_email(email: str):
         return dict(row) if row else None
 
 
-def create_user(email: str, name: str, password: str) -> int:
+def create_user(email: str, name: str, password: str, *, one_time: bool = False) -> int:
+    """one_time: the password was generated or set by someone other than the
+    user, so it expires (one_time_password_expires_at) and must be changed
+    before the account can do anything else."""
     password_hash = hash_password(password)
     clean_name = sanitize_text(name, max_len=120) if name else None
+    expires_at = one_time_password_expires_at() if one_time else None
     with get_db() as db:
         db.execute(
-            "INSERT INTO users (email, name, password_hash) VALUES (?, ?, ?)",
-            (email.strip().lower(), clean_name, password_hash),
+            "INSERT INTO users (email, name, password_hash, password_expires_at) "
+            "VALUES (?, ?, ?, ?)",
+            (email.strip().lower(), clean_name, password_hash, expires_at),
         )
         db.commit()
         return db.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def reset_password(user_id: int, password: str, *, one_time: bool = True) -> None:
+    """Operator reset (scripts/create_admin.py --reset). Logs out every
+    session, and by default issues a one-time password like create_user."""
+    expires_at = one_time_password_expires_at() if one_time else None
+    with get_db() as db:
+        db.execute(
+            "UPDATE users SET password_hash = ?, password_expires_at = ?, "
+            "session_version = session_version + 1 WHERE id = ?",
+            (hash_password(password), expires_at, user_id),
+        )
+        db.commit()
+
+
+def password_change_required(user) -> bool:
+    """True while the user is still on a one-time password."""
+    return bool(user and user.get("password_expires_at"))
+
+
+def password_expired(user) -> bool:
+    expires_at = user.get("password_expires_at") if user else None
+    if not expires_at:
+        return False
+    try:
+        expires = datetime.strptime(expires_at, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return True  # unreadable: fail closed
+    return datetime.now(timezone.utc) >= expires
 
 
 def count_users() -> int:
@@ -88,8 +122,8 @@ def change_password(user_id: int, current_password: str, new_password: str):
         return False, "New password must be at least 8 characters."
     with get_db() as db:
         db.execute(
-            "UPDATE users SET password_hash = ?, session_version = session_version + 1 "
-            "WHERE id = ?",
+            "UPDATE users SET password_hash = ?, password_expires_at = NULL, "
+            "session_version = session_version + 1 WHERE id = ?",
             (hash_password(new_password), user_id),
         )
         db.commit()
@@ -204,7 +238,7 @@ def maybe_bootstrap_admin() -> None:
                 "bootstrap admin: a user with that email already exists; skipping"
             )
             return
-        user_id = create_user(email, name, password)
+        user_id = create_user(email, name, password, one_time=True)
     except Exception:
         logger.exception("bootstrap admin: failed to create the first admin; skipping")
         return
@@ -212,28 +246,49 @@ def maybe_bootstrap_admin() -> None:
     if password_source == "file":
         logger.info(
             "bootstrap admin: created user #%s (%s) from "
-            "BOOTSTRAP_ADMIN_PASSWORD_FILE. After you can log in, unmount the "
-            "secret so it is no longer readable by the process.",
+            "BOOTSTRAP_ADMIN_PASSWORD_FILE. It is a one-time password: log in "
+            "and change it before %s UTC. Then unmount the secret so it is no "
+            "longer readable by the process.",
             user_id,
             email.strip().lower(),
+            get_user_by_email(email.strip().lower())["password_expires_at"],
         )
     else:
         logger.info(
-            "bootstrap admin: created user #%s (%s). After you can log in, delete "
+            "bootstrap admin: created user #%s (%s). It is a one-time password: "
+            "log in and change it before %s UTC. Then delete "
             "BOOTSTRAP_ADMIN_PASSWORD from .env and redeploy so the secret leaves "
             "the running container.",
             user_id,
             email.strip().lower(),
+            get_user_by_email(email.strip().lower())["password_expires_at"],
         )
 
 
-def authenticate_user(email: str, password: str):
+ONE_TIME_PASSWORD_EXPIRED = (
+    "This one-time password has expired. Ask the operator to reset it "
+    "(scripts/create_admin.py --reset)."
+)
+
+
+def check_login(email: str, password: str):
+    """Return (user, None) on success, or (None, error) where error is
+    ONE_TIME_PASSWORD_EXPIRED for a correct but expired one-time password and
+    None for a wrong email or password."""
     user = get_user_by_email(email.strip().lower())
-    if not user:
-        return None
-    if verify_password(password, user["password_hash"]):
-        return user
-    return None
+    if not user or not verify_password(password, user["password_hash"]):
+        return None, None
+    if password_expired(user):
+        logger.warning(
+            "login refused: one-time password for user #%s expired at %s UTC",
+            user["id"], user["password_expires_at"],
+        )
+        return None, ONE_TIME_PASSWORD_EXPIRED
+    return user, None
+
+
+def authenticate_user(email: str, password: str):
+    return check_login(email, password)[0]
 
 
 # ==================== CSRF ====================

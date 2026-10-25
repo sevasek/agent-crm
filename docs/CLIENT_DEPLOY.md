@@ -163,6 +163,8 @@ Generate `SECRET_KEY` and `CRM_MCP_API_KEY` with
 [`.env.example`](../.env.example). Create the admin with
 `BOOTSTRAP_ADMIN_EMAIL` and `BOOTSTRAP_ADMIN_PASSWORD_FILE` (the file is
 not visible in `docker inspect`), then remove the password file and
-recreate the container. The rest of this page (TLS, health, Grok, updates)
+recreate the container. That password is one-time: change it at first login
+within `ONE_TIME_PASSWORD_TTL_HOURS` (default 24), or reset it with
+`scripts/create_admin.py --reset <email>`. The rest of this page (TLS, health, Grok, updates)
 is the same. A later second client should use `scripts/new-instance.sh`,
 not a second copy of this `.env`.

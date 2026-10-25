@@ -1,0 +1,13 @@
+{# Delegated tasks for a partner or deal. Pass `deal_names` ({deal id: label}) to show a Deal column. #}
+<table>
+    <tr><th>Task</th><th>Owner</th><th>Status</th><th>Due</th>{% if deal_names is defined %}<th>Deal</th>{% endif %}</tr>
+    {% for t in tasks %}
+    <tr>
+        <td>{{ t.title }}{% if t.result_notes %}<div class="muted">{{ t.result_notes }}</div>{% elif t.brief %}<div class="muted">{{ t.brief }}</div>{% endif %}</td>
+        <td>{{ t.owner }}</td>
+        <td><span class="pill">{{ t.status }}</span></td>
+        <td class="nowrap">{{ (t.due_date or "")[:10] }}</td>
+        {% if deal_names is defined %}<td><a href="/crm/deals/{{ t.deal_id }}/edit">{{ deal_names.get(t.deal_id) or ("#" ~ t.deal_id) }}</a></td>{% endif %}
+    </tr>
+    {% endfor %}
+</table>

@@ -6,7 +6,7 @@
 <form method="post" action="{{ '/crm/deals/' ~ deal.id ~ '/edit' if deal else '/crm/deals/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if deal %}
-    <p class="muted">{{ partner.name if partner else "No partner" }} · <span class="pill">{{ deal.stage }}</span>
+    <p class="muted">{% if partner %}<a href="/contacts/partners/{{ partner.id }}">{{ partner.name }}</a>{% if company %} at <a href="/contacts/partners/{{ company.id }}">{{ company.name }}</a>{% endif %}{% else %}No partner{% endif %} · <span class="pill">{{ deal.stage }}</span>
         — stage changes on the partner page.
     </p>
     {% set selected_service = form_service_id if form_service_id is not none else (service.id if service else none) %}
@@ -189,5 +189,20 @@
 {% else %}
 <p class="muted">Merged into #{{ deal.merged_into_id }}. Restore is not available.</p>
 {% endif %}
+{% endif %}
+{% if deal %}
+{% if tasks %}
+<h2>Delegated tasks</h2>
+{% include "admin/_tasks_table.html" %}
+{% endif %}
+<h2>Activity</h2>
+{% for a in activities %}
+<div class="activity">
+    <span class="pill">{{ a.type }}</span> {{ a.display_body or a.body or "" }}
+    <div class="meta">{{ a.occurred_at }}</div>
+</div>
+{% else %}
+<p class="muted">No activity yet.{% if deal.partner_id %} Log it on the <a href="/contacts/partners/{{ deal.partner_id }}">partner page</a>.{% endif %}</p>
+{% endfor %}
 {% endif %}
 {% endblock %}

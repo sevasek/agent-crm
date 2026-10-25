@@ -82,7 +82,7 @@ def get_task(task_id: int):
         return dict(row) if row else None
 
 
-def list_tasks(owner=None, status=None, deal_id=None, due_only=False, today=None):
+def list_tasks(owner=None, status=None, deal_id=None, due_only=False, today=None, partner_id=None):
     query = "SELECT * FROM delegated_tasks WHERE 1=1"
     params = []
     owner_key = clean_task_owner(owner)
@@ -96,6 +96,9 @@ def list_tasks(owner=None, status=None, deal_id=None, due_only=False, today=None
     if deal_id:
         query += " AND deal_id = ?"
         params.append(deal_id)
+    if partner_id:
+        query += " AND partner_id = ?"
+        params.append(partner_id)
     query += " ORDER BY CASE WHEN due_date IS NULL OR TRIM(due_date) = '' THEN 1 ELSE 0 END, due_date, id"
     with get_db() as db:
         rows = [dict(r) for r in db.execute(query, params).fetchall()]

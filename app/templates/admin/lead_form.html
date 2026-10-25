@@ -7,6 +7,9 @@
     {% else %}New lead{% endif %}
 </h1>
 {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if lead and lead.partner %}
+<p class="muted">Linked to <a href="/contacts/partners/{{ lead.partner.id }}">{{ lead.partner.name }}</a></p>
+{% endif %}
 
 {% if lead and lead.conversion_readiness %}
 <p class="muted">

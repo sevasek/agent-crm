@@ -435,11 +435,13 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
         SELECT deals.*, partners.name AS partner_name, services.name AS service_name,
                services.slug AS service_slug,
                lost_reasons.name AS lost_reason_name,
-               lost_reasons.is_disqualification AS is_disqualification
+               lost_reasons.is_disqualification AS is_disqualification,
+               offers.name AS offer_name
         FROM deals
         LEFT JOIN partners ON partners.id = deals.partner_id
         LEFT JOIN services ON services.id = deals.service_id
         LEFT JOIN lost_reasons ON lost_reasons.id = deals.lost_reason_id
+        LEFT JOIN offers ON offers.id = deals.offer_id
         WHERE 1=1
     """
     params = []
@@ -492,6 +494,21 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
     deals = attach_tags(deals)
     from app.services.deal_outcome import attach_outcomes
     return attach_outcomes(deals)
+
+
+def open_record_counts(column: str) -> dict:
+    """{service or offer id: {"opportunity": n, "lead": n}} over open records."""
+    if column not in ("service_id", "offer_id"):
+        raise ValueError(column)
+    with get_db() as db:
+        rows = db.execute(
+            f"SELECT {column} AS ref, type, COUNT(*) AS n FROM deals"
+            f" WHERE active = 1 AND {column} IS NOT NULL GROUP BY {column}, type"
+        ).fetchall()
+    counts = {}
+    for row in rows:
+        counts.setdefault(row["ref"], {"opportunity": 0, "lead": 0})[row["type"]] = row["n"]
+    return counts
 
 
 def validate_parent_link(deal_id, parent_deal_id, partner_id):

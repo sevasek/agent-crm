@@ -47,6 +47,15 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 - A person's partner page now shows the company they belong to (their
   `parent_id`), as a link after their title.
+- Record pages link the records they are connected to. A partner page shows
+  the partner's tags, linked leads, and delegated tasks. Each deal card shows
+  its offer, owner, and campaigns, and links its parent deal. A company page
+  lists its people's deals and their recent activity. A deal page links its
+  partner and company, and shows the deal's activity and delegated tasks. A
+  lead page links its partner. Opening a converted lead's URL goes to the
+  opportunity it became. The partners list has a sortable Company column.
+  The Services and Offers pages show the open deals, leads, and campaigns
+  that use each one.
 
 ## [1.0.0] - 2026-10-17
 

@@ -21,7 +21,10 @@ from app.services.deals import list_deals
 from app.services.offers import get_offer
 from app.services.partners import PREFERRED_CHANNELS
 
-STATUSES = ("draft", "active", "paused", "completed")
+STATUSES = ("draft", "active", "paused", "completed", "archived")
+# Archived campaigns are hidden from lists by default. Unarchive returns to this status.
+UNARCHIVED_STATUS = "paused"
+CANCELLED_REASON = "Campaign cancelled"
 # Counts are integers. Won value is a non-negative amount.
 TARGET_FIELDS = (
     ("target_leads", "leads", "count"),
@@ -45,7 +48,7 @@ ERROR_MESSAGES = {
     "name_required": "Name is required.",
     "invalid_slug": "Slug must use lowercase letters, digits, and hyphens, as in spring-2026.",
     "duplicate_slug": "A campaign with that slug already exists.",
-    "invalid_status": "Status must be draft, active, paused, or completed.",
+    "invalid_status": "Status must be draft, active, paused, completed, or archived.",
     "invalid_channel": "Channel must be phone, email, text, or blank.",
     "invalid_date": "Dates must be YYYY-MM-DD.",
     "deadline_before_start": "Deadline must be on or after the start date.",
@@ -304,12 +307,15 @@ def _clean_payload(fields, *, creating, current=None):
     return cleaned, None
 
 
-def list_campaigns(status=None):
+def list_campaigns(status=None, include_archived=False):
+    """Archived campaigns are left out unless asked for by status or include_archived."""
     query = _CAMPAIGN_SELECT
     params = []
     if status:
         query += " WHERE campaigns.status = ?"
         params.append(status)
+    elif not include_archived:
+        query += " WHERE campaigns.status != 'archived'"
     query += """
         ORDER BY
             CASE campaigns.status
@@ -528,3 +534,63 @@ def list_campaign_deals(slug: str):
     for deal in deals:
         deal["display_name"] = _display_name(deal)
     return deals
+
+
+def untouched_open_deals(slug: str):
+    """Open records in the campaign whose timeline is only system entries."""
+    open_deals = [d for d in list_campaign_deals(slug) if d.get("active")]
+    if not open_deals:
+        return []
+    ids = [d["id"] for d in open_deals]
+    placeholders = ",".join("?" * len(ids))
+    with get_db() as db:
+        touched = {
+            row["deal_id"]
+            for row in db.execute(
+                f"SELECT DISTINCT deal_id FROM activities"
+                f" WHERE type != 'system' AND deal_id IN ({placeholders})",
+                ids,
+            ).fetchall()
+        }
+    return [d for d in open_deals if d["id"] not in touched]
+
+
+def archive_campaign(campaign_id: int, *, close_untouched=False):
+    """Return (campaign, closed deal ids, None) or (None, [], error_code).
+
+    close_untouched marks the campaign's open records with no updates
+    lost with the Campaign cancelled reason. Records someone worked on
+    stay open.
+    """
+    from app.services.deals import mark_lost
+    from app.services.lost_reasons import create_lost_reason, get_lost_reason_by_name
+
+    campaign = get_campaign(campaign_id)
+    if not campaign:
+        return None, [], "not_found"
+    closed = []
+    if close_untouched:
+        reason = get_lost_reason_by_name(CANCELLED_REASON)
+        if not reason:
+            reason, error = create_lost_reason(CANCELLED_REASON)
+            if error:
+                return None, [], error
+        note = f"{campaign['name']} campaign archived; record had no updates."
+        for deal in untouched_open_deals(campaign["slug"]):
+            _deal, error = mark_lost(deal["id"], lost_reason_id=reason["id"], note=note)
+            if error is None:
+                closed.append(deal["id"])
+    updated, error = update_campaign(campaign_id, status="archived")
+    if error:
+        return None, closed, error
+    return updated, closed, None
+
+
+def unarchive_campaign(campaign_id: int):
+    """Return (campaign, None) or (None, error_code). Lost records stay lost."""
+    campaign = get_campaign(campaign_id)
+    if not campaign:
+        return None, "not_found"
+    if campaign["status"] != "archived":
+        return campaign, None
+    return update_campaign(campaign_id, status=UNARCHIVED_STATUS)

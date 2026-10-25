@@ -12,10 +12,22 @@
 <h1>{{ campaign.name }} <span class="pill">{{ campaign.status }}</span></h1>
 <p class="muted">A campaign is one planned push — one audience, one offer, one opening line — that a set of deals and leads join. <a href="{{ help_url('campaigns') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <p>
+    {% if campaign.status != "archived" %}
     <a class="btn" href="/actions/calls?campaign={{ campaign.slug }}&include_new=1">Start calls</a>
+    {% endif %}
     <a class="btn btn-secondary" href="/crm/campaigns/{{ campaign.id }}/edit">Edit</a>
     <a class="btn btn-secondary" href="/crm/campaigns">All campaigns</a>
 </p>
+{% if campaign.status == "archived" %}
+<div class="api-key-new">
+    <p><strong>This campaign is archived.</strong> It is hidden from the campaign list.</p>
+    <form method="post" action="/crm/campaigns/{{ campaign.id }}/unarchive">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn-secondary">Unarchive</button>
+        <span class="muted">Sets the status to {{ unarchived_status }}. Records closed when it was archived stay lost.</span>
+    </form>
+</div>
+{% endif %}
 <p class="muted">Tag <span class="pill pill-tag">{{ campaign.tag }}</span>
     {% if campaign.channel %} · {{ campaign.channel }}{% endif %}
     {% if campaign.start_date %} · starts {{ campaign.start_date }}{% endif %}
@@ -269,5 +281,19 @@
     {% endfor %}
 </table>
 </div>
+{% endif %}
+{% if campaign.status != "archived" %}
+<h2>Archive</h2>
+<form method="post" action="/crm/campaigns/{{ campaign.id }}/archive">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <p class="muted">Archiving hides the campaign from the campaign list. Its records and their tags stay as they are.</p>
+    {% if untouched_count %}
+    <label>
+        <input type="checkbox" name="close_untouched" value="1">
+        Also mark the {{ untouched_count }} open record{{ "s" if untouched_count != 1 }} with no updates as lost (Campaign cancelled)
+    </label>
+    {% endif %}
+    <button type="submit" class="btn-secondary" data-confirm="Archive this campaign?">Archive campaign</button>
+</form>
 {% endif %}
 {% endblock %}

@@ -98,10 +98,11 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `get_deal` | One deal record (lead or opportunity), including `tags`, `child_deals`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. A lead also returns its contact columns. |
 | `list_activities` | The timeline for a partner or a deal record, newest first. Accepts a lead without a partner. |
 | `get_call_queue` | Open opportunities in the qualified pool with a dialable phone. No leads. Filters: `stage`, `service_slug`, `source_prefix`, `include_new=true`, `owner`, `campaign` (slug) or `campaign_id`. `limit` up to 50. A campaign keeps deals tagged `campaign:<slug>`. |
-| `list_campaigns` | Campaigns with win/loss, percent complete, and pace. Optional `status`. |
+| `list_campaigns` | Campaigns with win/loss, percent complete, and pace. Optional `status`. Archived campaigns are left out unless `status=archived` or `include_archived=true`. |
 | `get_campaign` | One campaign by `campaign_id` or `slug`: fields, results, win/loss, targets, pacing, deals, and `period=week\|month\|year` for the breakdown. Same numbers as the campaign page. |
 | `create_campaign` | Name plus optional slug, audience, service, offer, angle, opener, channel, status, dates, and targets. Deals already tagged `campaign:<slug>` are included. |
 | `update_campaign` | Change fields. `new_slug` rewrites the `campaign:` tag on linked deals. Null clears an optional field. |
+| `archive_campaign` | Archive a campaign so `list_campaigns` hides it. `close_untouched` also marks open records with only system timeline entries lost (Campaign cancelled). `unarchive` sets it back to paused. |
 | `list_due_followups` | Open deal records whose `next_action_date` is today or earlier. Includes leads and opportunities. Filter `type`, `owner` / `owner_key`, `service_slug`. |
 | `list_catalog` | Services, pipeline stages (with `is_lost` marked deprecated), offers, call-outcome keys, activity types (includes `research`), and `lost_reasons` (including `is_disqualification`). |
 | `ingest_leads` | Creates **leads**, not partners. `type=opportunity` keeps the old partner + opportunity path. Strong-key matches fill-empty; weak-key-only matches create a new lead. Optional `tags` merge. |

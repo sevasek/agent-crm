@@ -2460,12 +2460,14 @@ def _campaign_period(raw: str) -> str:
 
 
 @crm_router.get("/crm/campaigns", response_class=HTMLResponse)
-async def campaigns_list(request: Request, user=Depends(require_login)):
+async def campaigns_list(request: Request, archived: str = "", user=Depends(require_login)):
     from app.services.campaign_metrics_adapter import metrics_for_campaign, summary_from_metrics
     from app.services.campaigns import list_campaigns
 
+    show_archived = _truthy_query(archived, "archived")
+    campaigns = list_campaigns(status="archived") if show_archived else list_campaigns()
     rows = []
-    for campaign in list_campaigns():
+    for campaign in campaigns:
         metrics = metrics_for_campaign(campaign)
         rows.append({
             "campaign": campaign,
@@ -2476,6 +2478,8 @@ async def campaigns_list(request: Request, user=Depends(require_login)):
         "user": user,
         "rows": rows,
         "pace_labels": PACE_LABELS,
+        "show_archived": show_archived,
+        "archived_count": 0 if show_archived else len(list_campaigns(status="archived")),
     })
 
 
@@ -2520,12 +2524,15 @@ async def campaign_detail(
     user=Depends(require_login),
 ):
     from app.services.campaign_metrics_adapter import metrics_for_campaign
-    from app.services.campaigns import TARGET_LABELS, get_campaign, list_campaign_deals
+    from app.services.campaigns import (
+        TARGET_LABELS, UNARCHIVED_STATUS, get_campaign, list_campaign_deals, untouched_open_deals,
+    )
 
     campaign = get_campaign(campaign_id)
     if not campaign:
         return RedirectResponse("/crm/campaigns", status_code=303)
     grain = _campaign_period(period)
+    archived = campaign["status"] == "archived"
     return templates.TemplateResponse(request, "admin/campaign_detail.html", {
         "request": request,
         "user": user,
@@ -2538,7 +2545,35 @@ async def campaign_detail(
         "stage_labels": {
             stage["key"]: stage["label"] for stage in pipeline_stages.list_stages()
         },
+        "untouched_count": 0 if archived else len(untouched_open_deals(campaign["slug"])),
+        "unarchived_status": UNARCHIVED_STATUS,
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
     })
+
+
+@crm_router.post("/crm/campaigns/{campaign_id}/archive")
+async def archive_campaign_submit(
+    request: Request, campaign_id: int,
+    close_untouched: str = Form(""), csrf_token: str = Form(...),
+    user=Depends(require_login),
+):
+    from app.services.campaigns import archive_campaign
+
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        archive_campaign(campaign_id, close_untouched=bool(close_untouched))
+    return RedirectResponse(f"/crm/campaigns/{campaign_id}", status_code=303)
+
+
+@crm_router.post("/crm/campaigns/{campaign_id}/unarchive")
+async def unarchive_campaign_submit(
+    request: Request, campaign_id: int, csrf_token: str = Form(...),
+    user=Depends(require_login),
+):
+    from app.services.campaigns import unarchive_campaign
+
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        unarchive_campaign(campaign_id)
+    return RedirectResponse(f"/crm/campaigns/{campaign_id}", status_code=303)
 
 
 @crm_router.get("/crm/campaigns/{campaign_id}/edit", response_class=HTMLResponse)

@@ -12,7 +12,9 @@ from app.services.campaigns import (
     create_campaign,
     get_campaign,
     list_campaign_deals,
+    archive_campaign,
     list_campaigns,
+    unarchive_campaign,
     update_campaign,
 )
 from app.services.catalog import get_service_by_slug
@@ -107,7 +109,8 @@ def list_campaigns_tool(arguments):
     if status and status not in STATUSES:
         return _fail("invalid_status")
     rows = []
-    for campaign in list_campaigns(status=status):
+    include_archived = bool(arguments.get("include_archived"))
+    for campaign in list_campaigns(status=status, include_archived=include_archived):
         summary = summary_from_metrics(metrics_for_campaign(campaign))
         rows.append({
             "id": campaign["id"],
@@ -154,6 +157,23 @@ def get_campaign_tool(arguments):
             "service_id": deal.get("service_id"),
         })
     return _ok(campaign=campaign, metrics=metrics, deals=deals)
+
+
+def archive_campaign_tool(arguments):
+    campaign, error = _resolve_campaign(arguments)
+    if error:
+        return error
+    if arguments.get("unarchive"):
+        updated, error = unarchive_campaign(campaign["id"])
+        if error:
+            return _fail(error)
+        return _ok(campaign=updated, closed_deal_ids=[])
+    updated, closed, error = archive_campaign(
+        campaign["id"], close_untouched=bool(arguments.get("close_untouched")),
+    )
+    if error:
+        return _fail(error)
+    return _ok(campaign=updated, closed_deal_ids=closed)
 
 
 def create_campaign_tool(arguments):
@@ -218,13 +238,15 @@ CAMPAIGN_TOOLS = [
             "Campaigns, with win/loss, percent complete, and pace. "
             "A deal is in a campaign when it is tagged campaign:<slug>. "
             "Win/loss excludes disqualified deals. Percent complete is 0–100. "
-            "Pace is ahead, on_track, behind, or null when there is nothing to compare."
+            "Pace is ahead, on_track, behind, or null when there is nothing to compare. "
+            "Archived campaigns are left out unless status=archived or include_archived=true."
         ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
                 "status": {"type": "string", "enum": list(STATUSES)},
+                "include_archived": {"type": "boolean"},
             },
         },
         "annotations": {"title": "List campaigns", **_READ},
@@ -292,5 +314,27 @@ CAMPAIGN_TOOLS = [
         },
         "annotations": {"title": "Update campaign", **_WRITE},
         "handler": update_campaign_tool,
+    },
+    {
+        "name": "archive_campaign",
+        "description": (
+            "Archive a campaign (hidden from list_campaigns by default). "
+            "close_untouched=true also marks its open records whose timeline is "
+            "only system entries lost with the reason Campaign cancelled; records "
+            "anyone worked on stay open. unarchive=true sets status back to paused. "
+            "Pass campaign_id or slug."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "campaign_id": {"type": "integer", "minimum": 1},
+                "slug": {"type": "string"},
+                "close_untouched": {"type": "boolean"},
+                "unarchive": {"type": "boolean"},
+            },
+        },
+        "annotations": {"title": "Archive campaign", **_WRITE},
+        "handler": archive_campaign_tool,
     },
 ]

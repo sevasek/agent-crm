@@ -279,6 +279,7 @@ _SORT_COLUMNS = {
     "type": "p.is_company",
     "email": "p.email COLLATE NOCASE",
     "phone": "p.phone COLLATE NOCASE",
+    "company": "company.name COLLATE NOCASE",
     "tags": (
         "(SELECT GROUP_CONCAT(tag, ', ') FROM "
         "(SELECT tag FROM partner_tags WHERE partner_id = p.id ORDER BY tag)) COLLATE NOCASE"
@@ -314,7 +315,8 @@ def list_partners(search: str = "", tags=None, sort: str = "name", direction: st
     where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     with get_db() as db:
         rows = db.execute(f"""
-            SELECT p.* FROM partners p
+            SELECT p.*, company.name AS company_name FROM partners p
+            LEFT JOIN partners company ON company.id = p.parent_id
             {where_sql}
             ORDER BY {sort_col} {order_dir}, p.name COLLATE NOCASE ASC
         """, params).fetchall()

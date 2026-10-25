@@ -20,6 +20,7 @@
     <tr>
         <th><a href="{{ sort_links.name.href }}">Name{% if sort_links.name.dir %} {{ "↑" if sort_links.name.dir == "asc" else "↓" }}{% endif %}</a></th>
         <th><a href="{{ sort_links.type.href }}">Type{% if sort_links.type.dir %} {{ "↑" if sort_links.type.dir == "asc" else "↓" }}{% endif %}</a></th>
+        <th><a href="{{ sort_links.company.href }}">Company{% if sort_links.company.dir %} {{ "↑" if sort_links.company.dir == "asc" else "↓" }}{% endif %}</a></th>
         <th><a href="{{ sort_links.email.href }}">Email{% if sort_links.email.dir %} {{ "↑" if sort_links.email.dir == "asc" else "↓" }}{% endif %}</a></th>
         <th><a href="{{ sort_links.phone.href }}">Phone{% if sort_links.phone.dir %} {{ "↑" if sort_links.phone.dir == "asc" else "↓" }}{% endif %}</a></th>
         <th><a href="{{ sort_links.tags.href }}">Tags{% if sort_links.tags.dir %} {{ "↑" if sort_links.tags.dir == "asc" else "↓" }}{% endif %}</a></th>
@@ -28,6 +29,7 @@
     <tr>
         <td><a href="/contacts/partners/{{ p.id }}">{{ p.name }}</a></td>
         <td>{{ "Company" if p.is_company else "Person" }}</td>
+        <td>{% if p.parent_id %}<a href="/contacts/partners/{{ p.parent_id }}">{{ p.company_name }}</a>{% endif %}</td>
         <td>{% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% endif %}</td>
         <td class="nowrap">{{ p.phone or "" }}</td>
         <td>
@@ -38,7 +40,7 @@
         </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">No partners yet.</td></tr>
+    <tr><td colspan="6" class="muted">No partners yet.</td></tr>
     {% endfor %}
 </table>
 {% endblock %}

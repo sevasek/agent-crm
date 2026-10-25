@@ -11,7 +11,7 @@
     <tr>
         <th>Name</th><th>Service</th><th>Price (USD)</th><th>Currency</th>
         <th>Description</th><th>Pitch</th><th>Proof</th><th>Anchor</th>
-        <th>Default</th><th>Active</th><th></th>
+        <th>Default</th><th>Active</th><th style="min-width:9rem;">In use</th><th></th>
     </tr>
     {% for o in offers %}
     <form id="offer-edit-{{ o.id }}" method="post" action="/definitions/offers/{{ o.id }}/edit"></form>
@@ -33,13 +33,14 @@
         <td><input type="text" name="price_anchor" value="{{ o.price_anchor or '' }}" form="offer-edit-{{ o.id }}" aria-label="Price anchor"></td>
         <td><input type="checkbox" name="is_default" form="offer-edit-{{ o.id }}" aria-label="Default" {% if o.is_default %}checked{% endif %}></td>
         <td><input type="checkbox" name="active" form="offer-edit-{{ o.id }}" aria-label="Active" {% if o.active %}checked{% endif %}></td>
+        <td>{% set usage_id = o.id %}{% include "admin/_definition_usage.html" %}</td>
         <td>
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="offer-edit-{{ o.id }}">
             <button type="submit" form="offer-edit-{{ o.id }}">Save</button>
         </td>
     </tr>
     {% else %}
-    <tr><td colspan="11" class="muted">No offers yet — add one below.</td></tr>
+    <tr><td colspan="12" class="muted">No offers yet — add one below.</td></tr>
     {% endfor %}
 </table>
 </div>

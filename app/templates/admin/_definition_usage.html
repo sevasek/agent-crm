@@ -1,0 +1,8 @@
+{# Open records and campaigns for one service or offer (`usage_id`). #}
+{% set counts = usage_counts.get(usage_id, {}) %}
+{% if counts.get("opportunity") %}{{ counts.opportunity }} open deal{{ "s" if counts.opportunity != 1 }}{% endif %}
+{% if counts.get("lead") %}{% if counts.get("opportunity") %} · {% endif %}{{ counts.lead }} lead{{ "s" if counts.lead != 1 }}{% endif %}
+{% for c in usage_campaigns.get(usage_id, []) %}
+<div><a href="/crm/campaigns/{{ c.id }}">{{ c.name }}</a></div>
+{% endfor %}
+{% if not counts.get("opportunity") and not counts.get("lead") and not usage_campaigns.get(usage_id) %}<span class="muted">—</span>{% endif %}

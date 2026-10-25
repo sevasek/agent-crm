@@ -6,17 +6,18 @@
 <p class="muted">A service is one of the things you sell. <a href="{{ help_url('services') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <a class="btn" href="/definitions/services/new">+ New service</a>
 <table>
-    <tr><th>Name</th><th>Slug</th><th>Nurture list</th><th>Active</th><th></th></tr>
+    <tr><th>Name</th><th>Slug</th><th>Nurture list</th><th>Active</th><th>In use</th><th></th></tr>
     {% for s in services %}
     <tr>
         <td>{{ s.name }}</td>
         <td>{{ s.slug }}</td>
         <td>{{ s.nurture_list_slug or "—" }}</td>
         <td>{{ "yes" if s.active else "no" }}</td>
+        <td>{% set usage_id = s.id %}{% include "admin/_definition_usage.html" %}</td>
         <td><a href="/definitions/services/{{ s.id }}/edit">Edit</a></td>
     </tr>
     {% else %}
-    <tr><td colspan="5" class="muted">No services yet.</td></tr>
+    <tr><td colspan="6" class="muted">No services yet.</td></tr>
     {% endfor %}
 </table>
 {% endblock %}

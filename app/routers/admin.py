@@ -24,7 +24,7 @@ from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, pa
 from app.services.deals import (
     create_deal, get_deal, list_deals, list_parent_candidates, mark_lost,
     check_offer_for_deal, restore_deal, set_deal_service, set_deal_stage, update_deal_fields, record_call_outcome,
-    validate_parent_link, CALL_OUTCOMES, UNSET, service_change_message,
+    validate_parent_link, CALL_OUTCOMES, UNSET, service_change_message, open_record_counts,
 )
 from app.services.lead_records import create_lead, get_lead, list_leads, update_lead, convert_lead
 from app.services.lost_reasons import (
@@ -256,7 +256,7 @@ async def apps_launcher(request: Request, user=Depends(require_login)):
     })
 
 
-_PARTNER_SORT_COLUMNS = ("name", "type", "email", "phone", "tags")
+_PARTNER_SORT_COLUMNS = ("name", "type", "company", "email", "phone", "tags")
 
 
 def _partners_url(q="", tags=(), sort="name", direction="asc"):
@@ -396,18 +396,53 @@ async def new_partner_submit(
     return RedirectResponse(f"/contacts/partners/{partner_id}", status_code=303)
 
 
+_ROLLUP_ACTIVITY_LIMIT = 10
+
+
+def _company_rollup(children):
+    """Open deals and recent activity of the people at a company."""
+    if not children:
+        return {"people_deals": {}, "people_activities": []}
+    names = {c["id"]: c["name"] for c in children}
+    people_deals = {pid: list_deals(partner_id=pid) for pid in names}
+    people_activities = []
+    for pid, name in names.items():
+        for item in list_activities_for_partner(pid):
+            item["display_body"] = activity_display_body(item.get("body") or "")
+            item["partner_name"] = name
+            people_activities.append(item)
+    people_activities.sort(key=lambda a: (a.get("occurred_at") or "", a["id"]), reverse=True)
+    return {
+        "people_deals": people_deals,
+        "people_activities": people_activities[:_ROLLUP_ACTIVITY_LIMIT],
+    }
+
+
 @router.get("/contacts/partners/{partner_id}", response_class=HTMLResponse)
 async def partner_detail(request: Request, partner_id: int, user=Depends(require_login)):
     partner = get_partner(partner_id)
     if not partner:
         return RedirectResponse("/contacts/partners", status_code=303)
+    from app.services.campaigns import campaign_links_for_tags
+    from app.services.delegated_tasks import list_tasks
+
     activities = list_activities_for_partner(partner_id)
     for item in activities:
         item["display_body"] = activity_display_body(item.get("body") or "")
+    deals = annotate_deals(list_deals(partner_id=partner_id))
+    for d in deals:
+        d["campaign_links"] = campaign_links_for_tags(d.get("tags"))
+    children = get_children(partner_id) if partner["is_company"] else []
     return templates.TemplateResponse(request, "admin/partner_detail.html", {
         "request": request, "user": user, "partner": partner,
-        "children": get_children(partner_id) if partner["is_company"] else [],
-        "deals": annotate_deals(list_deals(partner_id=partner_id)),
+        "partner_tags": tags_for_partner(partner_id),
+        "children": children,
+        "company": get_partner(partner["parent_id"]) if partner["parent_id"] else None,
+        "deals": deals,
+        "leads": list_deals(partner_id=partner_id, type="lead"),
+        "tasks": list_tasks(partner_id=partner_id),
+        "deal_names": {d["id"]: d["service_name"] for d in deals},
+        **_company_rollup(children),
         "activities": activities,
         "services": list_services(active_only=True),
         "stages": pipeline_stages.list_stages(),
@@ -475,10 +510,22 @@ async def add_activity(
 
 
 # ==================== Services (catalog) ====================
+def _definition_usage(column):
+    """Open deal/lead counts and campaigns per service or offer id."""
+    from app.services.campaigns import list_campaigns
+
+    campaigns = {}
+    for c in list_campaigns():
+        if c.get(column):
+            campaigns.setdefault(c[column], []).append(c)
+    return {"usage_counts": open_record_counts(column), "usage_campaigns": campaigns}
+
+
 @crm_router.get("/definitions/services", response_class=HTMLResponse)
 async def services_list(request: Request, user=Depends(require_login)):
     return templates.TemplateResponse(request, "admin/services.html", {
         "request": request, "user": user, "services": list_services(),
+        **_definition_usage("service_id"),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
     })
 
@@ -954,9 +1001,19 @@ def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
         from app.services.deal_outcome import attach_outcomes
         deal = dict(deal)
         attach_outcomes([deal])
+    from app.services.delegated_tasks import list_tasks
+
+    activities, tasks = [], []
+    if deal:
+        activities = list_activities_for_deal(deal["id"])
+        for item in activities:
+            item["display_body"] = activity_display_body(item.get("body") or "")
+        tasks = list_tasks(deal_id=deal["id"])
+    company = get_partner(partner["parent_id"]) if partner and partner.get("parent_id") else None
     ctx = {
         "request": request, "user": user, "deal": deal,
-        "partner": partner, "service": service,
+        "partner": partner, "company": company, "service": service,
+        "activities": activities, "tasks": tasks,
         "services": _edit_service_choices(service, form_service_id),
         "offers": _edit_offer_choices(deal),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
@@ -1491,6 +1548,7 @@ async def offers_settings(request: Request, user=Depends(require_login)):
         "request": request, "user": user,
         "offers": offers_service.list_offers(),
         "services": list_services(),
+        **_definition_usage("offer_id"),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
     })
 
@@ -1519,6 +1577,7 @@ async def create_offer_submit(
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
+            **_definition_usage("offer_id"),
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
@@ -1549,6 +1608,7 @@ async def edit_offer_submit(
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
+            **_definition_usage("offer_id"),
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
@@ -1568,6 +1628,7 @@ async def delete_offer_submit(
             "request": request, "user": user,
             "offers": offers_service.list_offers(),
             "services": list_services(),
+            **_definition_usage("offer_id"),
             "csrf_token": generate_csrf_token(get_session_cookie(request)),
             "error": _OFFER_ERROR_MESSAGES.get(error, error),
         }, status_code=400)
@@ -2080,6 +2141,9 @@ async def new_lead_submit(
 async def lead_detail(request: Request, lead_id: int, user=Depends(require_login)):
     lead = get_lead(lead_id)
     if not lead:
+        record = get_deal(lead_id)
+        if record and record.get("type") == "opportunity":
+            return RedirectResponse(f"/crm/deals/{lead_id}/edit", status_code=303)
         return RedirectResponse("/crm/leads", status_code=303)
     return _lead_form_page(request, user, lead=lead)
 

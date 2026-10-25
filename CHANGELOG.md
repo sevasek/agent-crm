@@ -56,6 +56,12 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   opportunity it became. The partners list has a sortable Company column.
   The Services and Offers pages show the open deals, leads, and campaigns
   that use each one.
+- Templates no longer use inline `onclick` / `onchange` / `onkeydown`
+  handlers, which the `script-src 'self'` CSP blocked (a console error on
+  every interaction). They use `data-autosubmit`, `data-confirm`,
+  `data-call-tap`, and `data-copy-target`, bound in `app.js` and
+  `call-tap.js`, instead of regex-parsing the blocked attributes. A test
+  fails if a template reintroduces an inline handler.
 
 ## [1.0.0] - 2026-10-17
 

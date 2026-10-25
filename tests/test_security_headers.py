@@ -196,9 +196,25 @@ def test_login_loads_call_tap_from_static_not_inline(client):
     assert "<!DOCTYPE" not in js.text[:80]
     app_js = client.get("/static/app.js")
     assert app_js.status_code == 200
-    # Partner-page stage <select> has no submit button; CSP blocks its
-    # inline onchange, so app.js has to submit that form.
-    assert "this.form.submit()" in app_js.text
+    # Partner-page stage <select> has no submit button, so app.js submits
+    # forms for data-autosubmit selects.
+    assert "data-autosubmit" in app_js.text
+    assert "data-confirm" in app_js.text
+
+
+def test_templates_have_no_inline_event_handlers():
+    """CSP script-src 'self' blocks on*= attributes; use data- hooks in app.js."""
+    import pathlib
+    import re
+
+    pattern = re.compile(r"\son[a-z]+\s*=\s*[\"']", re.IGNORECASE)
+    offenders = [
+        f"{path.name}:{n}"
+        for path in pathlib.Path("app/templates").rglob("*.html")
+        for n, line in enumerate(path.read_text().splitlines(), 1)
+        if pattern.search(line)
+    ]
+    assert offenders == []
 
 
 def test_hsts_not_sent_on_plain_http_localhost(client):

@@ -110,7 +110,7 @@ def test_call_view_shows_talk_track_and_dial_link(logged_in_client, db):
     assert "btn-tel-big" in resp.text
     assert 'href="#main"' in resp.text
     assert 'id="main"' in resp.text
-    assert f"logCallTap('/actions/deals/{deal_id}/call-tel'" in resp.text
+    assert f'data-call-tap="/actions/deals/{deal_id}/call-tel"' in resp.text
     assert f"/actions/deals/{deal_id}/call-outcome" in resp.text
     assert "Score" in resp.text  # qualified-pool deal, so score section renders
     assert "unknown when qualified" not in resp.text
@@ -194,4 +194,4 @@ def test_partner_detail_phone_uses_tel_link(logged_in_client, db):
     pid = create_partner("Jane Doe", email="jane@x.example", phone="0400 111 222")
     resp = logged_in_client.get(f"/contacts/partners/{pid}")
     assert 'href="tel:0400111222"' in resp.text
-    assert f"logCallTap('/contacts/partners/{pid}/call-tel'" in resp.text
+    assert f'data-call-tap="/contacts/partners/{pid}/call-tel"' in resp.text

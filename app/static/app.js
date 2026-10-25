@@ -55,33 +55,34 @@
     });
 })();
 
-// CSP blocks inline onchange="this.form.submit()". Pipeline selects also
-// carry hx-trigger="change"; let htmx handle those so we don't POST twice.
+// CSP blocks inline handlers, so templates use data- attributes instead.
+
+// <select data-autosubmit> submits its form on change (in place of
+// this.form.submit()). Pipeline selects also carry hx-trigger="change";
+// let htmx handle those so we don't POST twice.
 document.addEventListener("change", function (event) {
     var el = event.target;
     if (!el || el.tagName !== "SELECT" || !el.form) return;
-    var handler = el.getAttribute("onchange") || "";
-    if (handler.indexOf("this.form.submit()") === -1) return;
+    if (!el.hasAttribute("data-autosubmit")) return;
     if (el.hasAttribute("hx-post") && window.htmx) return;
     el.form.submit();
 });
 
+// <button data-confirm="..."> asks before submitting.
 document.addEventListener("submit", function (event) {
     var btn = event.submitter;
     if (!btn) return;
-    var handler = btn.getAttribute("onclick") || "";
-    var match = handler.match(/return confirm\('(.*)'\)/);
-    if (!match) return;
-    if (!window.confirm(match[1])) event.preventDefault();
+    var message = btn.getAttribute("data-confirm");
+    if (message === null) return;
+    if (!window.confirm(message)) event.preventDefault();
 });
 
+// <button data-copy-target="id"> copies that element's text.
 document.addEventListener("click", function (event) {
-    var btn = event.target.closest && event.target.closest("button[onclick]");
+    var btn = event.target.closest && event.target.closest("button[data-copy-target]");
     if (!btn) return;
-    var handler = btn.getAttribute("onclick") || "";
-    if (handler.indexOf("navigator.clipboard.writeText") === -1) return;
-    var key = document.getElementById("new-api-key");
-    if (key && navigator.clipboard) navigator.clipboard.writeText(key.textContent);
+    var source = document.getElementById(btn.getAttribute("data-copy-target"));
+    if (source && navigator.clipboard) navigator.clipboard.writeText(source.textContent);
 });
 
 document.addEventListener("keydown", function (event) {

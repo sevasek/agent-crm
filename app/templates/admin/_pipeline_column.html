@@ -31,7 +31,7 @@
                     hx-include="closest form"
                     hx-swap="none"
                     hx-trigger="change"
-                    onchange="if (!window.htmx) this.form.submit()">
+                    data-autosubmit>
                 {% for s in stages %}
                 <option value="{{ s.key }}" {% if d.stage == s.key %}selected{% endif %}>{{ s.label }}</option>
                 {% endfor %}

@@ -101,7 +101,7 @@
     </form>
     <form method="post" action="/definitions/automations/{{ a.id }}/delete">
         <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="btn-secondary" onclick="return confirm('Delete this automation?')">Delete</button>
+        <button type="submit" class="btn-secondary" data-confirm="Delete this automation?">Delete</button>
     </form>
 </article>
 {% endfor %}

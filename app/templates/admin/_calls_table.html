@@ -17,7 +17,7 @@
         <td><a href="/contacts/partners/{{ d.partner_id }}">{{ d.partner_name }}</a></td>
         <td class="nowrap">
             <a href="{{ d.partner_phone|tel_href }}" class="btn-tel"
-               onclick="logCallTap('/actions/deals/{{ d.id }}/call-tel', '{{ csrf_token }}')">{{ d.partner_phone }}</a>
+               data-call-tap="/actions/deals/{{ d.id }}/call-tel" data-csrf="{{ csrf_token }}">{{ d.partner_phone }}</a>
         </td>
         <td>{{ d.service_name }}</td>
         <td>{% if d.value_estimate %}${{ "%.0f"|format(d.value_estimate) }}{% endif %}</td>
@@ -33,8 +33,7 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                 {% if campaign_slug %}<input type="hidden" name="campaign" value="{{ campaign_slug }}">{% endif %}
                 {% if include_new %}<input type="hidden" name="include_new" value="1">{% endif %}
-                <input type="text" name="note" placeholder="Note (optional)" aria-label="Call note"
-                       onkeydown="if(event.key==='Enter'){event.preventDefault();}">
+                <input type="text" name="note" placeholder="Note (optional)" aria-label="Call note">
                 {% for key, label, _ in outcomes %}
                 <button type="submit" name="outcome" value="{{ key }}"
                         class="btn-outcome btn-outcome-{{ key }}">{{ label }}</button>

@@ -30,7 +30,7 @@
     {% if fit %}
     <p class="muted call-view-score">
         Fit {{ fit.score }}/{{ fit.max }}{% if fit.matched %} —
-        {% for m in fit.matched %}{{ m.label or m.field }}{% if not loop.last %} · {% endif %}{% endfor -%}
+        {% for m in fit.matched %}{{ m|icp_label }}{% if not loop.last %} · {% endif %}{% endfor -%}
         {% endif %}
     </p>
     {% endif %}

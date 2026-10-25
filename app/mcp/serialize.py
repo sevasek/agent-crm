@@ -49,6 +49,8 @@ def partner_brief(partner):
     if not partner:
         return None
     out = _pick(partner, _PARTNER_FIELDS)
+    if "tags" in partner:
+        out["tags"] = list(partner.get("tags") or [])
     out["social_url"] = primary_social_url(partner)
     out["social_links"] = [
         {"label": label, "url": url} for label, url in listed_social_links(partner)
@@ -161,11 +163,12 @@ def offer_brief(offer):
 def icp_brief(fit):
     if not fit:
         return None
+    from app.services.icp import criterion_display
     return json_safe({
         "score": fit.get("score"),
         "max": fit.get("max"),
-        "matched": [c.get("label") or c.get("field") for c in (fit.get("matched") or [])],
-        "unmatched": [c.get("label") or c.get("field") for c in (fit.get("unmatched") or [])],
+        "matched": [criterion_display(c) for c in (fit.get("matched") or [])],
+        "unmatched": [criterion_display(c) for c in (fit.get("unmatched") or [])],
     })
 
 

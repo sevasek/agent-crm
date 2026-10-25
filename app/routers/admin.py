@@ -118,10 +118,17 @@ def _format_hover(value):
     return metric_title(value)
 
 
+def _icp_label(criterion):
+    if isinstance(criterion, dict):
+        return icp_service.criterion_display(criterion)
+    return criterion or ""
+
+
 templates.env.filters["metric"] = _format_metric
 templates.env.filters["pct"] = _format_pct
 templates.env.filters["points"] = _format_points
 templates.env.filters["hover"] = _format_hover
+templates.env.filters["icp_label"] = _icp_label
 
 # Plain-language help for people with no CRM/technical background — one
 # shared doc (docs/WELCOME.md), one section per object, linked by anchor.
@@ -1636,13 +1643,7 @@ async def delete_offer_submit(
 
 
 # ==================== ICP fit criteria ====================
-_ICP_ERROR_MESSAGES = {
-    "invalid_field": "Unknown field.",
-    "invalid_operator": "Unknown operator.",
-    "invalid_value": "Value doesn't match what this operator needs (e.g. a number, or true/false).",
-    "invalid_weight": "Weight must be a whole number.",
-    "not_found": "Criterion not found.",
-}
+_ICP_ERROR_MESSAGES = icp_service.ERROR_MESSAGES
 
 
 @crm_router.get("/definitions/icp", response_class=HTMLResponse)

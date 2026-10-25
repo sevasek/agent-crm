@@ -167,3 +167,117 @@ def test_lead_scores_from_own_columns_not_linked_partner():
     assert row["is_company"] is True
     lead_with_contact = dict(lead, contact_name="Pat Manager")
     assert icp.build_matchable_row(partner, lead_with_contact)["is_company"] is False
+
+
+def test_tag_rule_stores_normalized_slug(db):
+    c, error = icp.create_criterion("company_tag", "has_tag", "Google-Ads", weight=4, label="Ads")
+    assert error is None
+    assert c["field"] == "company_tag"
+    assert c["operator"] == "has_tag"
+    assert c["value"] == "google-ads"
+    assert c["weight"] == 4
+
+
+def test_tag_rule_rejects_bad_operator_and_slug(db):
+    c, error = icp.create_criterion("company_tag", "eq", "google-ads")
+    assert c is None
+    assert error == "tag_operator"
+    c, error = icp.create_criterion("industry", "has_tag", "google-ads")
+    assert c is None
+    assert error == "tag_operator"
+    c, error = icp.create_criterion("deal_tag", "has_tag", "Not A Tag")
+    assert c is None
+    assert error == "invalid_value"
+    c, error = icp.create_criterion("deal_tag", "has_tag", "campaign:spring")
+    assert error is None
+    assert c["value"] == "campaign:spring"
+
+
+def test_has_tag_matches_membership_only():
+    row = {"company_tag": ["google-ads", "gtm"], "deal_tag": ["campaign:spring"]}
+    assert icp.match_criterion(row, "company_tag", "has_tag", "google-ads") is True
+    assert icp.match_criterion(row, "company_tag", "has_tag", "Google-Ads") is True
+    assert icp.match_criterion(row, "company_tag", "has_tag", "meta-pixel") is False
+    assert icp.match_criterion(row, "deal_tag", "has_tag", "campaign:spring") is True
+    assert icp.match_criterion(row, "deal_tag", "has_tag", "google-ads") is False
+    assert icp.match_criterion({}, "company_tag", "has_tag", "google-ads") is False
+
+
+def test_tag_weights_sum_with_other_rules(db):
+    icp.create_criterion("company_tag", "has_tag", "google-ads", weight=5)
+    icp.create_criterion("deal_tag", "has_tag", "campaign:spring", weight=3)
+    icp.create_criterion("team_size", "gt", "10", weight=2)
+    icp.create_criterion("company_tag", "has_tag", "call-tracking", weight=9, active=False)
+    result = icp.score_fit({
+        "company_tag": ["google-ads"],
+        "deal_tag": ["campaign:spring"],
+        "team_size": 4,
+    })
+    assert result["score"] == 8
+    assert result["max"] == 10
+
+
+def test_company_tag_uses_company_or_parent_not_the_person(db):
+    from app.services.partner_tags import apply_partner_tags
+    from app.services.partners import create_partner, get_partner
+
+    company_id = create_partner("Acme Dental", is_company=True)
+    person_id = create_partner("Pat Manager", email="pat@acme.example", parent_id=company_id)
+    other_person = create_partner("Solo", email="solo@x.example")
+    apply_partner_tags(company_id, add=["google-ads", "meta-pixel"])
+    apply_partner_tags(person_id, add=["person-only"])
+    apply_partner_tags(other_person, add=["google-ads"])
+
+    person = get_partner(person_id)
+    company = get_partner(company_id)
+    solo = get_partner(other_person)
+    deal = {"type": "opportunity", "id": None, "tags": ["campaign:spring"], "source": "referral"}
+
+    person_row = icp.build_matchable_row(person, deal)
+    assert person_row["company_tag"] == ["google-ads", "meta-pixel"]
+    assert "person-only" not in person_row["company_tag"]
+    assert person_row["industry"] == person["industry"]
+    assert person_row["deal_tag"] == ["campaign:spring"]
+
+    company_row = icp.build_matchable_row(company, deal)
+    assert company_row["company_tag"] == ["google-ads", "meta-pixel"]
+
+    # A person's own tags are not a company, even when the slug matches.
+    solo_row = icp.build_matchable_row(solo, {"type": "lead", "tags": []})
+    assert solo_row["company_tag"] == []
+
+    # Passed lists are used as-is, including empty, and a lead's profile stays its own.
+    lead = {
+        "type": "lead",
+        "company_name": "Lead Co",
+        "industry": "Dentistry",
+        "tags": ["region:nsw"],
+    }
+    overridden = icp.build_matchable_row(
+        {"is_company": 1, "industry": "Should not fill the lead", "tags": ["gtm"]},
+        lead,
+        company_tags=["online-booking"],
+    )
+    assert overridden["industry"] == "Dentistry"
+    assert overridden["company_tag"] == ["online-booking"]
+    assert overridden["deal_tag"] == ["region:nsw"]
+
+
+def test_company_tag_ignores_a_parent_who_is_not_a_company(db):
+    from app.services.partner_tags import apply_partner_tags
+    from app.services.partners import create_partner, get_partner
+
+    human = create_partner("Not A Company", email="human@x.example")
+    child = create_partner("Child", email="child@x.example", parent_id=human)
+    apply_partner_tags(human, add=["google-ads"])
+    row = icp.build_matchable_row(get_partner(child), {"type": "lead", "tags": []})
+    assert row["company_tag"] == []
+
+
+def test_criterion_display_names_an_unlabeled_tag_rule():
+    assert icp.criterion_display({"field": "company_tag", "operator": "has_tag", "value": "google-ads"}) == (
+        "Company has tag google-ads"
+    )
+    assert icp.criterion_display({
+        "field": "deal_tag", "operator": "has_tag", "value": "campaign:spring", "label": "Spring",
+    }) == "Spring"

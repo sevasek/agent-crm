@@ -4,7 +4,7 @@
 {% block content %}
 <h1>ICP fit criteria</h1>
 <p class="muted">ICP fit criteria are the rules this CRM uses to score how well a lead or deal matches the customer you want. <a href="{{ help_url('icp') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
-<p class="muted">A weighted criterion that contributes to a lead's fit score.</p>
+<p class="muted">A weighted criterion that contributes to a lead's fit score. For a tag, choose <strong>Company has tag</strong> or <strong>Lead or deal has tag</strong>, operator <strong>has_tag</strong>, and the tag slug (for example <code>google-ads</code> or <code>campaign:spring</code>). Company means the linked company partner, or the parent company when the linked partner is a person. One rule per tag; the weights add up with every other matching rule.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <div class="table-scroll">
 <table class="wide-form-table">
@@ -29,7 +29,7 @@
                 {% endfor %}
             </select>
         </td>
-        <td><input type="text" name="value" value="{{ c.value or '' }}" form="icp-edit-{{ c.id }}" aria-label="Value" placeholder="ignored for is_not_null"></td>
+        <td><input type="text" name="value" value="{{ c.value or '' }}" form="icp-edit-{{ c.id }}" aria-label="Value" placeholder="tag slug, number, or text"></td>
         <td><input type="number" name="weight" value="{{ c.weight }}" form="icp-edit-{{ c.id }}" style="width:5rem;" aria-label="Weight"></td>
         <td><input type="checkbox" name="active" form="icp-edit-{{ c.id }}" aria-label="Active" {% if c.active %}checked{% endif %}></td>
         <td>
@@ -68,7 +68,7 @@
     </div>
     <div class="form-row">
         <label for="value">Value</label>
-        <input type="text" id="value" name="value" placeholder="e.g. 10 (for team_size &gt; 10), or true, or retail">
+        <input type="text" id="value" name="value" placeholder="e.g. google-ads, 10, true, or retail">
     </div>
     <div class="form-row">
         <label for="weight">Weight</label>

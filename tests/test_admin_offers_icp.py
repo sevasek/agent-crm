@@ -158,6 +158,42 @@ def test_edit_icp_criterion(logged_in_client, db):
     assert icp.get_criterion(c["id"])["weight"] == 8
 
 
+def test_create_tag_icp_criterion_via_admin_form(logged_in_client, db):
+    resp = logged_in_client.post("/definitions/icp/new", data={
+        "label": "Runs Google Ads",
+        "field": "company_tag",
+        "operator": "has_tag",
+        "value": "Google-Ads",
+        "weight": "5",
+        "active": "on",
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+    }, follow_redirects=False)
+    assert resp.status_code == 303
+    criteria = icp.list_criteria()
+    assert criteria[0]["field"] == "company_tag"
+    assert criteria[0]["operator"] == "has_tag"
+    assert criteria[0]["value"] == "google-ads"
+    assert criteria[0]["weight"] == 5
+
+    page = logged_in_client.get("/definitions/icp")
+    assert "Company has tag" in page.text
+    assert "has_tag" in page.text
+    assert "google-ads" in page.text
+
+
+def test_create_tag_icp_criterion_rejects_wrong_operator(logged_in_client, db):
+    resp = logged_in_client.post("/definitions/icp/new", data={
+        "field": "company_tag",
+        "operator": "is_not_null",
+        "value": "google-ads",
+        "weight": "1",
+        "csrf_token": generate_csrf_token(logged_in_client.cookies.get("session")),
+    })
+    assert resp.status_code == 400
+    assert "has_tag" in resp.text
+    assert icp.list_criteria() == []
+
+
 def test_delete_icp_criterion(logged_in_client, db):
     c, _ = icp.create_criterion("team_size", "gt", "10")
     resp = logged_in_client.post(f"/definitions/icp/{c['id']}/delete", data={
@@ -168,6 +204,27 @@ def test_delete_icp_criterion(logged_in_client, db):
 
 
 # ==================== Call view integration ====================
+
+def test_call_view_shows_company_tag_fit(logged_in_client, db):
+    from app.services.partner_tags import apply_partner_tags
+    from app.services.partners import update_partner
+
+    icp.create_criterion("company_tag", "has_tag", "google-ads", weight=5, label="Runs Google Ads")
+    icp.create_criterion("deal_tag", "has_tag", "campaign:spring", weight=3, label="Spring campaign")
+    pid, _, deal_id = _qualified_deal(db)
+    company_id = create_partner("Acme", is_company=True)
+    update_partner(pid, parent_id=company_id)
+    apply_partner_tags(company_id, add=["google-ads"])
+    apply_partner_tags(pid, add=["person-only"])
+    from app.services.deal_tags import apply_deal_tags
+    apply_deal_tags(deal_id, add=["campaign:spring"])
+
+    resp = logged_in_client.get(f"/actions/deals/{deal_id}/call")
+    assert resp.status_code == 200
+    assert "Fit 8/8" in resp.text
+    assert "Runs Google Ads" in resp.text
+    assert "Spring campaign" in resp.text
+
 
 def test_call_view_shows_fit_score(logged_in_client, db):
     icp.create_criterion("team_size", "gt", "10", weight=5, label="Big team")

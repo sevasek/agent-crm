@@ -28,11 +28,11 @@ Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguou
 | **Campaign** | One row in `campaigns`. The shared pitch for a set of deals. A deal is in it when the deal carries the tag `campaign:<slug>`. |
 | **Merged** | A lost deal record with `merged_into_id` set. The CRM does not delete merged records. |
 | **Research note** | An `activities` row with `type = 'research'`. |
-| **Fit score** | The sum of weights of the matching `icp_criteria`. A lead scores from its own columns. An opportunity scores from the partner. |
+| **Fit score** | The sum of weights of the matching `icp_criteria`. A lead's profile fields come from the lead. An opportunity's profile fields come from the partner. Tag rules are separate: `deal_tag` reads that record's tags, and `company_tag` reads the linked company partner (or the parent company when the linked partner is a person). |
 | **Conversion readiness** | Missing data that conversion needs. Information, not a gate. |
 | **Customer** | A partner with one or more won opportunities. Calculated, not stored. |
 
-Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `activities`,
+Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `partner_tags`, `activities`,
 `pipeline_stages`, `offers`, `icp_criteria`, `delegated_tasks`,
 `stage_automations`, `users`, `api_keys`, OAuth tables, `app_install`.
 
@@ -177,6 +177,19 @@ Writes:
 - `bulk_update_deals` changes service for up to 50 open opportunities when `deal_ids` is passed with `set_service_id` or `set_service_slug` (not both), plus an optional `offer_id` under the same offer rule. `service_slug` only filters. A mismatch writes nothing; the batch is one transaction. Each deal whose service id changes gets the same timeline line.
 - Lead ingest (`POST /api/v1/leads` and MCP `ingest_leads`) takes an optional `tags` array. A re-run merges those tags onto the open deal. Leaving `tags` off the payload leaves the existing set alone. Entries that are not valid slugs are dropped so one bad label cannot fail the lead.
 
+### `partner_tags`
+
+Labels on a partner. Independent of `deal_tags`: a company can be tagged `google-ads` without that slug appearing on its deals. Same slug rules as deal tags (lowercase letters, digits, hyphens and colons, at most 80 characters). Added in migration 10. No later migration changes the table.
+
+| Column | Type | Notes |
+|---|---|---|
+| `partner_id` | INTEGER NOT NULL | FK to `partners(id)`. With `tag`, the primary key. |
+| `tag` | TEXT NOT NULL | The slug. Examples: `google-ads`, `meta-pixel`, `gtm`, `analytics`, `call-tracking`, `online-booking`. Those names are not special; any valid slug is stored the same way. |
+
+The partners list (`/contacts/partners?tag=`) and MCP `search_partners` (`tag` / `tags`) keep a partner only when it carries every listed tag. That filter uses the partner's own tags. It does not walk up to a parent company. `list_partner_tags` reads one partner's tags. `update_partner_tags` writes them: `tags` replaces (`[]` clears), then `add_tags`, then `remove_tags`. `get_partner` and `search_partners` include `tags` on each partner (and on the parent company, when that row is included). There is no separate HTTP API for partner tags; the admin partner form and MCP are the write paths, same as the rest of partner editing.
+
+An ICP `company_tag` rule does walk up: a company partner matches on its own tags, and a person partner matches on the parent company's tags. A person's own tags do not satisfy `company_tag`.
+
 ### `lost_reasons`
 
 Operator configuration, seeded once like pipeline stages.
@@ -281,15 +294,29 @@ active criterion that matches, so order does not matter.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `label` | TEXT | Name shown beside the score. |
-| `field` | TEXT NOT NULL | One of a fixed allowlist (`icp.MATCHABLE_FIELDS`): industry, team size, is-a-company, preferred channel, presence of email / phone / website / social URL, source, value estimate, pain points, goals. Not an arbitrary column, so a typo cannot create a rule that never matches. |
-| `operator` | TEXT NOT NULL | `is_not_null`, `boolean`, `fuzzy_match` (case-insensitive substring, or a `difflib` ratio of at least 0.6), or `eq` / `gt` / `gte` / `lt` / `lte` for numbers. |
-| `value` | TEXT | Ignored for `is_not_null`; `true` or `false` for `boolean`; a number for numeric operators. Validated against the operator at write time. |
+| `field` | TEXT NOT NULL | One of a fixed allowlist (`icp.MATCHABLE_FIELDS`): industry, team size, is-a-company, preferred channel, presence of email / phone / website / social URL, source, value estimate, pain points, goals, plus `company_tag` and `deal_tag`. Not an arbitrary column, so a typo cannot create a rule that never matches. |
+| `operator` | TEXT NOT NULL | `is_not_null`, `boolean`, `fuzzy_match` (case-insensitive substring, or a `difflib` ratio of at least 0.6), `eq` / `gt` / `gte` / `lt` / `lte` for numbers, or `has_tag`. `has_tag` is only valid with `company_tag` and `deal_tag`, and those two fields only accept `has_tag`. |
+| `value` | TEXT | Ignored for `is_not_null`; `true` or `false` for `boolean`; a number for numeric operators; one tag slug for `has_tag` (stored lowercased, for example `google-ads` or `campaign:spring`). Validated against the operator at write time. |
 | `weight` | INTEGER NOT NULL DEFAULT 1 | Points added on a match. |
 | `active` | INTEGER NOT NULL DEFAULT 1 | Inactive rules are kept but not scored. |
 | `created_at`, `updated_at` | TEXT | |
 
 It is a deterministic weighted-rules formula, not a learned model, and it has no
 pass/fail threshold. The call view shows it beside the call-priority score.
+`get_lead` puts the same number on `fit` and on `conversion_readiness.fit_score`.
+`list_leads` with `sort=fit` orders by it. `get_deal` returns it as `icp`.
+
+A tag rule is one row, one slug, one weight. `company_tag` matches when the
+linked company partner has that tag. If the linked partner is a person, the
+parent company is the one that is checked, not the person. A lead with no
+partner does not match a company-tag rule. `deal_tag` matches when the lead or
+deal itself has that tag. Profile fields are unchanged: a lead still scores
+those from its own columns, and an opportunity still scores them from the
+partner. The tag fields are stored in the existing `field` / `operator` /
+`value` columns, so adding them did not bump the schema (still version 14).
+
+MCP: `list_icp_criteria`, `create_icp_criterion`, `update_icp_criterion`,
+`delete_icp_criterion`. `list_catalog` includes `icp_fields` and `icp_operators`.
 
 ### `delegated_tasks`
 
@@ -354,7 +381,8 @@ That is the post-sale model.
 `deals.parent_deal_id`, `deals(stage, board_position)`, `activities.partner_id`, `activities.deal_id`,
 `pipeline_stages.position`, `api_keys.user_id`, `delegated_tasks.deal_id`,
 `delegated_tasks(owner, status)`, `deal_tags(tag)` (the primary key on
-`(deal_id, tag)` covers lookups by deal),
+`(deal_id, tag)` covers lookups by deal), `partner_tags(tag)` (the primary key
+on `(partner_id, tag)` covers lookups by partner; migration 10),
 `stage_automations(stage_key, enabled)`,
 `stage_automation_actions(automation_id, position)`.
 `offers` and `icp_criteria` are small and scanned in full.

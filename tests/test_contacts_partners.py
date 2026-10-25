@@ -175,3 +175,13 @@ def test_sort_by_email_column(logged_in_client):
 
     resp_desc = logged_in_client.get("/contacts/partners?sort=email&dir=desc")
     assert resp_desc.text.index("b@example.com") < resp_desc.text.index("a@example.com")
+
+
+def test_app_tiles_share_one_icon_colour(logged_in_client):
+    """Every tile sits in the same lightness band, so all take the same icon colour."""
+    from app.routers.admin import APPS_MENU
+
+    assert {app["icon_color"] for app in APPS_MENU} == {"black"}
+    html = logged_in_client.get("/apps").text
+    assert "/static/icons/help-black.svg" in html
+    assert "#008300" not in html

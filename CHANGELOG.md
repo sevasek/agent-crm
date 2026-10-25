@@ -72,6 +72,9 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ### Changed
 
+- The Help tile on Apps uses the palette's violet in place of the dark
+  green that stood out from the other tiles, so it takes the same black
+  icon as the rest.
 - The CRM menu is ordered Campaigns, Leads, Pipeline, Deals.
 
 ## [1.0.0] - 2026-10-17

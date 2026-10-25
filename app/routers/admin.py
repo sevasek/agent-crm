@@ -183,13 +183,19 @@ def _safe_int(value):
 # Background colours are the first five slots of the house categorical
 # palette (dataviz skill's references/palette.md), assigned in the
 # palette's fixed order for maximum hue variety across these tiles.
+# The sixth tile skips slot 6 (green #008300): it is far darker than the
+# other five, so it stood out and took a white icon. It uses slot 7
+# (violet) instead: #9085e9 (the palette's lighter step) in light mode,
+# and #8275e3 (between the palette's two violet steps) in dark mode,
+# matching the OKLab lightness the other dark tiles share (~0.62). Both
+# take the same black icon as the rest.
 _PALETTE_SLOTS = [
     {"name": "blue", "light": "#2a78d6", "dark": "#3987e5"},
     {"name": "orange", "light": "#eb6834", "dark": "#d95926"},
     {"name": "aqua", "light": "#1baf7a", "dark": "#199e70"},
     {"name": "yellow", "light": "#eda100", "dark": "#c98500"},
     {"name": "magenta", "light": "#e87ba4", "dark": "#d55181"},
-    {"name": "green", "light": "#008300", "dark": "#008300"},
+    {"name": "violet", "light": "#9085e9", "dark": "#8275e3"},
 ]
 
 

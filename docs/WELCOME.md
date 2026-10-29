@@ -103,7 +103,9 @@ small, out of area) shows the deal as disqualified rather than lost.
 ICP (Ideal Customer Profile) fit criteria are the rules this CRM uses to
 score how well a lead or deal matches the kind of customer you actually
 want. Each matching rule adds the points you gave it — there's no pass or
-fail line, you or your agent decide what score is good enough.
+fail line, you or your agent decide what score is good enough. A rule can
+also check a tag: the company's tags, or the lead's own tags. One rule per
+tag, and those points add up with the rest.
 
 ## Settings
 

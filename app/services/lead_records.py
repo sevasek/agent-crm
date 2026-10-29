@@ -12,7 +12,7 @@ from app.services.deals import (
     get_open_deal_for_partner_service,
     mark_lost,
 )
-from app.services.icp import build_matchable_row, score_fit
+from app.services.icp import build_matchable_row, criterion_display, score_fit
 from app.services.lost_reasons import get_lost_reason, resolve_lost_reason
 from app.services.offers import get_offer
 from app.services.partners import (
@@ -468,8 +468,8 @@ def get_lead(lead_id: int, *, include_extras=True):
     lead["fit"] = {
         "score": fit["score"],
         "max": fit["max"],
-        "matched": [c.get("label") or c.get("field") for c in fit["matched"]],
-        "unmatched": [c.get("label") or c.get("field") for c in fit["unmatched"]],
+        "matched": [criterion_display(c) for c in fit["matched"]],
+        "unmatched": [criterion_display(c) for c in fit["unmatched"]],
     }
     lead["partner"] = partner
     if lead.get("lost_reason_id"):

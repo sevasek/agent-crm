@@ -28,6 +28,19 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ### Added
 
+- ICP fit rules can test a tag. On ICP, choose **Company has tag** or
+  **Lead or deal has tag**, operator `has_tag`, and one tag slug (for
+  example `google-ads`). The weight adds into the fit score the same way
+  as any other rule, including conversion readiness and fit sort. Company
+  means the linked company partner, or the parent company when the linked
+  partner is a person. No schema change: the slug is stored in the existing
+  `icp_criteria` row (schema stays at 14). MCP:
+  `list_icp_criteria`, `create_icp_criterion`, `update_icp_criterion`,
+  `delete_icp_criterion`.
+- Partner tags are readable and writable over MCP. `list_partner_tags` and
+  `update_partner_tags` (`tags` replaces, `add_tags` / `remove_tags` merge)
+  use the same slug rules as deal tags. `search_partners` accepts `tag` /
+  `tags`, and `get_partner` / search results include `tags`.
 - Lost reasons have an `is_disqualification` flag, editable on Lost reasons
   and via `create_lost_reason` / `update_lost_reason`. A deal lost with that
   reason is reported as disqualified on the deal page, deal lists, and MCP

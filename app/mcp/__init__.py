@@ -51,7 +51,12 @@ INSTRUCTIONS = (
     "Stage automations are operator configuration, empty until someone adds "
     "them: list_stage_automations, create_stage_automation, "
     "update_stage_automation, delete_stage_automation. Enabled ones run when "
-    "a deal enters their stage."
+    "a deal enters their stage. "
+    "Partner tags are separate from deal tags: list_partner_tags and "
+    "update_partner_tags (tags replaces; add_tags/remove_tags merge). "
+    "search_partners tag/tags filters on the partner's own tags. "
+    "ICP tag rules: create_icp_criterion with field company_tag or deal_tag, "
+    "operator has_tag, and one tag slug. Weights sum like every other rule."
 )
 
 

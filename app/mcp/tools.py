@@ -45,6 +45,11 @@ from app.services.catalog import (
     update_catalog_service,
 )
 from app.services.deal_tags import TAG_HELP, MAX_TAGS, apply_deal_tags, list_tags, parse_tag_list
+from app.services.partner_tags import (
+    apply_partner_tags,
+    attach_tags as attach_partner_tags,
+    tags_for_partner,
+)
 from app.services.deals import (
     CALL_OUTCOMES,
     UNSET,
@@ -341,20 +346,67 @@ def _fit_for_deal(deal, partner):
 
 def search_partners(arguments):
     query = as_text(arguments.get("query")).strip()
+    tag_filter, error = _tag_filter_arg(arguments)
+    if error:
+        return error
     limit = clamp_limit(arguments.get("limit"))
-    rows, truncated = paginate(list_partners(search=query), limit)
+    rows, truncated = paginate(list_partners(search=query, tags=tag_filter), limit)
+    parents = {}
+    for partner in rows:
+        parent_id = partner.get("parent_id")
+        if parent_id and parent_id not in parents:
+            parent = get_partner(parent_id)
+            if parent:
+                parents[parent_id] = parent
+    attach_partner_tags(rows)
+    if parents:
+        attach_partner_tags(list(parents.values()))
     partners = []
     for partner in rows:
         brief = partner_brief(partner)
-        if partner.get("parent_id"):
-            brief["company"] = partner_brief(get_partner(partner["parent_id"]))
+        if partner.get("parent_id") and partner["parent_id"] in parents:
+            brief["company"] = partner_brief(parents[partner["parent_id"]])
         partners.append(brief)
     return _ok(
         partners=partners,
         count=len(partners),
         truncated=truncated,
         query=query or None,
+        tags=tag_filter,
     )
+
+
+def list_partner_tags_tool(arguments):
+    partner_id, error = _id_arg(arguments, "partner_id")
+    if error:
+        return error
+    _partner, error = _require_partner(partner_id)
+    if error:
+        return error
+    return _ok(partner_id=partner_id, tags=tags_for_partner(partner_id))
+
+
+def update_partner_tags_tool(arguments):
+    partner_id, error = _id_arg(arguments, "partner_id")
+    if error:
+        return error
+    _partner, error = _require_partner(partner_id)
+    if error:
+        return error
+    tag_ops, error = _tag_ops_arg(arguments)
+    if error:
+        return error
+    if not tag_ops:
+        return _err(
+            "tags_required",
+            "Pass tags to replace the set, or add_tags / remove_tags to merge. " + TAG_HELP,
+        )
+    tag_error = apply_partner_tags(partner_id, **tag_ops)
+    if tag_error == "not_found":
+        return _err("not_found", f"No partner with id {partner_id}")
+    if tag_error:
+        return _err(tag_error, tag_error)
+    return _ok(partner_id=partner_id, tags=tags_for_partner(partner_id))
 
 
 def get_partner_tool(arguments):
@@ -364,7 +416,12 @@ def get_partner_tool(arguments):
     partner, error = _require_partner(partner_id)
     if error:
         return error
+    attach_partner_tags([partner])
     parent = get_partner(partner["parent_id"]) if partner.get("parent_id") else None
+    if parent:
+        attach_partner_tags([parent])
+    people = get_children(partner_id)
+    attach_partner_tags(people)
     deals = [deal_brief(d) for d in list_deals(partner_id=partner_id)]
     leads = [deal_brief(d) for d in list_deals(partner_id=partner_id, type="lead")]
     won_keys = pipeline_stages.won_stage_keys()
@@ -377,7 +434,7 @@ def get_partner_tool(arguments):
     return _ok(
         partner=partner_brief(partner),
         company=partner_brief(parent),
-        people=[partner_brief(p) for p in get_children(partner_id)],
+        people=[partner_brief(p) for p in people],
         deals=deals,
         leads=leads,
         is_customer=is_customer,
@@ -592,6 +649,14 @@ def list_catalog_tool(_arguments):
                 "is_disqualification": bool(r.get("is_disqualification")),
             }
             for r in list_lost_reasons()
+        ],
+        icp_fields=[
+            {"key": key, "label": label}
+            for key, label in icp_service.MATCHABLE_FIELDS.items()
+        ],
+        icp_operators=[
+            {"key": key, "label": label}
+            for key, label in icp_service.OPERATORS.items()
         ],
     )
     # Some deployments pin this list. Other clients leave the env
@@ -1456,13 +1521,28 @@ TOOLS = [
         "description": (
             "Find partners (people or companies) by name, email, phone, or website. "
             "Nested people under a company are included. Call this before create_partner. "
-            "Empty query lists partners (capped). Results include parent company when set."
+            "Empty query lists partners (capped). Results include parent company when set, "
+            "and each partner's tags. tag / tags filter to partners that carry every listed "
+            "tag (the partner's own tags, not a parent company's). "
+            "A tag is a lowercase slug of letters, digits, hyphens and colons."
         ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
                 "query": {"type": "string", "description": "Name or email substring. Empty = list."},
+                "tag": {
+                    "type": "string",
+                    "description": "Single partner tag. Combined with tags; the partner must carry every tag.",
+                },
+                "tags": {
+                    **_TAGS_PROP,
+                    "description": (
+                        "Match partners that carry every one of these tags. "
+                        "Lowercase slugs of letters, digits, hyphens and colons "
+                        "(google-ads, campaign:example-2026-09)."
+                    ),
+                },
                 "limit": _LIMIT_PROP,
             },
         },
@@ -1478,8 +1558,9 @@ TOOLS = [
     {
         "name": "get_partner",
         "description": (
-            "Full partner record: profile, parent company, people, deals, recent activities. "
-            "Use after search_partners when you have an id."
+            "Full partner record: profile, tags, parent company, people, deals, recent activities. "
+            "Use after search_partners when you have an id. "
+            "tags is this partner's own labels (empty array when none)."
         ),
         "inputSchema": {
             "type": "object",
@@ -1498,6 +1579,71 @@ TOOLS = [
             "openWorldHint": False,
         },
         "handler": get_partner_tool,
+    },
+    {
+        "name": "list_partner_tags",
+        "description": (
+            "List one partner's tags. A tag is a lowercase slug of letters, digits, "
+            "hyphens and colons (google-ads, meta-pixel, campaign:example-2026-09). "
+            "Returns an empty array when the partner has none. "
+            "These are the partner's own tags, separate from deal tags."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["partner_id"],
+            "properties": {
+                "partner_id": {"type": "integer", "minimum": 1},
+            },
+        },
+        "annotations": {
+            "title": "List partner tags",
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": list_partner_tags_tool,
+    },
+    {
+        "name": "update_partner_tags",
+        "description": (
+            "Add, remove, or replace a partner's tags. "
+            "tags replaces the whole set (tags=[] clears it). "
+            "add_tags and remove_tags merge, and run after a replace when both are sent "
+            "(remove_tags wins on overlap). "
+            "A tag is a lowercase slug of letters, digits, hyphens and colons "
+            "(google-ads, meta-pixel, gtm). Adding a tag the partner already has is a no-op. "
+            "Does not change deal tags."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["partner_id"],
+            "properties": {
+                "partner_id": {"type": "integer", "minimum": 1},
+                "tags": {
+                    **_TAGS_PROP,
+                    "description": "Replace the partner's tags with this set. [] clears them.",
+                },
+                "add_tags": {
+                    **_TAGS_PROP,
+                    "description": "Merge these tags onto the partner. Applied after tags.",
+                },
+                "remove_tags": {
+                    **_TAGS_PROP,
+                    "description": "Remove these tags. Applied last, so it wins over tags and add_tags.",
+                },
+            },
+        },
+        "annotations": {
+            "title": "Update partner tags",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": update_partner_tags_tool,
     },
     {
         "name": "list_deals",
@@ -2611,8 +2757,10 @@ TOOLS = [
 
 from app.mcp.lead_tools import LEAD_TOOLS
 from app.mcp.campaign_tools import CAMPAIGN_TOOLS
+from app.mcp.icp_tools import ICP_TOOLS
 TOOLS.extend(LEAD_TOOLS)
 TOOLS.extend(CAMPAIGN_TOOLS)
+TOOLS.extend(ICP_TOOLS)
 
 TOOL_BY_NAME = {tool["name"]: tool for tool in TOOLS}
 

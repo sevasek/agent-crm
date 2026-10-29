@@ -368,6 +368,53 @@ def test_merge_leads_missing_duplicate_reason_fails_before_writes(db):
     assert get_deal(target["id"])["phone"] is None
 
 
+def test_fit_includes_company_and_deal_tags_and_sorts(db):
+    from app.services.icp import create_criterion
+    from app.services.partner_tags import apply_partner_tags
+
+    company_id = create_partner("Acme Dental", is_company=True)
+    person_id = create_partner("Pat Manager", parent_id=company_id, email="pat@acme.example")
+    apply_partner_tags(company_id, add=["google-ads", "meta-pixel"])
+    apply_partner_tags(person_id, add=["person-only"])
+    create_criterion("company_tag", "has_tag", "google-ads", weight=5, label="Runs Google Ads")
+    create_criterion("company_tag", "has_tag", "call-tracking", weight=2, label="Call tracking")
+    create_criterion("deal_tag", "has_tag", "campaign:spring", weight=3, label="Spring campaign")
+    create_criterion("industry", "fuzzy_match", "dental", weight=1, label="Dental")
+
+    lead, error = create_lead(
+        company_name="Acme Dental",
+        contact_name="Pat Manager",
+        industry="Dental",
+        partner_id=person_id,
+        tags=["campaign:spring", "region:nsw"],
+    )
+    assert error is None
+    full = get_lead(lead["id"])
+    assert full["conversion_readiness"]["fit_score"] == 9
+    assert full["conversion_readiness"]["fit_max"] == 11
+    assert full["fit"]["score"] == 9
+    assert "Runs Google Ads" in full["fit"]["matched"]
+    assert "Spring campaign" in full["fit"]["matched"]
+    assert "Dental" in full["fit"]["matched"]
+    assert "Call tracking" in full["fit"]["unmatched"]
+
+    direct, _error = create_lead(
+        company_name="Acme Dental",
+        email="office@acme.example",
+        partner_id=company_id,
+        tags=["campaign:spring"],
+    )
+    assert get_lead(direct["id"])["fit"]["score"] == 8  # company tag + deal tag, no dental industry
+
+    untagged, _error = create_lead(company_name="No Tags Co", email="n@x.example", tags=["region:nsw"])
+    assert get_lead(untagged["id"])["conversion_readiness"]["fit_score"] == 0
+
+    rows = list_leads(sort="fit")
+    assert [row["id"] for row in rows[:2]] == [lead["id"], direct["id"]]
+    assert rows[0]["fit_score"] == 9
+    assert rows[-1]["fit_score"] == 0
+
+
 def test_list_leads_and_get_lead(db):
     create_lead(company_name="Riverstone Dental", email="pm@riverstone.example", source="research:directory")
     create_lead(company_name="Other", email="o@x.example")

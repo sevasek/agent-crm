@@ -91,8 +91,10 @@ only `text/event-stream`). It is stateless, so no session is required.
 
 | Tool | What it does |
 | --- | --- |
-| `search_partners` | Search name, email, phone, website. Returns nested people and the parent `company`. |
-| `get_partner` | Full record: profile, parent company, people, opportunities, open `leads`, `is_customer`, and recent activities. |
+| `search_partners` | Search name, email, phone, website. Returns nested people and the parent `company`. `tag` / `tags` keep partners that carry every listed tag (the partner's own tags). Each partner includes `tags`. |
+| `get_partner` | Full record: profile, `tags`, parent company, people, opportunities, open `leads`, `is_customer`, and recent activities. |
+| `list_partner_tags` | One partner's tags. Empty array when there are none. Separate from deal tags. |
+| `update_partner_tags` | `tags` replaces (`[]` clears). `add_tags` and `remove_tags` merge, and `remove_tags` wins on overlap. Same slug rules as deal tags. |
 | `list_deals` | Opportunities by default (`type=opportunity`, `include_lost=false`). Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`, `tags`, `type` (`lead` / `all`), `include_lost`. **Breaking:** lost records are hidden unless `include_lost=true`. Each row includes `type`, `active`, `lost_reason`, `tags`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. |
 | `list_tags` | Tags in use, each with a `count`. Lost records are not counted. |
 | `get_deal` | One deal record (lead or opportunity), including `tags`, `child_deals`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. A lead also returns its contact columns. |
@@ -104,7 +106,7 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `update_campaign` | Change fields. `new_slug` rewrites the `campaign:` tag on linked deals. Null clears an optional field. |
 | `archive_campaign` | Archive a campaign so `list_campaigns` hides it. `close_untouched` also marks open records with only system timeline entries lost (Campaign cancelled). `unarchive` sets it back to paused. |
 | `list_due_followups` | Open deal records whose `next_action_date` is today or earlier. Includes leads and opportunities. Filter `type`, `owner` / `owner_key`, `service_slug`. |
-| `list_catalog` | Services, pipeline stages (with `is_lost` marked deprecated), offers, call-outcome keys, activity types (includes `research`), and `lost_reasons` (including `is_disqualification`). |
+| `list_catalog` | Services, pipeline stages (with `is_lost` marked deprecated), offers, call-outcome keys, activity types (includes `research`), `lost_reasons` (including `is_disqualification`), and `icp_fields` / `icp_operators`. |
 | `ingest_leads` | Creates **leads**, not partners. `type=opportunity` keeps the old partner + opportunity path. Strong-key matches fill-empty; weak-key-only matches create a new lead. Optional `tags` merge. |
 | `create_lead` | Create one lead. Does not create a partner. Never refuses on duplicates; returns `possible_duplicates`. Do not use `create_partner` for a research candidate. |
 | `update_lead` / `get_lead` / `list_leads` | Lead reads and writes. `get_lead` returns `fit`, `conversion_readiness`, `possible_duplicates`, `last_researched_at`, `research_note_count`. Lead payloads include `outcome` and `is_disqualified`. |
@@ -130,6 +132,10 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `create_stage_automation` | `name`, `stage_key`, optional `service_slug` / `service_id` / `offer_id`, `enabled`, and `actions`. |
 | `update_stage_automation` | Rename, retarget, enable or disable, change scope, or replace `actions`. `service_slug` `""` or `service_id` null clears the service scope. `offer_id` null clears the offer scope. |
 | `delete_stage_automation` | Remove one automation. Deals and tasks already created stay. |
+| `list_icp_criteria` | Fit rules, including inactive ones unless `active_only=true`. Also returns the field and operator allowlists. |
+| `create_icp_criterion` | Add a fit rule. Tag rules use `field` `company_tag` or `deal_tag`, `operator` `has_tag`, and `value` set to one tag slug. `weight` is the points. |
+| `update_icp_criterion` | Change one rule. Omitted fields stay. |
+| `delete_icp_criterion` | Remove one rule. |
 
 ## Stage automations
 
@@ -356,3 +362,32 @@ that carry every listed tag, and that filter combines with the others.
 out of the lead leaves the set alone. `update_deal`'s `tags` replaces;
 `add_tags` and `remove_tags` merge. `bulk_update_deals` merges across the
 deals you already select with `deal_ids` or `service_slug`.
+
+## Partner tags
+
+Partner tags use the same slug rules and live in `partner_tags`, not on the
+deal. `list_partner_tags` reads one partner. `update_partner_tags` writes:
+`tags` replaces the set, then `add_tags`, then `remove_tags`. `search_partners`
+with `tag` or `tags` returns only partners that carry every listed tag. That
+filter does not include a person's parent company. `get_partner` and search
+results include `tags`.
+
+## ICP tag rules
+
+Fit is still the sum of the weights of the active rules that match. To give
+points for a tag, call `create_icp_criterion` (or add the row under ICP in
+the CRM):
+
+```json
+{"name": "create_icp_criterion", "arguments": {
+  "field": "company_tag", "operator": "has_tag", "value": "google-ads",
+  "weight": 5, "label": "Runs Google Ads"}}
+```
+
+`company_tag` matches the linked company partner. When the linked partner is
+a person, the parent company is checked instead of the person's own tags.
+`deal_tag` matches a tag on the lead or deal itself. One rule per slug. The
+same `weight` is used as for industry, team size, and the other fields.
+`get_lead` (`fit`, `conversion_readiness.fit_score`), `list_leads`
+(`sort=fit`), and `get_deal` (`icp`) all include it. `list_catalog` lists
+`icp_fields` and `icp_operators`.

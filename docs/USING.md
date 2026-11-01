@@ -26,7 +26,7 @@ A **deal** is a lead you have decided to pursue. It belongs to one partner and o
 - **Offers** — the price and the short pitch you use on a call.
 - **Automations** — optional. When a deal enters a stage, the CRM can create a task or a follow-on deal. A new install has none of these.
 - **Lost reasons** — the list you pick from when a deal is lost. "Not now" can also notify your nurture tool, if you have set one up. Tick Disqualification when that reason should show as disqualified rather than lost. A new install includes a Disqualified reason with that tick on.
-- **ICP** — fit rules. Each matching rule adds the points you gave it. There is no pass mark. You, or your agent, decide. A rule can also award points when the company has a tag, or when the lead itself has a tag. Pick Company has tag or Lead or deal has tag, operator has_tag, and the tag (for example google-ads). One rule per tag.
+- **ICP** — fit rules. Each matching rule adds the points you gave it. There is no pass mark. You, or your agent, decide. A rule can also award points when the company has a tag, or when the lead itself has a tag. Pick Company has tag or Lead or deal has tag, operator has_tag, and the tag (for example google-ads). One rule per tag. A rule can also use a company metric (for example google-rating at least 4.5, or google-review-count up by 20 over 90 days). The readings live on the company page, each with the time it was captured. A person uses their company's readings.
 - **Settings** — your password and the keys an agent or an import uses.
 
 A new install starts with seven stages: New, Contacted, Qualified, Nurture, Proposal, Won, and Lost. You can rename them. It does not start with your services, offers, or fit rules. You add those.

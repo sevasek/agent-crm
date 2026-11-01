@@ -95,6 +95,9 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `get_partner` | Full record: profile, `tags`, parent company, people, opportunities, open `leads`, `is_customer`, and recent activities. |
 | `list_partner_tags` | One partner's tags. Empty array when there are none. Separate from deal tags. |
 | `update_partner_tags` | `tags` replaces (`[]` clears). `add_tags` and `remove_tags` merge, and `remove_tags` wins on overlap. Same slug rules as deal tags. |
+| `record_partner_metric` | Append one intel snapshot (`metric_key`, `source`, `numeric_value` and/or `text_value`, optional `captured_at`). Does not overwrite history. |
+| `record_partner_metrics` | Append up to 50 snapshots in one transaction. One invalid item writes nothing. |
+| `list_partner_metrics` | One partner's snapshots, newest first. Filter by `metric_key` and `captured_after` / `captured_before`. `latest` is the newest row of each key. |
 | `list_deals` | Opportunities by default (`type=opportunity`, `include_lost=false`). Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`, `tags`, `type` (`lead` / `all`), `include_lost`. **Breaking:** lost records are hidden unless `include_lost=true`. Each row includes `type`, `active`, `lost_reason`, `tags`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. |
 | `list_tags` | Tags in use, each with a `count`. Lost records are not counted. |
 | `get_deal` | One deal record (lead or opportunity), including `tags`, `child_deals`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. A lead also returns its contact columns. |
@@ -132,9 +135,9 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `create_stage_automation` | `name`, `stage_key`, optional `service_slug` / `service_id` / `offer_id`, `enabled`, and `actions`. |
 | `update_stage_automation` | Rename, retarget, enable or disable, change scope, or replace `actions`. `service_slug` `""` or `service_id` null clears the service scope. `offer_id` null clears the offer scope. |
 | `delete_stage_automation` | Remove one automation. Deals and tasks already created stay. |
-| `list_icp_criteria` | Fit rules, including inactive ones unless `active_only=true`. Also returns the field and operator allowlists. |
-| `create_icp_criterion` | Add a fit rule. Tag rules use `field` `company_tag` or `deal_tag`, `operator` `has_tag`, and `value` set to one tag slug. `weight` is the points. |
-| `update_icp_criterion` | Change one rule. Omitted fields stay. |
+| `list_icp_criteria` | Fit rules, including inactive ones unless `active_only=true`. Also returns the field and operator allowlists. Each rule includes `metric_key` and `period_days`. |
+| `create_icp_criterion` | Add a fit rule. Tag rules use `field` `company_tag` or `deal_tag`, `operator` `has_tag`, and `value` set to one tag slug. A company metric uses `field` `company_metric`, `metric_key`, a numeric operator, and `value`. `period_days` tests the change over that many days. `weight` is the points. |
+| `update_icp_criterion` | Change one rule. Omitted fields stay. `period_days` null clears the window. |
 | `delete_icp_criterion` | Remove one rule. |
 
 ## Stage automations
@@ -391,3 +394,52 @@ same `weight` is used as for industry, team size, and the other fields.
 `get_lead` (`fit`, `conversion_readiness.fit_score`), `list_leads`
 (`sort=fit`), and `get_deal` (`icp`) all include it. `list_catalog` lists
 `icp_fields` and `icp_operators`.
+
+## Partner metrics
+
+A metric snapshot is one reading at one time: a slug you choose
+(`google-rating`, `google-review-count`), a number and/or a short note, a
+source slug (`google-maps`), and `captured_at`. Omit `captured_at` to use
+the current time. A date alone is midnight UTC. Recording again appends
+another row. Nothing updates the previous one.
+
+```json
+{"name": "record_partner_metrics", "arguments": {"snapshots": [
+  {"partner_id": 4, "metric_key": "google-rating", "numeric_value": 4.8,
+   "source": "google-maps", "captured_at": "2026-08-01T15:04:00Z"},
+  {"partner_id": 4, "metric_key": "google-review-count", "numeric_value": 312,
+   "source": "google-maps", "captured_at": "2026-08-01T15:04:00Z"}
+]}}
+```
+
+`list_partner_metrics` reads that partner's own rows. `get_partner` includes
+`latest_metrics` (and the parent company's, on `company`). Record company
+intel on the company. A person's own rows are not what a company-metric
+fit rule reads.
+
+## ICP metric rules
+
+Same fit sum as every other rule. To score a metric:
+
+```json
+{"name": "create_icp_criterion", "arguments": {
+  "field": "company_metric", "operator": "gte", "value": "4.5",
+  "metric_key": "google-rating", "weight": 5, "label": "Strong Google rating"}}
+```
+
+That matches when the company's latest `google-rating` is at least 4.5.
+Add `period_days` to test the change instead of the level:
+
+```json
+{"name": "create_icp_criterion", "arguments": {
+  "field": "company_metric", "operator": "gte", "value": "20",
+  "metric_key": "google-review-count", "period_days": 90, "weight": 3,
+  "label": "Review count up over 90 days"}}
+```
+
+The change is the latest numeric reading minus the newest numeric reading
+at or before 90 days ago. The latest reading must be inside that window.
+No baseline, or no reading inside the window, does not match. `gt`, `lt`,
+`lte`, and `eq` work the same way, so a rule can also look for a flat or
+falling number. The company is the linked company partner, or the parent
+company when the linked partner is a person.

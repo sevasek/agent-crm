@@ -32,6 +32,81 @@
 <a class="btn btn-secondary" href="/contacts/partners/{{ partner.id }}/edit">Edit</a>
 <a class="btn" href="/crm/deals/new?partner_id={{ partner.id }}">+ New deal</a>
 
+<h2>Intel</h2>
+<p class="muted">Timestamped readings for this partner. A new reading is kept alongside the older ones. Company metric fit rules use a company partner. When the partner is a person, they use the parent company.</p>
+{% if metric_error %}<p class="error">{{ metric_error }}</p>{% endif %}
+{% if latest_metrics %}
+<table>
+    <tr><th>Metric</th><th>Value</th><th>Note</th><th>Source</th><th>Captured</th></tr>
+    {% for m in latest_metrics %}
+    <tr>
+        <td>{{ m.metric_key }}</td>
+        <td>{% if m.numeric_value is not none %}{{ m.numeric_value }}{% endif %}</td>
+        <td>{{ m.text_value or "" }}</td>
+        <td>{{ m.source }}</td>
+        <td>{{ m.captured_at }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% else %}
+<p class="muted">No readings yet.</p>
+{% endif %}
+{% if metric_history|length > latest_metrics|length %}
+<h3>Recent history</h3>
+<table>
+    <tr><th>Metric</th><th>Value</th><th>Note</th><th>Source</th><th>Captured</th></tr>
+    {% for m in metric_history %}
+    <tr>
+        <td>{{ m.metric_key }}</td>
+        <td>{% if m.numeric_value is not none %}{{ m.numeric_value }}{% endif %}</td>
+        <td>{{ m.text_value or "" }}</td>
+        <td>{{ m.source }}</td>
+        <td>{{ m.captured_at }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+<form method="post" action="/contacts/partners/{{ partner.id }}/metrics">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="metric_key">Metric</label>
+        <input type="text" id="metric_key" name="metric_key" placeholder="google-rating" aria-label="Metric key">
+    </div>
+    <div class="form-row">
+        <label for="numeric_value">Number</label>
+        <input type="text" id="numeric_value" name="numeric_value" placeholder="4.8" aria-label="Numeric value">
+    </div>
+    <div class="form-row">
+        <label for="text_value">Note</label>
+        <input type="text" id="text_value" name="text_value" placeholder="optional" aria-label="Text value">
+    </div>
+    <div class="form-row">
+        <label for="source">Source</label>
+        <input type="text" id="source" name="source" placeholder="google-maps" aria-label="Source">
+    </div>
+    <div class="form-row">
+        <label for="captured_at">Captured</label>
+        <input type="text" id="captured_at" name="captured_at" placeholder="blank for now, or 2026-08-01T15:04:00Z" aria-label="Captured at">
+    </div>
+    <button type="submit">Record snapshot</button>
+</form>
+{% if company and company_latest_metrics %}
+<h3>Intel on <a href="/contacts/partners/{{ company.id }}">{{ company.name }}</a></h3>
+<p class="muted">Fit rules for this person use these readings.</p>
+<table>
+    <tr><th>Metric</th><th>Value</th><th>Note</th><th>Source</th><th>Captured</th></tr>
+    {% for m in company_latest_metrics %}
+    <tr>
+        <td>{{ m.metric_key }}</td>
+        <td>{% if m.numeric_value is not none %}{{ m.numeric_value }}{% endif %}</td>
+        <td>{{ m.text_value or "" }}</td>
+        <td>{{ m.source }}</td>
+        <td>{{ m.captured_at }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% endif %}
+
 {% if partner.is_company and children %}
 <h2>People at this company</h2>
 <table>

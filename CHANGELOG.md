@@ -28,6 +28,19 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ### Added
 
+- Company intel snapshots. A partner can store many timestamped readings per
+  metric key (`google-rating`, `google-review-count`, and any later slug),
+  each with a number and/or a note, a source (`google-maps`), and the time
+  it was captured. A new reading is appended. Older readings stay.
+  Migration 15 adds `partner_metric_snapshots` (empty on existing databases)
+  and nullable `metric_key` / `period_days` columns on `icp_criteria`.
+  Existing partners, deals, and fit rules are unchanged.
+  MCP: `record_partner_metric`, `record_partner_metrics`, `list_partner_metrics`.
+  `get_partner` includes `latest_metrics`. The partner page shows the latest
+  readings and can record one. An ICP **Company metric** rule scores the
+  company's latest number (`gte` 4.5 on `google-rating`) or the change over
+  `period_days` (review count `gte` 20 over 90 days). A person uses the
+  parent company's snapshots, same as a company-tag rule.
 - ICP fit rules can test a tag. On ICP, choose **Company has tag** or
   **Lead or deal has tag**, operator `has_tag`, and one tag slug (for
   example `google-ads`). The weight adds into the fit score the same way

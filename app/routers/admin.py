@@ -19,6 +19,12 @@ from app.services.partner_tags import (
     apply_partner_tags, attach_tags as attach_partner_tags, parse_tag_list as parse_partner_tag_list,
     coerce_tag_filter as coerce_partner_tag_filter, tags_for_partner,
 )
+from app.services.partner_metrics import (
+    ERROR_MESSAGES as METRIC_ERROR_MESSAGES,
+    latest_snapshots,
+    recent_snapshots,
+    record_snapshot,
+)
 from app.services.catalog import create_service, get_service, update_service, list_services
 from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
 from app.services.deals import (
@@ -431,14 +437,11 @@ def _company_rollup(children):
     }
 
 
-@router.get("/contacts/partners/{partner_id}", response_class=HTMLResponse)
-async def partner_detail(request: Request, partner_id: int, user=Depends(require_login)):
-    partner = get_partner(partner_id)
-    if not partner:
-        return RedirectResponse("/contacts/partners", status_code=303)
+def _partner_detail_context(request, user, partner, *, metric_error=None):
     from app.services.campaigns import campaign_links_for_tags
     from app.services.delegated_tasks import list_tasks
 
+    partner_id = partner["id"]
     activities = list_activities_for_partner(partner_id)
     for item in activities:
         item["display_body"] = activity_display_body(item.get("body") or "")
@@ -446,11 +449,16 @@ async def partner_detail(request: Request, partner_id: int, user=Depends(require
     for d in deals:
         d["campaign_links"] = campaign_links_for_tags(d.get("tags"))
     children = get_children(partner_id) if partner["is_company"] else []
-    return templates.TemplateResponse(request, "admin/partner_detail.html", {
+    company = get_partner(partner["parent_id"]) if partner["parent_id"] else None
+    latest, _lookup_error = latest_snapshots(partner_id)
+    company_latest = []
+    if company and not partner["is_company"]:
+        company_latest, _lookup_error = latest_snapshots(company["id"])
+    return {
         "request": request, "user": user, "partner": partner,
         "partner_tags": tags_for_partner(partner_id),
         "children": children,
-        "company": get_partner(partner["parent_id"]) if partner["parent_id"] else None,
+        "company": company,
         "deals": deals,
         "leads": list_deals(partner_id=partner_id, type="lead"),
         "tasks": list_tasks(partner_id=partner_id),
@@ -460,8 +468,54 @@ async def partner_detail(request: Request, partner_id: int, user=Depends(require
         "services": list_services(active_only=True),
         "stages": pipeline_stages.list_stages(),
         "social_links": listed_social_links(partner),
+        "latest_metrics": latest or [],
+        "metric_history": recent_snapshots(partner_id, limit=10),
+        "company_latest_metrics": company_latest or [],
+        "metric_error": METRIC_ERROR_MESSAGES.get(metric_error, metric_error) if metric_error else None,
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
-    })
+    }
+
+
+@router.get("/contacts/partners/{partner_id}", response_class=HTMLResponse)
+async def partner_detail(request: Request, partner_id: int, user=Depends(require_login)):
+    partner = get_partner(partner_id)
+    if not partner:
+        return RedirectResponse("/contacts/partners", status_code=303)
+    return templates.TemplateResponse(
+        request, "admin/partner_detail.html",
+        _partner_detail_context(request, user, partner),
+    )
+
+
+@router.post("/contacts/partners/{partner_id}/metrics")
+async def record_partner_metric_submit(
+    request: Request, partner_id: int,
+    metric_key: str = Form(""),
+    numeric_value: str = Form(""),
+    text_value: str = Form(""),
+    source: str = Form(""),
+    captured_at: str = Form(""),
+    csrf_token: str = Form(...),
+    user=Depends(require_login),
+):
+    partner = get_partner(partner_id)
+    if not partner:
+        return RedirectResponse("/contacts/partners", status_code=303)
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse(f"/contacts/partners/{partner_id}", status_code=303)
+    _row, error = record_snapshot(
+        partner_id, metric_key, source,
+        numeric_value=numeric_value,
+        text_value=text_value,
+        captured_at=captured_at,
+    )
+    if error:
+        return templates.TemplateResponse(
+            request, "admin/partner_detail.html",
+            _partner_detail_context(request, user, partner, metric_error=error),
+            status_code=400,
+        )
+    return RedirectResponse(f"/contacts/partners/{partner_id}", status_code=303)
 
 
 @router.get("/contacts/partners/{partner_id}/edit", response_class=HTMLResponse)
@@ -1668,6 +1722,7 @@ async def create_icp_criterion_submit(
     request: Request,
     label: str = Form(""), field: str = Form(""), operator: str = Form(""),
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
+    metric_key: str = Form(""), period_days: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
@@ -1684,6 +1739,7 @@ async def create_icp_criterion_submit(
         }, status_code=400)
     _, error = icp_service.create_criterion(
         field, operator, value, weight=weight_int, label=label, active=bool(active),
+        metric_key=metric_key, period_days=period_days,
     )
     if error:
         return templates.TemplateResponse(request, "admin/icp.html", {
@@ -1702,6 +1758,7 @@ async def edit_icp_criterion_submit(
     request: Request, criterion_id: int,
     label: str = Form(""), field: str = Form(""), operator: str = Form(""),
     value: str = Form(""), weight: str = Form("1"), active: str = Form(""),
+    metric_key: str = Form(""), period_days: str = Form(""),
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if not validate_csrf_token(csrf_token, get_session_cookie(request)):
@@ -1719,6 +1776,7 @@ async def edit_icp_criterion_submit(
     _, error = icp_service.update_criterion(
         criterion_id, label=label, field=field, operator=operator,
         value=value, weight=weight_int, active=bool(active),
+        metric_key=metric_key, period_days=period_days,
     )
     if error:
         return templates.TemplateResponse(request, "admin/icp.html", {

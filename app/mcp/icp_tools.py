@@ -4,6 +4,8 @@ from app.mcp.util import as_bool, as_int, as_text
 from app.services.icp import (
     ERROR_MESSAGES,
     MATCHABLE_FIELDS,
+    MAX_PERIOD_DAYS,
+    METRIC_FIELD,
     OPERATORS,
     TAG_FIELDS,
     create_criterion,
@@ -29,7 +31,11 @@ _FIELD_HELP = (
     "One of the list_catalog icp_fields keys. "
     "Tag rules: company_tag (the linked company, or the parent company of a person) "
     "or deal_tag (the lead or deal itself), with operator has_tag and the tag slug "
-    "(google-ads, campaign:spring)."
+    "(google-ads, campaign:spring). "
+    "Metric rules: company_metric, a numeric operator (eq, gt, gte, lt, lte), "
+    "metric_key (google-rating, google-review-count), and value as the number. "
+    "Leave period_days empty to test the latest snapshot. Set period_days to test "
+    "the change over that many days (latest minus the reading at the start of the window)."
 )
 
 
@@ -44,6 +50,8 @@ def _brief(row):
         "value": row.get("value"),
         "weight": row["weight"],
         "active": bool(row.get("active")),
+        "metric_key": row.get("metric_key"),
+        "period_days": row.get("period_days"),
     }
 
 
@@ -56,6 +64,7 @@ def _catalog():
         "fields": [{"key": key, "label": label} for key, label in MATCHABLE_FIELDS.items()],
         "operators": [{"key": key, "label": label} for key, label in OPERATORS.items()],
         "tag_fields": sorted(TAG_FIELDS),
+        "metric_field": METRIC_FIELD,
     }
 
 
@@ -79,6 +88,27 @@ def _text_value(arguments):
     return str(value)
 
 
+def _metric_args(arguments, *, present: bool):
+    """metric_key and period_days. Create always sends them; update only if present."""
+    kwargs = {}
+    if present or "metric_key" in arguments:
+        kwargs["metric_key"] = as_text(arguments.get("metric_key"))
+    if "period_days" in arguments:
+        raw = arguments.get("period_days")
+        if raw in (None, ""):
+            kwargs["period_days"] = ""
+        elif isinstance(raw, bool) or (isinstance(raw, float) and not raw.is_integer()):
+            return None, _fail("invalid_period")
+        else:
+            parsed = as_int(raw)
+            if parsed is None or parsed < 1 or parsed > MAX_PERIOD_DAYS:
+                return None, _fail("invalid_period")
+            kwargs["period_days"] = parsed
+    elif present:
+        kwargs["period_days"] = ""
+    return kwargs, None
+
+
 def list_icp_criteria_tool(arguments):
     active_only = as_bool(arguments.get("active_only"), default=False)
     rows = list_criteria(active_only=bool(active_only))
@@ -97,9 +127,13 @@ def create_icp_criterion_tool(arguments):
         return error
     active = as_bool(arguments.get("active"), default=True)
     label = as_text(arguments.get("label")) if "label" in arguments else ""
+    metric, error = _metric_args(arguments, present=True)
+    if error:
+        return error
     row, fail = create_criterion(
         field, operator, _text_value(arguments),
         weight=weight, label=label, active=bool(active),
+        **metric,
     )
     if fail:
         return _fail(fail)
@@ -129,6 +163,10 @@ def update_icp_criterion_tool(arguments):
         if active is None:
             return _fail("invalid_value")
         fields["active"] = active
+    metric, error = _metric_args(arguments, present=False)
+    if error:
+        return error
+    fields.update(metric)
     row, fail = update_criterion(criterion_id, **fields)
     if fail:
         return _fail(fail)
@@ -152,7 +190,9 @@ ICP_TOOLS = [
             "ICP fit rules. A lead or deal's fit score is the sum of weight over "
             "every active rule that matches. Includes inactive rules unless "
             "active_only is true. fields and operators are the allowlists. "
-            "Tag rules use field company_tag or deal_tag and operator has_tag."
+            "Tag rules use field company_tag or deal_tag and operator has_tag. "
+            "Metric rules use field company_metric, metric_key, a numeric operator, "
+            "and optional period_days for the change over that many days."
         ),
         "inputSchema": {
             "type": "object",
@@ -176,7 +216,13 @@ ICP_TOOLS = [
             "operator is has_tag, and value is one tag slug such as google-ads. "
             "One rule per tag; the score sums them with every other matching rule. "
             "Profile fields keep their existing operators (is_not_null, boolean, "
-            "fuzzy_match, eq, gt, gte, lt, lte)."
+            "fuzzy_match, eq, gt, gte, lt, lte). "
+            "A company metric uses those numeric operators on the company's latest "
+            "snapshot of metric_key. Set period_days (1-3650) to compare the change "
+            "over that many days instead: latest numeric value minus the newest "
+            "numeric reading at or before now minus period_days. The latest reading "
+            "must sit inside the window. A person partner uses the parent company's "
+            "snapshots. One rule per metric comparison; weights sum with the rest."
         ),
         "inputSchema": {
             "type": "object",
@@ -192,8 +238,26 @@ ICP_TOOLS = [
                     "type": "string",
                     "description": (
                         "Tag slug for has_tag (google-ads, campaign:spring). "
-                        "true or false for boolean. A number for eq/gt/gte/lt/lte. "
+                        "true or false for boolean. A number for eq/gt/gte/lt/lte, "
+                        "including company_metric (the latest value, or the change "
+                        "when period_days is set). "
                         "Text for fuzzy_match. Ignored for is_not_null."
+                    ),
+                },
+                "metric_key": {
+                    "type": "string",
+                    "description": (
+                        "Required for company_metric. Slug such as google-rating "
+                        "or google-review-count. Ignored for other fields — do not send it."
+                    ),
+                },
+                "period_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": MAX_PERIOD_DAYS,
+                    "description": (
+                        "Company metric only. Omit to test the latest snapshot. "
+                        "Set to compare the change over this many days."
                     ),
                 },
                 "weight": {"type": "integer", "description": "Points added on a match. Default 1."},
@@ -209,7 +273,9 @@ ICP_TOOLS = [
         "description": (
             "Change an ICP fit rule. Omitted fields stay as they are. "
             "Tag rules still require field company_tag or deal_tag with operator has_tag "
-            "and a tag slug. Weight works the same as any other rule."
+            "and a tag slug. Company metric rules take metric_key and optional "
+            "period_days; null period_days clears the window and scores the latest value. "
+            "Weight works the same as any other rule."
         ),
         "inputSchema": {
             "type": "object",
@@ -220,6 +286,16 @@ ICP_TOOLS = [
                 "field": {"type": "string", "description": _FIELD_HELP},
                 "operator": {"type": "string"},
                 "value": {"type": "string"},
+                "metric_key": {
+                    "type": "string",
+                    "description": "Company metric slug. Null or empty clears it, which a metric rule then rejects.",
+                },
+                "period_days": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": MAX_PERIOD_DAYS,
+                    "description": "Days in the change window. Null clears it so the rule uses the latest value.",
+                },
                 "weight": {"type": "integer"},
                 "label": {"type": "string"},
                 "active": {"type": "boolean"},

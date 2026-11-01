@@ -28,11 +28,12 @@ Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguou
 | **Campaign** | One row in `campaigns`. The shared pitch for a set of deals. A deal is in it when the deal carries the tag `campaign:<slug>`. |
 | **Merged** | A lost deal record with `merged_into_id` set. The CRM does not delete merged records. |
 | **Research note** | An `activities` row with `type = 'research'`. |
-| **Fit score** | The sum of weights of the matching `icp_criteria`. A lead's profile fields come from the lead. An opportunity's profile fields come from the partner. Tag rules are separate: `deal_tag` reads that record's tags, and `company_tag` reads the linked company partner (or the parent company when the linked partner is a person). |
+| **Fit score** | The sum of weights of the matching `icp_criteria`. A lead's profile fields come from the lead. An opportunity's profile fields come from the partner. Tag rules are separate: `deal_tag` reads that record's tags, and `company_tag` reads the linked company partner (or the parent company when the linked partner is a person). `company_metric` reads that same company's metric snapshots. |
 | **Conversion readiness** | Missing data that conversion needs. Information, not a gate. |
 | **Customer** | A partner with one or more won opportunities. Calculated, not stored. |
 
-Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `partner_tags`, `activities`,
+Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `partner_tags`,
+`partner_metric_snapshots`, `activities`,
 `pipeline_stages`, `offers`, `icp_criteria`, `delegated_tasks`,
 `stage_automations`, `users`, `api_keys`, OAuth tables, `app_install`.
 
@@ -190,6 +191,25 @@ The partners list (`/contacts/partners?tag=`) and MCP `search_partners` (`tag` /
 
 An ICP `company_tag` rule does walk up: a company partner matches on its own tags, and a person partner matches on the parent company's tags. A person's own tags do not satisfy `company_tag`.
 
+### `partner_metric_snapshots`
+
+Timestamped intel about a partner. Added in migration 15. A row is one observation of one metric. Inserts only: a later reading does not update or delete an earlier one. Metric keys are not a fixed catalogue. Any slug is stored the same way (`google-rating`, `google-review-count`, and later things like a website check or an ad-library count).
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `partner_id` | INTEGER NOT NULL | FK to `partners(id)`. The partner the reading was stored on. |
+| `metric_key` | TEXT NOT NULL | Lowercase slug, same shape as a tag (`google-rating`). |
+| `numeric_value` | REAL | The number, when the reading has one (4.8, 312). Null when the snapshot is text only. |
+| `text_value` | TEXT | Optional short note. A snapshot needs a number, text, or both. |
+| `source` | TEXT NOT NULL | Where it came from, as a slug (`google-maps`, `website-check`, `ad-library`). |
+| `captured_at` | TEXT NOT NULL | When the reading was taken, UTC `YYYY-MM-DDTHH:MM:SS`. A date alone is stored as midnight UTC. |
+| `created_at` | TEXT NOT NULL | When the row was written. |
+
+`list_partner_metrics` returns this partner's own rows, newest first, optionally filtered by `metric_key` and an inclusive `captured_after` / `captured_before`. A date-only end covers that whole day. `record_partner_metric` appends one row. `record_partner_metrics` appends up to 50, all or nothing. `get_partner` includes `latest_metrics`, the newest row of each key.
+
+An ICP `company_metric` rule does walk up, the same way `company_tag` does. A company partner is scored on its own snapshots. A person partner is scored on the parent company's snapshots. A person's own snapshots do not satisfy the rule. Numeric rules use the newest snapshot of that key that has a number and whose `captured_at` is at or before the moment the score is calculated. A text-only row and a future-dated row are kept in the history and skipped by the comparison.
+
 ### `lost_reasons`
 
 Operator configuration, seeded once like pipeline stages.
@@ -294,9 +314,11 @@ active criterion that matches, so order does not matter.
 |---|---|---|
 | `id` | INTEGER PK | |
 | `label` | TEXT | Name shown beside the score. |
-| `field` | TEXT NOT NULL | One of a fixed allowlist (`icp.MATCHABLE_FIELDS`): industry, team size, is-a-company, preferred channel, presence of email / phone / website / social URL, source, value estimate, pain points, goals, plus `company_tag` and `deal_tag`. Not an arbitrary column, so a typo cannot create a rule that never matches. |
-| `operator` | TEXT NOT NULL | `is_not_null`, `boolean`, `fuzzy_match` (case-insensitive substring, or a `difflib` ratio of at least 0.6), `eq` / `gt` / `gte` / `lt` / `lte` for numbers, or `has_tag`. `has_tag` is only valid with `company_tag` and `deal_tag`, and those two fields only accept `has_tag`. |
-| `value` | TEXT | Ignored for `is_not_null`; `true` or `false` for `boolean`; a number for numeric operators; one tag slug for `has_tag` (stored lowercased, for example `google-ads` or `campaign:spring`). Validated against the operator at write time. |
+| `field` | TEXT NOT NULL | One of a fixed allowlist (`icp.MATCHABLE_FIELDS`): industry, team size, is-a-company, preferred channel, presence of email / phone / website / social URL, source, value estimate, pain points, goals, plus `company_tag`, `deal_tag`, and `company_metric`. Not an arbitrary column, so a typo cannot create a rule that never matches. The metric slug itself lives in `metric_key`, not in `field`. |
+| `operator` | TEXT NOT NULL | `is_not_null`, `boolean`, `fuzzy_match` (case-insensitive substring, or a `difflib` ratio of at least 0.6), `eq` / `gt` / `gte` / `lt` / `lte` for numbers, or `has_tag`. `has_tag` is only valid with `company_tag` and `deal_tag`, and those two fields only accept `has_tag`. `company_metric` only accepts the numeric operators. |
+| `value` | TEXT | Ignored for `is_not_null`; `true` or `false` for `boolean`; a number for numeric operators; one tag slug for `has_tag` (stored lowercased, for example `google-ads` or `campaign:spring`). For `company_metric`, the number the latest value or the change is compared to. Validated against the operator at write time. |
+| `metric_key` | TEXT | Company-metric rules only (migration 15). The slug, for example `google-rating`. Null on every other rule. |
+| `period_days` | INTEGER | Company-metric rules only. Null means compare the latest numeric snapshot. A whole number from 1 to 3650 means compare the change over that many days. |
 | `weight` | INTEGER NOT NULL DEFAULT 1 | Points added on a match. |
 | `active` | INTEGER NOT NULL DEFAULT 1 | Inactive rules are kept but not scored. |
 | `created_at`, `updated_at` | TEXT | |
@@ -313,10 +335,26 @@ partner does not match a company-tag rule. `deal_tag` matches when the lead or
 deal itself has that tag. Profile fields are unchanged: a lead still scores
 those from its own columns, and an opportunity still scores them from the
 partner. The tag fields are stored in the existing `field` / `operator` /
-`value` columns, so adding them did not bump the schema (still version 14).
+`value` columns.
+
+A company-metric rule is one row, one metric slug, one weight. With
+`period_days` null, `eq` / `gt` / `gte` / `lt` / `lte` compare the latest
+numeric snapshot of `metric_key` on that company. With `period_days` set,
+the same operators compare the change: the latest numeric reading minus the
+newest numeric reading at or before (the scoring time minus that many days).
+The latest reading has to fall strictly inside the window. If either end is
+missing, the rule does not match. The clock is the time the fit score is
+calculated, in UTC. Example: `google-review-count` `gte` `20` with
+`period_days` 90 matches when the review count grew by at least 20 over the
+last 90 days. `lte` `0` matches when it did not grow.
+
+Migration 15 adds `partner_metric_snapshots` and the two nullable columns.
+Existing criteria stay valid with those columns null.
 
 MCP: `list_icp_criteria`, `create_icp_criterion`, `update_icp_criterion`,
 `delete_icp_criterion`. `list_catalog` includes `icp_fields` and `icp_operators`.
+`create_icp_criterion` and `update_icp_criterion` accept `metric_key` and
+`period_days`.
 
 ### `delegated_tasks`
 
@@ -384,7 +422,8 @@ That is the post-sale model.
 `(deal_id, tag)` covers lookups by deal), `partner_tags(tag)` (the primary key
 on `(partner_id, tag)` covers lookups by partner; migration 10),
 `stage_automations(stage_key, enabled)`,
-`stage_automation_actions(automation_id, position)`.
+`stage_automation_actions(automation_id, position)`,
+`partner_metric_snapshots(partner_id, metric_key, captured_at, id)` (migration 15).
 `offers` and `icp_criteria` are small and scanned in full.
 
 ## Scoring

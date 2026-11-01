@@ -56,7 +56,12 @@ INSTRUCTIONS = (
     "update_partner_tags (tags replaces; add_tags/remove_tags merge). "
     "search_partners tag/tags filters on the partner's own tags. "
     "ICP tag rules: create_icp_criterion with field company_tag or deal_tag, "
-    "operator has_tag, and one tag slug. Weights sum like every other rule."
+    "operator has_tag, and one tag slug. Weights sum like every other rule. "
+    "Company intel is append-only: record_partner_metric or record_partner_metrics "
+    "(metric_key such as google-rating, source such as google-maps, captured_at). "
+    "list_partner_metrics reads the history. A company_metric fit rule scores the "
+    "company's latest number, or the change over period_days. A person uses the "
+    "parent company's snapshots."
 )
 
 

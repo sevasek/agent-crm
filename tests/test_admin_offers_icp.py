@@ -205,6 +205,31 @@ def test_delete_icp_criterion(logged_in_client, db):
 
 # ==================== Call view integration ====================
 
+def test_call_view_shows_company_metric_fit(logged_in_client, db):
+    from datetime import datetime, timedelta, timezone
+
+    from app.services.partner_metrics import record_snapshot
+    from app.services.partners import update_partner
+
+    now = datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+    icp.create_criterion(
+        "company_metric", "gte", "4.5", metric_key="google-rating",
+        weight=5, label="Strong rating",
+    )
+    pid, _, deal_id = _qualified_deal(db)
+    company_id = create_partner("Acme", is_company=True)
+    update_partner(pid, parent_id=company_id)
+    record_snapshot(
+        company_id, "google-rating", "google-maps", numeric_value=4.8,
+        captured_at=(now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        now=now,
+    )
+    resp = logged_in_client.get(f"/actions/deals/{deal_id}/call")
+    assert resp.status_code == 200
+    assert "Fit 5/5" in resp.text
+    assert "Strong rating" in resp.text
+
+
 def test_call_view_shows_company_tag_fit(logged_in_client, db):
     from app.services.partner_tags import apply_partner_tags
     from app.services.partners import update_partner

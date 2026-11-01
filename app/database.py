@@ -18,7 +18,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place. Every new migration needs an upgrade test in
 # UPGRADE_TESTS (tests/test_database.py), or CI fails.
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 class SchemaVersionError(RuntimeError):
@@ -1040,6 +1040,45 @@ def migrate_014(db) -> None:
         )
 
 
+def migrate_015(db) -> None:
+    """Add partner metric snapshots, and metric columns on icp_criteria.
+
+    A snapshot is one timestamped observation of one metric on one partner
+    (Google rating, review count, and later other intel). History is kept:
+    this migration only creates an empty table. Existing partners are not
+    rewritten.
+
+    `icp_criteria.metric_key` and `period_days` are nullable. Profile and
+    tag rules leave them null. A company-metric rule stores the slug and,
+    when the comparison is a change over time, the number of days.
+
+    Re-running is safe: CREATE TABLE IF NOT EXISTS, and ADD COLUMN only
+    when the column is missing.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS partner_metric_snapshots (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            partner_id INTEGER NOT NULL REFERENCES partners(id),
+            metric_key TEXT NOT NULL,
+            numeric_value REAL,
+            text_value TEXT,
+            source TEXT NOT NULL,
+            captured_at TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    db.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_partner_metric_snapshots_lookup
+        ON partner_metric_snapshots(partner_id, metric_key, captured_at, id)
+        """
+    )
+    _add_column_if_missing(db, "icp_criteria", "metric_key", "metric_key TEXT")
+    _add_column_if_missing(db, "icp_criteria", "period_days", "period_days INTEGER")
+
+
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
@@ -1055,6 +1094,7 @@ MIGRATIONS = {
     12: migrate_012,
     13: migrate_013,
     14: migrate_014,
+    15: migrate_015,
 }
 
 

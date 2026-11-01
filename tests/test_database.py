@@ -25,6 +25,7 @@ from app.database import (
     migrate_012,
     migrate_013,
     migrate_014,
+    migrate_015,
     row_to_dict,
 )
 
@@ -97,8 +98,8 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 14
-    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}
+    assert SCHEMA_VERSION == 15
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
@@ -113,6 +114,7 @@ def test_schema_version_is_only_applied_via_numbered_migration():
     assert MIGRATIONS[12] is migrate_012
     assert MIGRATIONS[13] is migrate_013
     assert MIGRATIONS[14] is migrate_014
+    assert MIGRATIONS[15] is migrate_015
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -542,6 +544,77 @@ def test_init_db_migrates_v13_expires_never_changed_passwords(tmp_path, monkeypa
     assert again == rows["otp@example.com"]["password_expires_at"]
 
 
+def test_init_db_migrates_v14_adds_metric_snapshots(tmp_path, monkeypatch):
+    """A live v14 file gains an empty snapshot table and two nullable ICP columns.
+
+    Partners and existing fit rules are not rewritten. Running the migration
+    again does not fail or add a second copy of the columns.
+    """
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        for step in (migrate_001, migrate_002, migrate_003, migrate_004,
+                     migrate_005, migrate_006, migrate_007, migrate_008,
+                     migrate_009, migrate_010, migrate_011, migrate_012,
+                     migrate_013, migrate_014):
+            step(db)
+        db.execute("INSERT INTO partners (name, is_company) VALUES ('Acme Dental', 1)")
+        db.execute(
+            """INSERT INTO icp_criteria (label, field, operator, value, weight, active)
+               VALUES ('Big team', 'team_size', 'gt', '10', 5, 1)"""
+        )
+        db.execute(
+            """INSERT INTO users (email, name, password_hash, session_version)
+               VALUES ('own@example.com', 'Own', 'hash', 2)"""
+        )
+        db.execute("PRAGMA user_version = 14")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        assert "partner_metric_snapshots" in tables
+        cols = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(partner_metric_snapshots)").fetchall()
+        }
+        assert {
+            "id", "partner_id", "metric_key", "numeric_value", "text_value",
+            "source", "captured_at", "created_at",
+        } <= cols
+        assert conn.execute("SELECT COUNT(*) FROM partner_metric_snapshots").fetchone()[0] == 0
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' "
+                "AND tbl_name = 'partner_metric_snapshots'"
+            ).fetchall()
+        }
+        assert "idx_partner_metric_snapshots_lookup" in indexes
+        icp_cols = {row["name"] for row in conn.execute("PRAGMA table_info(icp_criteria)").fetchall()}
+        assert {"metric_key", "period_days"} <= icp_cols
+        rule = dict(conn.execute("SELECT * FROM icp_criteria").fetchone())
+        assert rule["field"] == "team_size"
+        assert rule["operator"] == "gt"
+        assert rule["value"] == "10"
+        assert rule["weight"] == 5
+        assert rule["metric_key"] is None
+        assert rule["period_days"] is None
+        assert conn.execute("SELECT name FROM partners").fetchone()["name"] == "Acme Dental"
+        assert conn.execute("SELECT password_hash FROM users").fetchone()["password_hash"] == "hash"
+        migrate_015(conn)
+        conn.commit()
+        again = dict(conn.execute("SELECT field, value, metric_key, period_days FROM icp_criteria").fetchone())
+    assert again == {"field": "team_size", "value": "10", "metric_key": None, "period_days": None}
+
+
 # Schema version -> a test that upgrades a populated database into it.
 UPGRADE_TESTS = {
     1: test_init_db_migrates_legacy_version_0,
@@ -553,6 +626,7 @@ UPGRADE_TESTS = {
     12: test_init_db_migrates_v11_keeps_handmade_disqualified,
     13: test_init_db_migrates_v11_seeds_disqualified,
     14: test_init_db_migrates_v13_expires_never_changed_passwords,
+    15: test_init_db_migrates_v14_adds_metric_snapshots,
 }
 # Shipped before this guard with no upgrade test of their own. Never add to it.
 GRANDFATHERED = frozenset({2, 6, 8, 10, 11})

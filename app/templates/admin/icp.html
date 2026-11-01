@@ -5,11 +5,12 @@
 <h1>ICP fit criteria</h1>
 <p class="muted">ICP fit criteria are the rules this CRM uses to score how well a lead or deal matches the customer you want. <a href="{{ help_url('icp') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
 <p class="muted">A weighted criterion that contributes to a lead's fit score. For a tag, choose <strong>Company has tag</strong> or <strong>Lead or deal has tag</strong>, operator <strong>has_tag</strong>, and the tag slug (for example <code>google-ads</code> or <code>campaign:spring</code>). Company means the linked company partner, or the parent company when the linked partner is a person. One rule per tag; the weights add up with every other matching rule.</p>
+<p class="muted">For a company metric, choose <strong>Company metric</strong>, a numeric operator, the metric slug (for example <code>google-rating</code> or <code>google-review-count</code>), and the number to compare. Leave Period blank to test the latest snapshot. Set Period to a number of days to test the change over that window (latest value minus the reading from the start of the window). The same company link is used: a person scores on the parent company's snapshots.</p>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <div class="table-scroll">
 <table class="wide-form-table">
     <tr>
-        <th>Label</th><th>Field</th><th>Operator</th><th>Value</th><th>Weight</th><th>Active</th><th></th>
+        <th>Label</th><th>Field</th><th>Operator</th><th>Value</th><th>Metric</th><th>Period (days)</th><th>Weight</th><th>Active</th><th></th>
     </tr>
     {% for c in criteria %}
     <form id="icp-edit-{{ c.id }}" method="post" action="/definitions/icp/{{ c.id }}/edit"></form>
@@ -30,6 +31,8 @@
             </select>
         </td>
         <td><input type="text" name="value" value="{{ c.value or '' }}" form="icp-edit-{{ c.id }}" aria-label="Value" placeholder="tag slug, number, or text"></td>
+        <td><input type="text" name="metric_key" value="{{ c.metric_key or '' }}" form="icp-edit-{{ c.id }}" aria-label="Metric key" placeholder="google-rating"></td>
+        <td><input type="number" name="period_days" value="{{ c.period_days or '' }}" form="icp-edit-{{ c.id }}" style="width:5rem;" aria-label="Period in days" min="1" placeholder="90"></td>
         <td><input type="number" name="weight" value="{{ c.weight }}" form="icp-edit-{{ c.id }}" style="width:5rem;" aria-label="Weight"></td>
         <td><input type="checkbox" name="active" form="icp-edit-{{ c.id }}" aria-label="Active" {% if c.active %}checked{% endif %}></td>
         <td>
@@ -38,7 +41,7 @@
         </td>
     </tr>
     {% else %}
-    <tr><td colspan="7" class="muted">No criteria yet — add one below. Until you do, no fit score shows on the call view.</td></tr>
+    <tr><td colspan="9" class="muted">No criteria yet — add one below. Until you do, no fit score shows on the call view.</td></tr>
     {% endfor %}
 </table>
 </div>
@@ -68,7 +71,15 @@
     </div>
     <div class="form-row">
         <label for="value">Value</label>
-        <input type="text" id="value" name="value" placeholder="e.g. google-ads, 10, true, or retail">
+        <input type="text" id="value" name="value" placeholder="e.g. google-ads, 4.5, 20, true, or retail">
+    </div>
+    <div class="form-row">
+        <label for="metric_key">Metric key</label>
+        <input type="text" id="metric_key" name="metric_key" placeholder="google-rating — company metric only">
+    </div>
+    <div class="form-row">
+        <label for="period_days">Period (days)</label>
+        <input type="number" id="period_days" name="period_days" min="1" placeholder="90" style="width:5rem;">
     </div>
     <div class="form-row">
         <label for="weight">Weight</label>

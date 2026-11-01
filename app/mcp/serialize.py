@@ -51,6 +51,8 @@ def partner_brief(partner):
     out = _pick(partner, _PARTNER_FIELDS)
     if "tags" in partner:
         out["tags"] = list(partner.get("tags") or [])
+    if "latest_metrics" in partner:
+        out["latest_metrics"] = list(partner.get("latest_metrics") or [])
     out["social_url"] = primary_social_url(partner)
     out["social_links"] = [
         {"label": label, "url": url} for label, url in listed_social_links(partner)

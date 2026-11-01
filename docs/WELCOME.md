@@ -105,7 +105,10 @@ score how well a lead or deal matches the kind of customer you actually
 want. Each matching rule adds the points you gave it — there's no pass or
 fail line, you or your agent decide what score is good enough. A rule can
 also check a tag: the company's tags, or the lead's own tags. One rule per
-tag, and those points add up with the rest.
+tag, and those points add up with the rest. A rule can also check a number
+recorded about the company, such as its Google rating, or how much that
+number changed over a stretch of days. Each reading keeps the time it was
+taken.
 
 ## Settings
 

@@ -409,6 +409,15 @@ def update_partner_tags_tool(arguments):
     return _ok(partner_id=partner_id, tags=tags_for_partner(partner_id))
 
 
+def _attach_latest_metrics(partner):
+    if not partner or not partner.get("id"):
+        return
+    from app.services.partner_metrics import latest_snapshots
+
+    latest, error = latest_snapshots(partner["id"])
+    partner["latest_metrics"] = [] if error else latest
+
+
 def get_partner_tool(arguments):
     partner_id, error = _id_arg(arguments, "partner_id")
     if error:
@@ -417,9 +426,11 @@ def get_partner_tool(arguments):
     if error:
         return error
     attach_partner_tags([partner])
+    _attach_latest_metrics(partner)
     parent = get_partner(partner["parent_id"]) if partner.get("parent_id") else None
     if parent:
         attach_partner_tags([parent])
+        _attach_latest_metrics(parent)
     people = get_children(partner_id)
     attach_partner_tags(people)
     deals = [deal_brief(d) for d in list_deals(partner_id=partner_id)]
@@ -1558,9 +1569,13 @@ TOOLS = [
     {
         "name": "get_partner",
         "description": (
-            "Full partner record: profile, tags, parent company, people, deals, recent activities. "
+            "Full partner record: profile, tags, latest metric snapshots, parent company, "
+            "people, deals, recent activities. "
             "Use after search_partners when you have an id. "
-            "tags is this partner's own labels (empty array when none)."
+            "tags is this partner's own labels (empty array when none). "
+            "latest_metrics is the newest snapshot of each metric key on this partner. "
+            "History is list_partner_metrics. A company-metric fit rule uses the company, "
+            "or the parent company of a person (company.latest_metrics)."
         ),
         "inputSchema": {
             "type": "object",
@@ -2758,9 +2773,11 @@ TOOLS = [
 from app.mcp.lead_tools import LEAD_TOOLS
 from app.mcp.campaign_tools import CAMPAIGN_TOOLS
 from app.mcp.icp_tools import ICP_TOOLS
+from app.mcp.metric_tools import METRIC_TOOLS
 TOOLS.extend(LEAD_TOOLS)
 TOOLS.extend(CAMPAIGN_TOOLS)
 TOOLS.extend(ICP_TOOLS)
+TOOLS.extend(METRIC_TOOLS)
 
 TOOL_BY_NAME = {tool["name"]: tool for tool in TOOLS}
 

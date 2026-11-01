@@ -13,14 +13,23 @@ queue's score. Order doesn't affect the result, since it's a plain sum.
 Tag rules are the same shape. `company_tag` / `deal_tag` with operator
 `has_tag` and a tag slug add that rule's weight when the tag is present.
 The slug is any valid tag (`google-ads`, `campaign:spring`), not a fixed list.
+
+Company-metric rules are the same idea for timestamped intel. `company_metric`
+names a free-form metric slug (`google-rating`) in `metric_key`. Numeric
+operators compare the company's latest numeric snapshot. When `period_days`
+is set, the same operators compare the change over that many days (latest
+minus the reading from the start of the window). A person partner uses the
+parent company's snapshots, same as `company_tag`.
 """
 
 import difflib
 import math
+from datetime import datetime, timedelta, timezone
 
 from app.database import get_db, row_to_dict
 from app.services.auth import sanitize_text
 from app.services.deal_tags import normalize_tag, tags_for_deal
+from app.services.partner_metrics import company_id_for, parse_captured_at, series_for_partner
 from app.services.partner_tags import tags_for_partner
 from app.services.partners import get_partner, primary_social_url
 
@@ -39,6 +48,7 @@ MATCHABLE_FIELDS = {
     "goals": "Goals (free text)",
     "company_tag": "Company has tag",
     "deal_tag": "Lead or deal has tag",
+    "company_metric": "Company metric",
 }
 
 OPERATORS = {
@@ -57,6 +67,12 @@ OPERATORS = {
 # `has_tag` is not a comparison for the profile fields above.
 TAG_FIELDS = {"company_tag", "deal_tag"}
 
+# Company-metric rules store the slug in `metric_key`, not in `value`.
+# `value` is the number. `period_days` empty means "latest snapshot";
+# a positive day count means the change over that window.
+METRIC_FIELD = "company_metric"
+MAX_PERIOD_DAYS = 3650
+
 ERROR_MESSAGES = {
     "invalid_field": "Unknown field.",
     "invalid_operator": "Unknown operator.",
@@ -68,10 +84,24 @@ ERROR_MESSAGES = {
         "Company and lead/deal tag rules use the has_tag operator. "
         "has_tag does not apply to other fields."
     ),
+    "metric_operator": (
+        "Company metric rules use a numeric operator: eq, gt, gte, lt, or lte."
+    ),
+    "metric_fields": (
+        "metric_key and period_days apply only to a company metric rule."
+    ),
+    "invalid_metric_key": (
+        "Metric key must be a slug such as google-rating or google-review-count."
+    ),
+    "invalid_period": (
+        "Period must be a whole number of days, from 1 to 3650, "
+        "or blank to test the latest value."
+    ),
     "invalid_weight": "Weight must be a whole number.",
     "not_found": "Criterion not found.",
 }
 NUMERIC_OPERATORS = {"eq", "gt", "gte", "lt", "lte"}
+_OP_SYMBOL = {"eq": "=", "gt": ">", "gte": ">=", "lt": "<", "lte": "<="}
 FUZZY_MATCH_THRESHOLD = 0.6
 
 
@@ -100,7 +130,19 @@ def criterion_display(criterion) -> str:
     if criterion.get("operator") == "has_tag" and criterion.get("field") in TAG_FIELDS:
         kind = "Company has tag" if criterion.get("field") == "company_tag" else "Lead or deal has tag"
         return f"{kind} {criterion.get('value') or ''}".strip()
+    if criterion.get("field") == METRIC_FIELD:
+        return _metric_rule_display(criterion)
     return criterion.get("field") or ""
+
+
+def _metric_rule_display(criterion) -> str:
+    key = criterion.get("metric_key") or "metric"
+    symbol = _OP_SYMBOL.get(criterion.get("operator") or "", criterion.get("operator") or "")
+    value = criterion.get("value") if criterion.get("value") is not None else ""
+    days = criterion.get("period_days")
+    if days:
+        return f"{key} change {symbol} {value} over {int(days)} days"
+    return f"{key} {symbol} {value}".strip()
 
 
 def _tag_list(value) -> list:
@@ -121,15 +163,83 @@ def _tag_list(value) -> list:
     return out
 
 
+def _finite_number(value):
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text or text.lower() in ("nan", "inf", "infinity", "+inf", "-inf", "+infinity", "-infinity"):
+            return None
+        try:
+            parsed = float(text)
+        except (TypeError, ValueError):
+            return None
+    elif isinstance(value, (int, float)):
+        parsed = float(value)
+    else:
+        return None
+    if not math.isfinite(parsed):
+        return None
+    return parsed
+
+
+def _stored_number(value):
+    parsed = _finite_number(value)
+    if parsed is None:
+        return None
+    if parsed.is_integer() and abs(parsed) < 1e15:
+        return str(int(parsed))
+    return str(parsed)
+
+
+def _clean_period(period_days):
+    """(days or None, error or None). Blank means no window."""
+    if period_days in (None, ""):
+        return None, None
+    if isinstance(period_days, bool):
+        return None, "invalid_period"
+    if isinstance(period_days, float):
+        if not period_days.is_integer():
+            return None, "invalid_period"
+    if isinstance(period_days, str):
+        text = period_days.strip()
+        if not text:
+            return None, None
+        if not text.isdigit():
+            return None, "invalid_period"
+        period_days = int(text)
+    try:
+        days = int(period_days)
+    except (TypeError, ValueError):
+        return None, "invalid_period"
+    if days < 1 or days > MAX_PERIOD_DAYS:
+        return None, "invalid_period"
+    return days, None
+
+
+def _blank_metric(value) -> bool:
+    return value in (None, "")
+
+
 def _stored_value(field, value):
     if field in TAG_FIELDS:
         return normalize_tag(str(value if value is not None else ""))
+    if field == METRIC_FIELD:
+        return _stored_number(value)
     if value is None:
         return None
     return sanitize_text(str(value), max_len=200) or None
 
 
-def _validate(field, operator, value):
+def _stored_metric_key(field, metric_key):
+    if field != METRIC_FIELD:
+        return None
+    if not isinstance(metric_key, str):
+        metric_key = "" if metric_key is None else str(metric_key)
+    return normalize_tag(metric_key)
+
+
+def _validate(field, operator, value, *, metric_key=None, period_days=None):
     if field not in MATCHABLE_FIELDS:
         return "invalid_field"
     if operator not in OPERATORS:
@@ -140,14 +250,23 @@ def _validate(field, operator, value):
         if not normalize_tag(str(value if value is not None else "")):
             return "invalid_value"
         return None
+    if field != METRIC_FIELD and (not _blank_metric(metric_key) or not _blank_metric(period_days)):
+        return "metric_fields"
+    if field == METRIC_FIELD:
+        if operator not in NUMERIC_OPERATORS:
+            return "metric_operator"
+        if not _stored_metric_key(field, metric_key):
+            return "invalid_metric_key"
+        _days, error = _clean_period(period_days)
+        if error:
+            return error
+        if _finite_number(value) is None:
+            return "invalid_value"
+        return None
     if operator == "boolean" and str(value).strip().lower() not in ("true", "false"):
         return "invalid_value"
     if operator in NUMERIC_OPERATORS:
-        try:
-            parsed = float(value)
-        except (TypeError, ValueError):
-            return "invalid_value"
-        if not math.isfinite(parsed):
+        if _finite_number(value) is None:
             return "invalid_value"
     if operator == "fuzzy_match" and not str(value or "").strip():
         return "invalid_value"
@@ -155,21 +274,26 @@ def _validate(field, operator, value):
 
 
 def create_criterion(field: str, operator: str, value: str = "", *, weight: int = 1,
-                      label: str = "", active: bool = True):
+                      label: str = "", active: bool = True, metric_key=None,
+                      period_days=None):
     """Returns (criterion_dict, None) on success or (None, error_code) on failure."""
-    error = _validate(field, operator, value)
+    error = _validate(field, operator, value, metric_key=metric_key, period_days=period_days)
     if error:
         return None, error
+    days, _period_error = _clean_period(period_days if field == METRIC_FIELD else None)
     with get_db() as db:
         db.execute("""
-            INSERT INTO icp_criteria (label, field, operator, value, weight, active)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO icp_criteria
+                (label, field, operator, value, weight, active, metric_key, period_days)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             sanitize_text(label, max_len=120) or None,
             field, operator,
             _stored_value(field, value),
             int(weight) if weight else 0,
             int(bool(active)),
+            _stored_metric_key(field, metric_key),
+            days,
         ))
         db.commit()
         criterion_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -177,7 +301,7 @@ def create_criterion(field: str, operator: str, value: str = "", *, weight: int 
 
 
 def update_criterion(criterion_id, **fields):
-    allowed = {"label", "field", "operator", "value", "weight", "active"}
+    allowed = {"label", "field", "operator", "value", "weight", "active", "metric_key", "period_days"}
     criterion = get_criterion(criterion_id)
     if not criterion:
         return None, "not_found"
@@ -185,9 +309,29 @@ def update_criterion(criterion_id, **fields):
     merged_field = updates.get("field", criterion["field"])
     merged_operator = updates.get("operator", criterion["operator"])
     merged_value = updates.get("value", criterion["value"])
-    error = _validate(merged_field, merged_operator, merged_value)
+    merged_metric = updates["metric_key"] if "metric_key" in updates else criterion.get("metric_key")
+    merged_period = updates["period_days"] if "period_days" in updates else criterion.get("period_days")
+    if merged_metric == "":
+        merged_metric = None
+    if merged_period == "":
+        merged_period = None
+    # Switching off a company-metric rule drops the slug and the window.
+    # Sending a new slug or period while the field is something else is an error.
+    if merged_field != METRIC_FIELD:
+        explicit_key = "metric_key" in updates and updates.get("metric_key") not in ("", None)
+        explicit_period = "period_days" in updates and updates.get("period_days") not in ("", None)
+        if explicit_key or explicit_period:
+            return None, "metric_fields"
+        merged_metric = None
+        merged_period = None
+    error = _validate(
+        merged_field, merged_operator, merged_value,
+        metric_key=merged_metric, period_days=merged_period,
+    )
     if error:
         return None, error
+    if not updates:
+        return criterion, None
     if "label" in updates:
         updates["label"] = sanitize_text(updates["label"], max_len=120) or None
     if "value" in updates or "field" in updates:
@@ -196,8 +340,9 @@ def update_criterion(criterion_id, **fields):
         updates["weight"] = int(updates["weight"]) if updates["weight"] else 0
     if "active" in updates:
         updates["active"] = int(bool(updates["active"]))
-    if not updates:
-        return criterion, None
+    updates["metric_key"] = _stored_metric_key(merged_field, merged_metric)
+    days, _period_error = _clean_period(merged_period if merged_field == METRIC_FIELD else None)
+    updates["period_days"] = days
     with get_db() as db:
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [criterion_id]
@@ -257,7 +402,18 @@ def deal_tags_for(deal, deal_tags=None) -> list:
     return []
 
 
-def build_matchable_row(partner: dict, deal: dict, *, company_tags=None, deal_tags=None) -> dict:
+def _company_metric_series(partner, company_metric_series):
+    """History the company-metric rules read. A passed dict, including {}, is used as-is."""
+    if company_metric_series is not None:
+        return company_metric_series if isinstance(company_metric_series, dict) else {}
+    company_id = company_id_for(partner)
+    if not company_id:
+        return {}
+    return series_for_partner(company_id)
+
+
+def build_matchable_row(partner: dict, deal: dict, *, company_tags=None, deal_tags=None,
+                        company_metric_series=None) -> dict:
     """Flatten the partner + deal fields ICP criteria can reference into one
     dict, keyed by MATCHABLE_FIELDS.
 
@@ -266,12 +422,18 @@ def build_matchable_row(partner: dict, deal: dict, *, company_tags=None, deal_ta
     exception: `deal_tag` is this record's tags, and `company_tag` is the
     linked company (or the parent company of a linked person). Both are lists
     of slugs on the row; `has_tag` checks membership.
+
+    `company_metric` is the same exception. `company_metric_series` is the
+    company's snapshots grouped by metric key (oldest first). A person uses
+    the parent company. Passing `company_metric_series` (including {}) skips
+    the lookup.
     """
     partner = partner or {}
     deal = deal or {}
     tag_values = {
         "company_tag": company_tags_for(partner, company_tags),
         "deal_tag": deal_tags_for(deal, deal_tags),
+        "company_metric_series": _company_metric_series(partner, company_metric_series),
     }
     if deal.get("type") == "lead":
         is_company = bool(
@@ -316,7 +478,99 @@ def build_matchable_row(partner: dict, deal: dict, *, company_tags=None, deal_ta
     return row
 
 
-def match_criterion(row: dict, field: str, operator: str, value) -> bool:
+def _scoring_now(now):
+    if now is None:
+        return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+    if isinstance(now, datetime):
+        if now.tzinfo is not None:
+            now = now.astimezone(timezone.utc).replace(tzinfo=None)
+        return now.replace(microsecond=0)
+    parsed, error = parse_captured_at(now)
+    if error or parsed is None:
+        return datetime.now(timezone.utc).replace(tzinfo=None, microsecond=0)
+    return parsed
+
+
+def _numeric_points(series, now):
+    """(captured_at, id, number) for snapshots at or before `now`, oldest first."""
+    points = []
+    for item in series or []:
+        if not isinstance(item, dict):
+            continue
+        captured, error = parse_captured_at(item.get("captured_at"))
+        if error or captured is None or captured > now:
+            continue
+        number = _finite_number(item.get("numeric_value"))
+        if number is None:
+            continue
+        try:
+            row_id = int(item.get("id") or 0)
+        except (TypeError, ValueError):
+            row_id = 0
+        points.append((captured, row_id, number))
+    points.sort()
+    return points
+
+
+def _metric_actual(row, metric_key, period_days, now):
+    """The number a company-metric rule compares, or None when it cannot.
+
+    No period: the newest numeric snapshot at or before `now`.
+    With a period: latest minus the newest numeric snapshot at or before
+    `now - period`. The latest reading must fall strictly inside the window.
+    A missing endpoint means the rule does not match.
+    """
+    key = normalize_tag(metric_key if isinstance(metric_key, str) else "")
+    if not key:
+        return None
+    series = (row.get("company_metric_series") or {}).get(key) or []
+    points = _numeric_points(series, now)
+    if not points:
+        return None
+    days, error = _clean_period(period_days)
+    if error:
+        return None
+    latest = points[-1][2]
+    if days is None:
+        return latest
+    cutoff = now - timedelta(days=days)
+    if points[-1][0] <= cutoff:
+        return None
+    baseline = None
+    for captured, _row_id, number in points:
+        if captured <= cutoff:
+            baseline = number
+        else:
+            break
+    if baseline is None:
+        return None
+    return round(latest - baseline, 6)
+
+
+def _compare_number(actual, operator, value) -> bool:
+    target = _finite_number(value)
+    actual_num = _finite_number(actual)
+    if actual_num is None or target is None:
+        return False
+    if operator == "eq":
+        return actual_num == target
+    if operator == "gt":
+        return actual_num > target
+    if operator == "gte":
+        return actual_num >= target
+    if operator == "lt":
+        return actual_num < target
+    if operator == "lte":
+        return actual_num <= target
+    return False
+
+
+def match_criterion(row: dict, field: str, operator: str, value, *,
+                    metric_key=None, period_days=None, now=None) -> bool:
+    if field == METRIC_FIELD:
+        moment = _scoring_now(now)
+        actual = _metric_actual(row, metric_key, period_days, moment)
+        return _compare_number(actual, operator, value)
     if operator == "has_tag":
         wanted = normalize_tag(str(value if value is not None else ""))
         if not wanted:
@@ -343,30 +597,19 @@ def match_criterion(row: dict, field: str, operator: str, value) -> bool:
             return True
         return difflib.SequenceMatcher(None, a, b).ratio() >= FUZZY_MATCH_THRESHOLD
     if operator in NUMERIC_OPERATORS:
-        try:
-            actual_num = float(raw)
-            target_num = float(value)
-        except (TypeError, ValueError):
-            return False
-        if not (math.isfinite(actual_num) and math.isfinite(target_num)):
-            return False
-        if operator == "eq":
-            return actual_num == target_num
-        if operator == "gt":
-            return actual_num > target_num
-        if operator == "gte":
-            return actual_num >= target_num
-        if operator == "lt":
-            return actual_num < target_num
-        if operator == "lte":
-            return actual_num <= target_num
+        return _compare_number(raw, operator, value)
     return False
 
 
-def score_fit(row: dict, criteria=None):
+def score_fit(row: dict, criteria=None, *, now=None):
     """criteria defaults to the active configured set. Returns score, max
     possible, and which criteria matched/didn't — same "formula, not a
-    black box" shape as call_queue.score_deal."""
+    black box" shape as call_queue.score_deal.
+
+    `now` is the clock company-metric windows are measured from. The default
+    is the current UTC time, so a rule for the last 90 days means the last
+    90 days as of the moment the score is calculated.
+    """
     if criteria is None:
         criteria = list_criteria(active_only=True)
     matched, unmatched = [], []
@@ -374,7 +617,12 @@ def score_fit(row: dict, criteria=None):
     max_total = 0
     for c in criteria:
         max_total += c["weight"]
-        if match_criterion(row, c["field"], c["operator"], c["value"]):
+        if match_criterion(
+            row, c["field"], c["operator"], c["value"],
+            metric_key=c.get("metric_key"),
+            period_days=c.get("period_days"),
+            now=now,
+        ):
             total += c["weight"]
             matched.append(c)
         else:

@@ -281,3 +281,236 @@ def test_criterion_display_names_an_unlabeled_tag_rule():
     assert icp.criterion_display({
         "field": "deal_tag", "operator": "has_tag", "value": "campaign:spring", "label": "Spring",
     }) == "Spring"
+
+
+def _series(*points):
+    """points are (id, key, number, captured_at)."""
+    grouped = {}
+    for row_id, key, number, captured_at in points:
+        grouped.setdefault(key, []).append({
+            "id": row_id,
+            "metric_key": key,
+            "numeric_value": number,
+            "captured_at": captured_at,
+        })
+    return grouped
+
+
+def test_create_company_metric_rule(db):
+    c, error = icp.create_criterion(
+        "company_metric", "gte", "4.5",
+        metric_key="Google-Rating", weight=5, label="Strong rating",
+    )
+    assert error is None
+    assert c["field"] == "company_metric"
+    assert c["metric_key"] == "google-rating"
+    assert c["operator"] == "gte"
+    assert c["value"] == "4.5"
+    assert c["period_days"] is None
+    assert c["weight"] == 5
+
+    change, error = icp.create_criterion(
+        "company_metric", "gte", "20",
+        metric_key="google-review-count", period_days=90, weight=3,
+    )
+    assert error is None
+    assert change["period_days"] == 90
+    assert change["value"] == "20"
+
+
+def test_company_metric_rejects_a_bad_key_operator_or_period(db):
+    c, error = icp.create_criterion("company_metric", "gte", "4.5")
+    assert c is None
+    assert error == "invalid_metric_key"
+
+    c, error = icp.create_criterion(
+        "company_metric", "has_tag", "google-rating", metric_key="google-rating",
+    )
+    assert error == "tag_operator"
+
+    c, error = icp.create_criterion(
+        "company_metric", "fuzzy_match", "high", metric_key="google-rating",
+    )
+    assert error == "metric_operator"
+
+    c, error = icp.create_criterion(
+        "industry", "fuzzy_match", "retail", metric_key="google-rating",
+    )
+    assert error == "metric_fields"
+
+    c, error = icp.create_criterion(
+        "company_metric", "gte", "1", metric_key="google-rating", period_days=0,
+    )
+    assert error == "invalid_period"
+
+    c, error = icp.create_criterion(
+        "company_metric", "gte", "not-a-number", metric_key="google-rating",
+    )
+    assert error == "invalid_value"
+
+
+def test_update_metric_rule_can_clear_the_window(db):
+    c, _ = icp.create_criterion(
+        "company_metric", "gte", "20", metric_key="google-review-count", period_days=90,
+    )
+    updated, error = icp.update_criterion(c["id"], period_days="")
+    assert error is None
+    assert updated["period_days"] is None
+    assert updated["metric_key"] == "google-review-count"
+
+    cleared, error = icp.update_criterion(c["id"], field="team_size", operator="gt", value="10")
+    assert error is None
+    assert cleared["field"] == "team_size"
+    assert cleared["metric_key"] is None
+    assert cleared["period_days"] is None
+
+
+def test_latest_snapshot_matches_numeric_operators():
+    from datetime import datetime
+
+    now = datetime(2026, 8, 1)
+    row = {"company_metric_series": _series(
+        (1, "google-rating", 4.2, "2026-01-01T00:00:00"),
+        (2, "google-rating", 4.8, "2026-07-15T00:00:00"),
+        (3, "google-review-count", 312, "2026-07-15T00:00:00"),
+    )}
+    assert icp.match_criterion(
+        row, "company_metric", "gte", "4.5", metric_key="google-rating", now=now,
+    ) is True
+    assert icp.match_criterion(
+        row, "company_metric", "lt", "4.5", metric_key="google-rating", now=now,
+    ) is False
+    assert icp.match_criterion(
+        row, "company_metric", "eq", "312", metric_key="google-review-count", now=now,
+    ) is True
+    # The January 4.2 is history. The latest 4.8 is what the rule sees.
+    assert icp.match_criterion(
+        row, "company_metric", "lte", "4.2", metric_key="google-rating", now=now,
+    ) is False
+    assert icp.match_criterion(
+        {"company_metric_series": {}}, "company_metric", "gte", "4.5",
+        metric_key="google-rating", now=now,
+    ) is False
+    assert icp.match_criterion(
+        row, "company_metric", "gte", "4.5", metric_key="missing-metric", now=now,
+    ) is False
+
+
+def test_text_only_and_future_readings_do_not_hide_the_latest_number():
+    from datetime import datetime
+
+    now = datetime(2026, 8, 1)
+    row = {"company_metric_series": {
+        "google-rating": [
+            {"id": 1, "numeric_value": 4.8, "captured_at": "2026-07-01T00:00:00"},
+            {"id": 2, "numeric_value": None, "text_value": "listed", "captured_at": "2026-07-20T00:00:00"},
+            {"id": 3, "numeric_value": 1.0, "captured_at": "2026-12-01T00:00:00"},
+        ],
+    }}
+    assert icp.match_criterion(
+        row, "company_metric", "eq", "4.8", metric_key="google-rating", now=now,
+    ) is True
+
+
+def test_change_over_period_uses_latest_minus_baseline():
+    from datetime import datetime, timedelta
+
+    now = datetime(2026, 8, 1, 12, 0, 0)
+    baseline_at = (now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%S")
+    inside_at = (now - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    stale_at = (now - timedelta(days=120)).strftime("%Y-%m-%dT%H:%M:%S")
+    row = {"company_metric_series": _series(
+        (1, "google-review-count", 312, baseline_at),
+        (2, "google-review-count", 340, inside_at),
+    )}
+    assert icp.match_criterion(
+        row, "company_metric", "gte", "20",
+        metric_key="google-review-count", period_days=90, now=now,
+    ) is True
+    assert icp.match_criterion(
+        row, "company_metric", "eq", "28",
+        metric_key="google-review-count", period_days=90, now=now,
+    ) is True
+    assert icp.match_criterion(
+        row, "company_metric", "gt", "28",
+        metric_key="google-review-count", period_days=90, now=now,
+    ) is False
+    # No reading from the start of the window.
+    only_new = {"company_metric_series": _series((2, "google-review-count", 340, inside_at))}
+    assert icp.match_criterion(
+        only_new, "company_metric", "gte", "1",
+        metric_key="google-review-count", period_days=90, now=now,
+    ) is False
+    # Newest reading is older than the window, so this is not "the last 90 days".
+    stale = {"company_metric_series": _series(
+        (1, "google-review-count", 100, (now - timedelta(days=200)).strftime("%Y-%m-%dT%H:%M:%S")),
+        (2, "google-review-count", 140, stale_at),
+    )}
+    assert icp.match_criterion(
+        stale, "company_metric", "gte", "20",
+        metric_key="google-review-count", period_days=90, now=now,
+    ) is False
+
+
+def test_company_metric_scores_the_parent_company_not_the_person(db):
+    from datetime import datetime, timedelta
+
+    from app.services.partner_metrics import record_snapshot
+    from app.services.partners import create_partner, get_partner
+
+    now = datetime(2026, 8, 1, 12, 0, 0)
+    company_id = create_partner("Acme Dental", is_company=True)
+    person_id = create_partner("Pat Manager", email="pat@acme.example", parent_id=company_id)
+    record_snapshot(
+        company_id, "google-rating", "google-maps",
+        numeric_value=4.8, captured_at="2026-07-01T00:00:00", now=now,
+    )
+    record_snapshot(
+        company_id, "google-review-count", "google-maps",
+        numeric_value=312, captured_at=(now - timedelta(days=90)).strftime("%Y-%m-%dT%H:%M:%S"), now=now,
+    )
+    record_snapshot(
+        company_id, "google-review-count", "google-maps",
+        numeric_value=340, captured_at=(now - timedelta(days=2)).strftime("%Y-%m-%dT%H:%M:%S"), now=now,
+    )
+    # The person's own rating must not satisfy, or spoil, the company rule.
+    record_snapshot(
+        person_id, "google-rating", "google-maps",
+        numeric_value=1.0, captured_at="2026-07-02T00:00:00", now=now,
+    )
+    icp.create_criterion("company_metric", "gte", "4.5", metric_key="google-rating", weight=5, label="Rating")
+    icp.create_criterion(
+        "company_metric", "gte", "20", metric_key="google-review-count",
+        period_days=90, weight=3, label="Reviews up",
+    )
+    icp.create_criterion("company_metric", "gte", "9", metric_key="google-rating", weight=9, label="Impossible", active=False)
+
+    person = get_partner(person_id)
+    fit = icp.score_fit(icp.build_matchable_row(person, {"type": "opportunity"}), now=now)
+    assert fit["score"] == 8
+    assert fit["max"] == 8
+    assert [c["label"] for c in fit["matched"]] == ["Rating", "Reviews up"]
+
+    company = get_partner(company_id)
+    company_fit = icp.score_fit(icp.build_matchable_row(company, {"type": "opportunity"}), now=now)
+    assert company_fit["score"] == 8
+
+    solo_id = create_partner("Solo", email="solo@x.example")
+    record_snapshot(solo_id, "google-rating", "google-maps", numeric_value=5, now=now)
+    solo = icp.score_fit(icp.build_matchable_row(get_partner(solo_id), {"type": "lead"}), now=now)
+    assert solo["score"] == 0
+
+    lead = {"type": "lead", "industry": "Dentistry"}
+    assert icp.build_matchable_row(person, lead)["industry"] == "Dentistry"
+    lead_fit = icp.score_fit(icp.build_matchable_row(person, lead), now=now)
+    assert lead_fit["score"] == 8
+
+
+def test_criterion_display_names_a_metric_rule():
+    assert icp.criterion_display({
+        "field": "company_metric", "operator": "gte", "value": "4.5", "metric_key": "google-rating",
+    }) == "google-rating >= 4.5"
+    assert icp.criterion_display({
+        "field": "company_metric", "operator": "gte", "value": "20",
+        "metric_key": "google-review-count", "period_days": 90, "label": "Reviews up",
+    }) == "Reviews up"

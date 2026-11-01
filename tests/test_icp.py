@@ -58,6 +58,13 @@ def test_match_numeric_ignores_non_finite_stored_field(db):
     assert icp.match_criterion({"value_estimate": float("inf")}, "value_estimate", "gt", "1000") is False
 
 
+def test_match_numeric_treats_bool_field_as_zero_or_one(db):
+    # A lead's is_company is a computed bool; numeric rules compare it as 1/0.
+    assert icp.match_criterion({"is_company": True}, "is_company", "eq", "1") is True
+    assert icp.match_criterion({"is_company": False}, "is_company", "eq", "0") is True
+    assert icp.match_criterion({"is_company": False}, "is_company", "gte", "1") is False
+
+
 def test_create_fuzzy_criterion_requires_nonblank_value(db):
     c, error = icp.create_criterion("industry", "fuzzy_match", "")
     assert c is None

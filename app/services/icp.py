@@ -548,6 +548,10 @@ def _metric_actual(row, metric_key, period_days, now):
 
 
 def _compare_number(actual, operator, value) -> bool:
+    # A lead's is_company is a bool. float(True) used to make it 1, and
+    # `is_company eq 1` rules depend on that; _finite_number rejects bools.
+    if isinstance(actual, bool):
+        actual = int(actual)
     target = _finite_number(value)
     actual_num = _finite_number(actual)
     if actual_num is None or target is None:

@@ -13,12 +13,30 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ### Added
 
+- Definitions → Tags: a `tags` table (migration 16) gives each deal tag a
+  description and an optional palette colour. The page lists every tag with
+  its deal count, and can add, edit, rename, merge (renaming onto an
+  existing tag, after a confirm; no duplicate tags on a deal) and delete
+  (after a confirm that shows the count). The migration defines every tag
+  already on a deal and makes `missing:` tags yellow.
+- Applying a tag anywhere (deal and lead forms, lead ingest, MCP,
+  bulk updates, campaign slug renames) defines it if it is new. Tags are
+  never rejected for lacking a definition.
+- A tag's pill uses its colour, with black text on every palette slot
+  (at least 4.76:1 in light and dark), and shows its description on hover.
+- The Tags box on the deal and lead forms suggests defined tags for the
+  tag being typed.
+- MCP: `list_tags` returns every defined tag with `description` and
+  `color`; new `define_tag` creates a tag or sets its description and colour.
+  Partner tags have no definitions and are unchanged.
 - Each deal tag pill (pipeline cards, deals list, partner page, leads list,
   call view) has an × button that removes that tag from the deal in place,
   without reloading the page (`POST /crm/deals/{id}/tags/remove`).
-- Tags that start with `missing:` show in the palette's yellow with black
-  text (9.70:1 light, 6.84:1 dark), so outstanding paperwork stands out on
-  the board.
+
+### Changed
+
+- MCP `list_tags` includes tags that are defined but on no deal yet
+  (`count` 0). It used to list only tags in use.
 
 ## [1.1.0] - 2026-11-23
 

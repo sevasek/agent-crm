@@ -17,6 +17,7 @@ links to the section about the thing it shows you.
 - [Offers](#offers)
 - [Automations](#automations)
 - [Lost reasons](#lost-reasons)
+- [Tags](#tags)
 - [ICP](#icp)
 - [Settings](#settings)
 - [Want more detail?](#want-more-detail)
@@ -97,6 +98,15 @@ for example "Went with a competitor" or "Not now." One reason, "Not now,"
 can also notify your nurture tool automatically, if you've set one up.
 A reason marked as a disqualification (the wrong kind of business, too
 small, out of area) shows the deal as disqualified rather than lost.
+
+## Tags
+
+A tag is a short label on a deal or lead, such as `missing:bond` or
+`referral`. The Tags page lists every tag, with a description of what it
+means and an optional colour for its pill, so everyone (and any AI agent)
+spells it the same way. Typing a new tag on a deal adds it to the list
+on its own. You can rename a tag, merge two tags into one, or delete a
+tag from every deal.
 
 ## ICP
 

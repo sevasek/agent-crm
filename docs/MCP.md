@@ -99,7 +99,8 @@ only `text/event-stream`). It is stateless, so no session is required.
 | `record_partner_metrics` | Append up to 50 snapshots in one transaction. One invalid item writes nothing. |
 | `list_partner_metrics` | One partner's snapshots, newest first. Filter by `metric_key` and `captured_after` / `captured_before`. `latest` is the newest row of each key. |
 | `list_deals` | Opportunities by default (`type=opportunity`, `include_lost=false`). Filter by `stage`, `owner` / `owner_key`, `service_slug`, `parent_deal_id`, `tags`, `type` (`lead` / `all`), `include_lost`. **Breaking:** lost records are hidden unless `include_lost=true`. Each row includes `type`, `active`, `lost_reason`, `tags`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. |
-| `list_tags` | Tags in use, each with a `count`. Lost records are not counted. |
+| `list_tags` | Every defined tag with `description`, `color` (palette slot or null) and `count`. Lost records are not counted. A tag on a deal is always defined, so a `count` of 0 means it is set up but unused. |
+| `define_tag` | Create a tag, or change its `description` and `color` (`blue`, `orange`, `aqua`, `yellow`, `magenta`, `violet`, or null for a plain pill). Omitted fields are left alone. |
 | `get_deal` | One deal record (lead or opportunity), including `tags`, `child_deals`, `outcome` (`open` / `won` / `lost` / `disqualified`), and `is_disqualified`. A lead also returns its contact columns. |
 | `list_activities` | The timeline for a partner or a deal record, newest first. Accepts a lead without a partner. |
 | `get_call_queue` | Open opportunities in the qualified pool with a dialable phone. No leads. Filters: `stage`, `service_slug`, `source_prefix`, `include_new=true`, `owner`, `campaign` (slug) or `campaign_id`. `limit` up to 50. A campaign keeps deals tagged `campaign:<slug>`. |
@@ -359,7 +360,9 @@ A tag is a lowercase slug of letters, digits, hyphens and colons, such as
 `campaign:example-2026-09` or `clinic`. Deals return `tags` (`[]`
 when none). `list_deals` with `tags` (or a single `tag`) returns only deals
 that carry every listed tag, and that filter combines with the others.
-`list_tags` is the set of tags in use and how many deals have each one.
+`list_tags` is the set of defined tags, each with its description, colour,
+and how many deals have it. Applying a tag defines it; `define_tag` adds a
+description and colour so the next agent or person uses the same spelling.
 
 `ingest_leads` merges `tags` onto a new or already-open deal. Leaving `tags`
 out of the lead leaves the set alone. `update_deal`'s `tags` replaces;

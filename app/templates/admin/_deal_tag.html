@@ -1,5 +1,8 @@
-{# One deal tag pill with a quick-remove button. Set `tag`, `tag_deal_id`, and optionally `tag_href` / `tag_on` before including. #}
-<span class="pill pill-tag deal-tag{% if tag.startswith('missing:') %} pill-tag-missing{% endif %}{% if tag_on %} pill-tag-on{% endif %}">
+{# One deal tag pill with a quick-remove button. Set `tag`, `tag_deal_id`, and optionally `tag_href` / `tag_on` before including. Colour and tooltip come from the tag's definition (Definitions → Tags). #}
+{% set tag_def = tag_defs(request).get(tag, {}) %}{% set tag_color = tag_pill_colors.get(tag_def.get("color")) %}
+<span class="pill pill-tag deal-tag{% if tag_color %} pill-tag-color{% endif %}{% if tag_on %} pill-tag-on{% endif %}"
+      {%- if tag_color %} style="--tag-bg-light: {{ tag_color.bg_light }}; --tag-bg-dark: {{ tag_color.bg_dark }}; --tag-fg-light: {{ tag_color.fg_light }}; --tag-fg-dark: {{ tag_color.fg_dark }};"{% endif %}
+      {%- if tag_def.get("description") %} title="{{ tag_def.description }}"{% endif %}>
     {%- if tag_href %}<a href="{{ tag_href }}">{{ tag }}</a>{% else %}<span>{{ tag }}</span>{% endif -%}
     <form method="post" action="/crm/deals/{{ tag_deal_id }}/tags/remove" class="tag-remove-form"
           hx-post="/crm/deals/{{ tag_deal_id }}/tags/remove" hx-target="closest .deal-tag" hx-swap="delete">

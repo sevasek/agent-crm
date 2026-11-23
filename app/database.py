@@ -18,7 +18,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place. Every new migration needs an upgrade test in
 # UPGRADE_TESTS (tests/test_database.py), or CI fails.
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 
 class SchemaVersionError(RuntimeError):
@@ -1079,6 +1079,36 @@ def migrate_015(db) -> None:
     _add_column_if_missing(db, "icp_criteria", "period_days", "period_days INTEGER")
 
 
+def migrate_016(db) -> None:
+    """Add `tags`, the definition of each deal tag (description, pill colour).
+
+    One row per distinct tag already in deal_tags. Tags that start with
+    `missing:` get the palette's yellow slot, so their pills keep the look
+    they had when the colour came from the prefix. `color` is otherwise
+    NULL (the neutral pill). Re-running is safe: CREATE TABLE IF NOT
+    EXISTS and INSERT OR IGNORE.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tags (
+            tag TEXT PRIMARY KEY,
+            description TEXT NOT NULL DEFAULT '',
+            color TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+    db.execute(
+        """INSERT OR IGNORE INTO tags (tag, color, created_at, updated_at)
+           SELECT DISTINCT tag,
+                  CASE WHEN tag LIKE 'missing:%' THEN 'yellow' END, ?, ?
+           FROM deal_tags""",
+        (now, now),
+    )
+
+
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
@@ -1095,6 +1125,7 @@ MIGRATIONS = {
     13: migrate_013,
     14: migrate_014,
     15: migrate_015,
+    16: migrate_016,
 }
 
 

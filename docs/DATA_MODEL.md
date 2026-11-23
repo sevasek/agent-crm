@@ -32,7 +32,7 @@ Say **lead**, **opportunity**, or **deal record**. "Deal" on its own is ambiguou
 | **Conversion readiness** | Missing data that conversion needs. Information, not a gate. |
 | **Customer** | A partner with one or more won opportunities. Calculated, not stored. |
 
-Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `partner_tags`,
+Other tables: `services` (catalogue), `campaigns`, `deal_tags`, `tags`, `partner_tags`,
 `partner_metric_snapshots`, `activities`,
 `pipeline_stages`, `offers`, `icp_criteria`, `delegated_tasks`,
 `stage_automations`, `users`, `api_keys`, OAuth tables, `app_install`.
@@ -167,7 +167,7 @@ Labels on a deal. A campaign link is the tag `campaign:<slug>` (see `campaigns`)
 | `deal_id` | INTEGER NOT NULL | FK to `deals(id)`. With `tag`, the primary key. |
 | `tag` | TEXT NOT NULL | Lowercase slug of letters, digits, hyphens and colons. Examples: `campaign:example-2026-09`, `clinic`, `referral`. At most 80 characters. |
 
-`get_deal` and `list_deals` always include `tags`, an empty list when the deal has none. `list_deals` accepts `tags` (one or more). A deal must carry every listed tag, and the filter combines with stage, owner, service and parent. `list_tags` returns each tag in use with a `count` of deals.
+`get_deal` and `list_deals` always include `tags`, an empty list when the deal has none. `list_deals` accepts `tags` (one or more). A deal must carry every listed tag, and the filter combines with stage, owner, service and parent. `list_tags` returns each defined tag (see `tags`) with a `count` of deals.
 
 Writes:
 
@@ -177,6 +177,19 @@ Writes:
 - `bulk_update_deals` takes `add_tags` / `remove_tags` for the same selection it already uses (`deal_ids`, or `service_slug` plus optional stage and owner).
 - `bulk_update_deals` changes service for up to 50 open opportunities when `deal_ids` is passed with `set_service_id` or `set_service_slug` (not both), plus an optional `offer_id` under the same offer rule. `service_slug` only filters. A mismatch writes nothing; the batch is one transaction. Each deal whose service id changes gets the same timeline line.
 - Lead ingest (`POST /api/v1/leads` and MCP `ingest_leads`) takes an optional `tags` array. A re-run merges those tags onto the open deal. Leaving `tags` off the payload leaves the existing set alone. Entries that are not valid slugs are dropped so one bad label cannot fail the lead.
+
+### `tags`
+
+The definition of each deal tag. Added in migration 16, which adds one row per distinct tag already in `deal_tags` and gives tags starting with `missing:` the `yellow` colour. Every write that puts a tag on a deal (forms, `apply_deal_tags`, lead ingest, MCP, bulk updates) adds a blank row with `INSERT OR IGNORE`, so a tag is never rejected for lacking a definition. Renaming a campaign slug renames its `campaign:` row. Partner tags are not covered.
+
+| Column | Type | Notes |
+|---|---|---|
+| `tag` | TEXT PRIMARY KEY | Same slug rules as `deal_tags.tag`. |
+| `description` | TEXT NOT NULL DEFAULT '' | Shown as the pill's tooltip. |
+| `color` | TEXT | A palette slot name (`blue`, `orange`, `aqua`, `yellow`, `magenta`, `violet`), or null for the neutral pill. |
+| `created_at`, `updated_at` | TEXT | ISO timestamps. |
+
+Renaming a tag (Definitions → Tags) rewrites `deal_tags`. Renaming onto an existing tag merges: a deal with both keeps one row, and the target keeps its description and colour. Deleting a tag removes it from every deal.
 
 ### `partner_tags`
 

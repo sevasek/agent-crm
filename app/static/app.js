@@ -77,6 +77,22 @@ document.addEventListener("submit", function (event) {
     if (!window.confirm(message)) event.preventDefault();
 });
 
+// <input data-tag-suggest list="..."> holds comma-separated tags. A native
+// datalist only matches the whole value, so prefix each suggestion with the
+// tags already typed: the list then completes the tag being typed.
+document.addEventListener("input", function (event) {
+    var field = event.target;
+    if (!field.hasAttribute || !field.hasAttribute("data-tag-suggest") || !field.list) return;
+    var cut = field.value.lastIndexOf(",");
+    var prefix = cut < 0 ? "" : field.value.slice(0, cut + 1).replace(/\s*$/, " ");
+    var typed = prefix.split(",").map(function (t) { return t.trim(); });
+    Array.prototype.forEach.call(field.list.options, function (option) {
+        var tag = option.getAttribute("data-tag");
+        option.value = prefix + tag;
+        option.disabled = typed.indexOf(tag) !== -1;  // already in the list
+    });
+});
+
 // <button data-copy-target="id"> copies that element's text.
 document.addEventListener("click", function (event) {
     var btn = event.target.closest && event.target.closest("button[data-copy-target]");

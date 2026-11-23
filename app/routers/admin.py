@@ -26,7 +26,10 @@ from app.services.partner_metrics import (
     record_snapshot,
 )
 from app.services.catalog import create_service, get_service, update_service, list_services
-from app.services.deal_tags import apply_deal_tags, list_tags, normalize_tag, parse_tag_list
+from app.services.deal_tags import (
+    apply_deal_tags, define_tag, delete_tag, list_tag_definitions, list_tags, normalize_tag,
+    parse_tag_list, rename_tag,
+)
 from app.services.deals import (
     create_deal, get_deal, list_deals, list_parent_candidates, mark_lost,
     check_offer_for_deal, restore_deal, set_deal_service, set_deal_stage, update_deal_fields, record_call_outcome,
@@ -266,6 +269,35 @@ def _apps_menu():
 
 
 APPS_MENU = _apps_menu()
+
+
+def _hex(name):
+    return "#000000" if name == "black" else "#ffffff"
+
+
+# Deal tag pills: a tag's `color` is a slot name; text is whichever of
+# black/white contrasts more with that slot, per mode (tests/test_tags.py
+# checks every slot is >= 4.5:1).
+TAG_PILL_COLORS = {
+    slot["name"]: {
+        "bg_light": slot["light"], "bg_dark": slot["dark"],
+        "fg_light": _hex(_best_icon_color(slot["light"])),
+        "fg_dark": _hex(_best_icon_color(slot["dark"])),
+    }
+    for slot in _PALETTE_SLOTS
+}
+
+
+def tag_defs(request):
+    """{tag: definition} for pills and the Tags datalist, one query per request."""
+    defs = getattr(request.state, "tag_defs", None)
+    if defs is None:
+        defs = request.state.tag_defs = {t["tag"]: t for t in list_tag_definitions()}
+    return defs
+
+
+templates.env.globals["tag_defs"] = tag_defs
+templates.env.globals["tag_pill_colors"] = TAG_PILL_COLORS
 
 
 @router.get("/apps", response_class=HTMLResponse)
@@ -2441,6 +2473,76 @@ async def edit_lost_reason_submit(
             request, user, error=_LOST_REASON_ERRORS.get(error, error), status_code=400,
         )
     return RedirectResponse("/definitions/lost-reasons", status_code=303)
+
+
+# ==================== Tags ====================
+_TAG_ERRORS = {
+    "invalid_tag": "Not a valid tag. Use lowercase letters, digits, hyphens and colons.",
+    "invalid_color": "Pick a colour from the list.",
+    "not_found": "That tag no longer exists.",
+}
+
+
+def _tags_page(request, user, error=None, merge=None, status_code=200):
+    return templates.TemplateResponse(request, "admin/tags.html", {
+        "request": request, "user": user,
+        "tags": list_tag_definitions(),
+        "colors": list(TAG_PILL_COLORS),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "error": error, "merge": merge,
+    }, status_code=status_code)
+
+
+@crm_router.get("/definitions/tags", response_class=HTMLResponse)
+async def tags_list(request: Request, user=Depends(require_login)):
+    return _tags_page(request, user)
+
+
+@crm_router.post("/definitions/tags/save")
+async def save_tag_submit(
+    request: Request,
+    tag: str = Form(""), description: str = Form(""), color: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    """Create a tag, or update its description and colour."""
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/definitions/tags", status_code=303)
+    _tag, error = define_tag(tag, description=description, color=color, set_color=True)
+    if error:
+        return _tags_page(request, user, error=_TAG_ERRORS.get(error, error), status_code=400)
+    return RedirectResponse("/definitions/tags", status_code=303)
+
+
+@crm_router.post("/definitions/tags/rename")
+async def rename_tag_submit(
+    request: Request,
+    tag: str = Form(""), new_tag: str = Form(""), merge: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    """Rename a tag on every deal. Renaming onto an existing tag is a merge
+    and asks first (the page comes back with a confirm panel)."""
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/definitions/tags", status_code=303)
+    _merged, error = rename_tag(tag, new_tag, merge=bool(merge))
+    if error == "exists":
+        counts = {t["tag"]: t["total"] for t in list_tag_definitions()}
+        old, new = normalize_tag(tag), normalize_tag(new_tag)
+        return _tags_page(request, user, merge={
+            "old": old, "new": new, "old_count": counts.get(old, 0), "new_count": counts.get(new, 0),
+        })
+    if error:
+        return _tags_page(request, user, error=_TAG_ERRORS.get(error, error), status_code=400)
+    return RedirectResponse("/definitions/tags", status_code=303)
+
+
+@crm_router.post("/definitions/tags/delete")
+async def delete_tag_submit(
+    request: Request, tag: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        delete_tag(tag)
+    return RedirectResponse("/definitions/tags", status_code=303)
 
 
 # ==================== Campaigns ====================

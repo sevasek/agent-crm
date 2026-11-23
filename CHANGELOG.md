@@ -108,6 +108,9 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   green that stood out from the other tiles, so it takes the same black
   icon as the rest.
 - The CRM menu is ordered Campaigns, Leads, Pipeline, Deals.
+- Dependencies: FastAPI 0.143.0 → 0.163.1, Starlette 1.7.0 → 1.10.0,
+  `python-multipart` 0.0.32 → 0.0.34, `tzdata` ≥ 2026.6; pytest ≥ 9.2.0 for
+  tests.
 
 ## [1.0.0] - 2026-10-17
 

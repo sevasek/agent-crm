@@ -35,7 +35,7 @@
         <td><span class="pill">{{ d.stage }}</span></td>
         <td>
             {% for tag in d.tags %}
-            <a class="pill pill-tag{% if current_tag == tag %} pill-tag-on{% endif %}" href="/crm/deals?tag={{ tag }}{% if current_stage %}&stage={{ current_stage }}{% endif %}">{{ tag }}</a>
+            {% set tag_deal_id = d.id %}{% set tag_on = current_tag == tag %}{% set tag_href = "/crm/deals?tag=" ~ tag ~ ("&stage=" ~ current_stage if current_stage else "") %}{% include "admin/_deal_tag.html" %}
             {% endfor %}
         </td>
         <td>{% if d.value_estimate %}${{ "%.0f"|format(d.value_estimate) }}{% endif %}</td>

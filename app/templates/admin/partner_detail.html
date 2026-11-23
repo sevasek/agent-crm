@@ -157,7 +157,7 @@
     {% if d.offer_name %}· {{ d.offer_name }}{% endif %}
     {% if d.owner_key %}· owner {{ d.owner_key }}{% endif %}
     {% for tag in d.tags %}
-    <a class="pill pill-tag" href="/crm/deals?tag={{ tag }}">{{ tag }}</a>
+    {% set tag_deal_id = d.id %}{% set tag_href = "/crm/deals?tag=" ~ tag %}{% include "admin/_deal_tag.html" %}
     {% endfor %}
     {% for link in d.campaign_links %}
     · {% if link.campaign %}<a href="/crm/campaigns/{{ link.campaign.id }}">{{ link.campaign.name }}</a>{% else %}<span class="muted">{{ link.tag }}</span>{% endif %}

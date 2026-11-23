@@ -6,7 +6,7 @@
     {% if deal.tags %}
     <p class="call-view-tags">
         {% for tag in deal.tags %}
-        <span class="pill pill-tag">{{ tag }}</span>
+        {% set tag_deal_id = deal.id %}{% include "admin/_deal_tag.html" %}
         {% endfor %}
     </p>
     {% endif %}

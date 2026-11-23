@@ -1,12 +1,12 @@
 import math
 
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from fastapi import APIRouter, Request, Form, Depends, Query
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from app.routers.auth import get_session_cookie, require_login, set_session_cookie
+from app.routers.auth import get_session_cookie, require_login, safe_return_to, set_session_cookie
 from app.services.auth import (
     bump_session_version, change_password, generate_csrf_token, is_valid_slug,
     set_user_currency, validate_csrf_token,
@@ -1461,6 +1461,27 @@ async def change_deal_stage(
     if deal:
         return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)
     return RedirectResponse("/crm/deals", status_code=303)
+
+
+@crm_router.post("/crm/deals/{deal_id}/tags/remove")
+async def remove_deal_tag(
+    request: Request, deal_id: int,
+    tag: str = Form(...), csrf_token: str = Form(...), user=Depends(require_login),
+):
+    """The x on a deal's tag pill. htmx deletes the pill on a 200."""
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return Response("Invalid CSRF token.", status_code=403)
+    slug = normalize_tag(tag)
+    if not slug:
+        return Response("That tag is not a valid slug.", status_code=400)
+    if apply_deal_tags(deal_id, remove=[slug]) == "not_found":
+        return Response("Deal not found.", status_code=404)
+    if _is_htmx(request):
+        return Response(status_code=200)
+    # No-JS fallback: back to the page the button was on.
+    ref = urlsplit(request.headers.get("referer", ""))
+    back = safe_return_to(ref.path + (f"?{ref.query}" if ref.query else ""))
+    return RedirectResponse(back or "/crm/deals", status_code=303)
 
 
 # ==================== Pipeline (Kanban board) ====================

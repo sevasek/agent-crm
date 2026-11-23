@@ -28,6 +28,10 @@
     --pill-disqualified-bg: #eeeef2;
     --pill-disqualified-fg: #3d3d4a;
     --pill-tag-on-bg: #e7eef8;
+    /* missing:* deal tags (paperwork still owed): the palette's yellow slot
+       (_PALETTE_SLOTS in app/routers/admin.py) with black text, 9.70:1. */
+    --pill-missing-bg: #eda100;
+    --pill-missing-fg: #000;
     --chip-hover: #f0f4fa;
     --success-bg: #f0f7f0;
     --success-border: #cde5cd;
@@ -84,6 +88,8 @@
         --pill-disqualified-bg: #2a2d38;
         --pill-disqualified-fg: #c5c8d4;
         --pill-tag-on-bg: #1e2d4a;
+        --pill-missing-bg: #c98500;
+        --pill-missing-fg: #000;
         --chip-hover: #1a2740;
         --success-bg: #1a2e1f;
         --success-border: #2d5a35;
@@ -122,6 +128,8 @@
     --pill-disqualified-bg: #2a2d38;
     --pill-disqualified-fg: #c5c8d4;
     --pill-tag-on-bg: #1e2d4a;
+    --pill-missing-bg: #c98500;
+    --pill-missing-fg: #000;
     --chip-hover: #1a2740;
     --success-bg: #1a2e1f;
     --success-border: #2d5a35;
@@ -490,6 +498,26 @@ button { height: var(--control-height); box-sizing: border-box; }
 }
 a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(--link); }
 .tag-filters { margin: 0.25rem 0 0.75rem; }
+/* A deal's tag pill: the tag (a filter link, or plain text) plus an x
+   button that removes the tag in place. */
+.deal-tag { display: inline-flex; align-items: center; gap: 0.1rem; vertical-align: middle; }
+.deal-tag a { color: inherit; text-decoration: none; }
+.deal-tag a:hover { text-decoration: underline; }
+.pill-tag.pill-tag-missing { background: var(--pill-missing-bg); color: var(--pill-missing-fg); font-weight: 600; }
+.tag-remove-form { display: inline; margin: 0; }
+.tag-remove {
+    /* Opts out of the shared --control-height. 24x24 hit area (WCAG 2.2
+       target size); the visible circle is drawn smaller. Negative margins
+       keep the pill from growing to fit it. */
+    height: 24px; width: 24px; min-width: 24px; padding: 0;
+    margin: -5px -0.45rem -5px 0;
+    border: none; border-radius: 50%; cursor: pointer;
+    font: inherit; font-size: 0.9rem; font-weight: 700; line-height: 1;
+    color: inherit;
+    background: radial-gradient(circle 7px, color-mix(in srgb, currentColor 14%, transparent) 6.5px, transparent 7px);
+}
+.tag-remove:hover { background: radial-gradient(circle 7px, color-mix(in srgb, currentColor 28%, transparent) 6.5px, transparent 7px); }
+.tag-remove:focus-visible { outline: 2px solid currentColor; outline-offset: -2px; }
 .activity { padding: 0.6rem 0; border-bottom: 1px solid var(--border); }
 .activity .meta { color: var(--muted); font-size: 0.8rem; }
 .stage-form { display: inline; }

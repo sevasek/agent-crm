@@ -9,7 +9,7 @@
         {% if d.tags %}
         <div class="tag-filters">
             {% for tag in d.tags %}
-            <a class="pill pill-tag" href="/crm/deals?tag={{ tag }}">{{ tag }}</a>
+            {% set tag_deal_id = d.id %}{% set tag_href = "/crm/deals?tag=" ~ tag %}{% include "admin/_deal_tag.html" %}
             {% endfor %}
         </div>
         {% endif %}

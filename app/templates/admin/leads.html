@@ -58,7 +58,7 @@
             {% if d.tags %}
             <div>
                 {% for tag in d.tags %}
-                <span class="pill pill-tag">{{ tag }}</span>
+                {% set tag_deal_id = d.id %}{% include "admin/_deal_tag.html" %}
                 {% endfor %}
             </div>
             {% endif %}

@@ -159,7 +159,8 @@ def test_mcp_set_replace_merge_filter_and_list_tags(client, db, monkeypatch):
 
     tags, _ = call(client, "list_tags")
     assert tags["ok"] is True
-    assert {row["tag"]: row["count"] for row in tags["tags"]} == {"clinic": 1, "referral": 1}
+    # The campaign tag stays defined after it is taken off the deal.
+    assert {row["tag"]: row["count"] for row in tags["tags"]} == {CAMPAIGN: 0, "clinic": 1, "referral": 1}
 
     bad, _ = call(client, "update_deal", {"deal_id": deal_id, "add_tags": ["has space"]})
     assert bad["ok"] is False

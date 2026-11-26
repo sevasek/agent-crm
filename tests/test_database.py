@@ -26,6 +26,7 @@ from app.database import (
     migrate_013,
     migrate_014,
     migrate_015,
+    migrate_016,
     row_to_dict,
 )
 
@@ -98,8 +99,8 @@ def test_init_db_sets_user_version(db):
 
 def test_schema_version_is_only_applied_via_numbered_migration():
     """Future columns must be a new migrate_00N + SCHEMA_VERSION bump."""
-    assert SCHEMA_VERSION == 15
-    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}
+    assert SCHEMA_VERSION == 16
+    assert set(MIGRATIONS) == {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
     assert MIGRATIONS[1] is migrate_001
     assert MIGRATIONS[2] is migrate_002
     assert MIGRATIONS[3] is migrate_003
@@ -115,6 +116,7 @@ def test_schema_version_is_only_applied_via_numbered_migration():
     assert MIGRATIONS[13] is migrate_013
     assert MIGRATIONS[14] is migrate_014
     assert MIGRATIONS[15] is migrate_015
+    assert MIGRATIONS[16] is migrate_016
 
 
 def test_init_db_refuses_newer_schema(tmp_path, monkeypatch):
@@ -615,6 +617,53 @@ def test_init_db_migrates_v14_adds_metric_snapshots(tmp_path, monkeypatch):
     assert again == {"field": "team_size", "value": "10", "metric_key": None, "period_days": None}
 
 
+def test_init_db_migrates_v15_backfills_tag_definitions(tmp_path, monkeypatch):
+    """A live v15 file gets one `tags` row per distinct deal tag.
+
+    missing:* tags get the yellow slot (the colour PR #200 gave them by
+    prefix); the rest have no colour. deal_tags is not rewritten, and
+    running the migration again adds nothing.
+    """
+    path = tmp_path / "data" / "crm.db"
+    path.parent.mkdir()
+    monkeypatch.setattr("app.database.DB_PATH", str(path))
+    monkeypatch.delenv("BACKUP_DIR", raising=False)
+    with get_db() as db:
+        for step in (migrate_001, migrate_002, migrate_003, migrate_004,
+                     migrate_005, migrate_006, migrate_007, migrate_008,
+                     migrate_009, migrate_010, migrate_011, migrate_012,
+                     migrate_013, migrate_014, migrate_015):
+            step(db)
+        db.execute("INSERT INTO partners (id, name) VALUES (1, 'Jane Doe')")
+        db.execute("INSERT INTO services (id, name, slug) VALUES (1, 'Enrolment', 'enrolment')")
+        for deal_id in (1, 2):
+            db.execute(
+                "INSERT INTO deals (id, partner_id, service_id, stage) VALUES (?, 1, 1, 'new')",
+                (deal_id,),
+            )
+        db.executemany(
+            "INSERT INTO deal_tags (deal_id, tag) VALUES (?, ?)",
+            [(1, "missing:bond"), (2, "missing:bond"), (1, "priority:p1"), (2, "referral")],
+        )
+        db.execute("PRAGMA user_version = 15")
+        db.commit()
+    init_db()
+    with get_db() as conn:
+        assert get_user_version(conn) == SCHEMA_VERSION
+        rows = [tuple(r) for r in conn.execute(
+            "SELECT tag, description, color FROM tags ORDER BY tag").fetchall()]
+        assert rows == [
+            ("missing:bond", "", "yellow"),
+            ("priority:p1", "", None),
+            ("referral", "", None),
+        ]
+        assert conn.execute("SELECT created_at FROM tags").fetchone()[0]
+        assert conn.execute("SELECT COUNT(*) FROM deal_tags").fetchone()[0] == 4
+        migrate_016(conn)
+        conn.commit()
+        assert conn.execute("SELECT COUNT(*) FROM tags").fetchone()[0] == 3
+
+
 # Schema version -> a test that upgrades a populated database into it.
 UPGRADE_TESTS = {
     1: test_init_db_migrates_legacy_version_0,
@@ -627,6 +676,7 @@ UPGRADE_TESTS = {
     13: test_init_db_migrates_v11_seeds_disqualified,
     14: test_init_db_migrates_v13_expires_never_changed_passwords,
     15: test_init_db_migrates_v14_adds_metric_snapshots,
+    16: test_init_db_migrates_v15_backfills_tag_definitions,
 }
 # Shipped before this guard with no upgrade test of their own. Never add to it.
 GRANDFATHERED = frozenset({2, 6, 8, 10, 11})

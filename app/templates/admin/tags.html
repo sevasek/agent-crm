@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Tags — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
+{% block content %}
+<h1>Tags</h1>
+<p class="muted">A tag is a short label on a deal or lead, such as <code>missing:bond</code> or <code>referral</code>. <a href="{{ help_url('tags') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
+<p class="muted">Define a tag so everyone spells it the same way. The description shows when you hover a tag, and the colour is used for its pill. A tag typed on a deal that is not here yet is added automatically.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+{% if merge %}
+<article class="tag-merge" role="alert">
+    <p><code>{{ merge.new }}</code> already exists ({{ merge.new_count }} deal{{ "s" if merge.new_count != 1 }}). Merge <code>{{ merge.old }}</code> ({{ merge.old_count }} deal{{ "s" if merge.old_count != 1 }}) into it? Every deal with <code>{{ merge.old }}</code> gets <code>{{ merge.new }}</code> instead, and <code>{{ merge.old }}</code> is removed. <code>{{ merge.new }}</code> keeps its description and colour.</p>
+    <form method="post" action="/definitions/tags/rename" class="tag-row-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="tag" value="{{ merge.old }}">
+        <input type="hidden" name="new_tag" value="{{ merge.new }}">
+        <input type="hidden" name="merge" value="1">
+        <button type="submit">Merge into {{ merge.new }}</button>
+        <a class="btn btn-secondary" href="/definitions/tags">Cancel</a>
+    </form>
+</article>
+{% endif %}
+<table>
+    <tr>
+        <th>Tag</th><th>Description</th><th>Colour</th><th>Deals</th><th></th><th>Rename or merge</th><th></th>
+    </tr>
+    {% for t in tags %}
+    {% set tag_color = tag_pill_colors.get(t.color) %}
+    <form id="tag-edit-{{ loop.index }}" method="post" action="/definitions/tags/save"></form>
+    <tr>
+        <td><span class="pill pill-tag{% if tag_color %} pill-tag-color{% endif %}"{% if tag_color %} style="--tag-bg-light: {{ tag_color.bg_light }}; --tag-bg-dark: {{ tag_color.bg_dark }}; --tag-fg-light: {{ tag_color.fg_light }}; --tag-fg-dark: {{ tag_color.fg_dark }};"{% endif %}>{{ t.tag }}</span></td>
+        <td><input type="text" name="description" value="{{ t.description }}" form="tag-edit-{{ loop.index }}" aria-label="Description of {{ t.tag }}"></td>
+        <td>
+            <select name="color" form="tag-edit-{{ loop.index }}" aria-label="Colour of {{ t.tag }}">
+                <option value="">None</option>
+                {% for c in colors %}<option value="{{ c }}"{% if t.color == c %} selected{% endif %}>{{ c | capitalize }}</option>{% endfor %}
+            </select>
+        </td>
+        <td>{% if t.count %}<a href="/crm/deals?tag={{ t.tag }}">{{ t.count }}</a>{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td>
+            <input type="hidden" name="tag" value="{{ t.tag }}" form="tag-edit-{{ loop.index }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="tag-edit-{{ loop.index }}">
+            <button type="submit" form="tag-edit-{{ loop.index }}">Save</button>
+        </td>
+        {% if t.tag.startswith("campaign:") %}
+        <td colspan="2" class="muted">Campaign membership: rename or remove it on the <a href="/crm/campaigns">Campaigns</a> page.</td>
+        {% else %}
+        <td>
+            <form method="post" action="/definitions/tags/rename" class="tag-row-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="tag" value="{{ t.tag }}">
+                <input type="text" name="new_tag" list="tag-suggestions" aria-label="New name for {{ t.tag }}" placeholder="new name" required>
+                <button type="submit" class="btn-secondary">Rename</button>
+            </form>
+        </td>
+        <td>
+            <form method="post" action="/definitions/tags/delete" class="tag-row-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="tag" value="{{ t.tag }}">
+                <button type="submit" class="btn-secondary" aria-label="Delete tag {{ t.tag }}"
+                        data-confirm="Delete {{ t.tag }}? It is removed from {{ t.total }} deal{{ 's' if t.total != 1 }}.">Delete</button>
+            </form>
+        </td>
+        {% endif %}
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No tags yet.</td></tr>
+    {% endfor %}
+</table>
+<datalist id="tag-suggestions">{% for t in tags %}<option value="{{ t.tag }}">{% endfor %}</datalist>
+
+<h2>Add a tag</h2>
+<form method="post" action="/definitions/tags/save">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="form-row">
+        <label for="tag">Tag</label>
+        <input type="text" id="tag" name="tag" placeholder="e.g. missing:bond" required>
+    </div>
+    <div class="form-row">
+        <label for="description">Description</label>
+        <input type="text" id="description" name="description" placeholder="e.g. Bond not paid yet">
+    </div>
+    <div class="form-row">
+        <label for="color">Colour</label>
+        <select id="color" name="color">
+            <option value="">None</option>
+            {% for c in colors %}<option value="{{ c }}">{{ c | capitalize }}</option>{% endfor %}
+        </select>
+    </div>
+    <button type="submit">Add tag</button>
+</form>
+{% endblock %}

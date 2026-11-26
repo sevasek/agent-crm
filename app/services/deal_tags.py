@@ -3,6 +3,10 @@
 A tag is a lowercase slug of letters, digits, hyphens and colons, for example
 `campaign:example-2026-09`, `clinic`, `referral`. Stored in
 `deal_tags` (deal_id, tag), not as a column on `deals`.
+
+Every tag is also a row in `tags` (description, pill colour). Applying a
+tag never fails for want of a definition: every write to deal_tags goes
+through `define_tags`, which adds a blank one.
 """
 import re
 from datetime import datetime, timezone
@@ -165,10 +169,23 @@ def attach_tags(deals) -> list:
     return deals
 
 
+def _now() -> str:
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+
+
+def define_tags(db, tags) -> None:
+    """Add a blank definition for each tag that has none. Caller commits."""
+    now = _now()
+    db.executemany(
+        "INSERT OR IGNORE INTO tags (tag, created_at, updated_at) VALUES (?, ?, ?)",
+        [(tag, now, now) for tag in tags],
+    )
+
+
 def _touch_deal(db, deal_id: int) -> None:
     db.execute(
         "UPDATE deals SET updated_at = ? WHERE id = ?",
-        (datetime.now(timezone.utc).replace(tzinfo=None).isoformat(), deal_id),
+        (_now(), deal_id),
     )
 
 
@@ -184,6 +201,7 @@ def apply_deal_tags(deal_id: int, *, replace=None, add=None, remove=None):
         exists = db.execute("SELECT 1 FROM deals WHERE id = ?", (deal_id,)).fetchone()
         if not exists:
             return "not_found"
+        define_tags(db, [*(replace or []), *(add or [])])
         if replace is not None:
             db.execute("DELETE FROM deal_tags WHERE deal_id = ?", (deal_id,))
             for tag in replace:
@@ -226,6 +244,124 @@ def list_tags() -> list:
                ORDER BY deal_tags.tag"""
         ).fetchall()
     return [{"tag": row["tag"], "count": row["count"]} for row in rows]
+
+
+def tag_colors() -> dict:
+    """Palette slot name -> the slot (light/dark hex). Lazy import: the
+    palette lives with the apps launcher in the admin router."""
+    from app.routers.admin import _PALETTE_SLOTS
+    return {slot["name"]: slot for slot in _PALETTE_SLOTS}
+
+
+def list_tag_definitions() -> list:
+    """Every defined tag with its description and colour.
+
+    `count` is deals that are not lost (as in list_tags); `total` includes
+    lost and merged ones, which a rename or delete also changes.
+    """
+    with get_db() as db:
+        rows = db.execute(
+            """SELECT tags.tag, tags.description, tags.color,
+                      COALESCE(SUM(deals.active = 1), 0) AS count,
+                      COUNT(deals.id) AS total
+               FROM tags
+               LEFT JOIN deal_tags ON deal_tags.tag = tags.tag
+               LEFT JOIN deals ON deals.id = deal_tags.deal_id
+               GROUP BY tags.tag ORDER BY tags.tag"""
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def define_tag(tag, *, description=None, color=None, set_color=False):
+    """Create a tag or update its description / colour.
+
+    None description leaves it as it is. `color` is a palette slot name, or
+    None / "" for the neutral pill; it is only written when `set_color`.
+    Returns (definition, error_code).
+    """
+    slug = normalize_tag(tag)
+    if not slug:
+        return None, "invalid_tag"
+    if description is not None and not isinstance(description, str):
+        return None, "invalid_description"
+    if set_color:
+        color = color or None
+        if color is not None and (not isinstance(color, str) or color not in tag_colors()):
+            return None, "invalid_color"
+    with get_db() as db:
+        define_tags(db, [slug])
+        if description is not None:
+            db.execute("UPDATE tags SET description = ?, updated_at = ? WHERE tag = ?",
+                       (description.strip(), _now(), slug))
+        if set_color:
+            db.execute("UPDATE tags SET color = ?, updated_at = ? WHERE tag = ?",
+                       (color, _now(), slug))
+        db.commit()
+    return next(t for t in list_tag_definitions() if t["tag"] == slug), None
+
+
+def tag_in_use(db, tag) -> bool:
+    return db.execute("SELECT 1 FROM tags WHERE tag = ?", (tag,)).fetchone() is not None
+
+
+def move_tag(db, old: str, new: str) -> None:
+    """Rename `old` to `new` on every deal and in `tags`. Caller commits.
+
+    When `new` already exists this is a merge: deals that had both keep one
+    row, and `new` keeps its own description and colour.
+    """
+    if old == new:
+        return
+    db.execute(
+        """DELETE FROM deal_tags
+           WHERE tag = ?
+             AND deal_id IN (SELECT deal_id FROM deal_tags WHERE tag = ?)""",
+        (old, new),
+    )
+    db.execute("UPDATE deal_tags SET tag = ? WHERE tag = ?", (new, old))
+    if tag_in_use(db, new):
+        db.execute("DELETE FROM tags WHERE tag = ?", (old,))
+    else:
+        db.execute("UPDATE tags SET tag = ?, updated_at = ? WHERE tag = ?", (new, _now(), old))
+
+
+def rename_tag(old, new, *, merge=False):
+    """Rename a tag. Returns (merged, error_code).
+
+    If `new` exists the rename is a merge and needs merge=True, otherwise
+    the error is "exists" and nothing changes.
+    """
+    old_slug, new_slug = normalize_tag(old), normalize_tag(new)
+    if not old_slug or not new_slug:
+        return False, "invalid_tag"
+    # campaign:<slug> is campaign membership; renaming it here would orphan
+    # the campaign's deals. Campaign renames go through update_campaign.
+    if old_slug.startswith(CAMPAIGN_PREFIX) or new_slug.startswith(CAMPAIGN_PREFIX):
+        return False, "campaign_tag"
+    with get_db() as db:
+        if not tag_in_use(db, old_slug):
+            return False, "not_found"
+        if old_slug == new_slug:
+            return False, None
+        exists = tag_in_use(db, new_slug)
+        if exists and not merge:
+            return False, "exists"
+        move_tag(db, old_slug, new_slug)
+        db.commit()
+    return exists, None
+
+
+def delete_tag(tag):
+    """Remove a tag from every deal and drop its definition. Returns
+    (number of deals it was removed from, error_code)."""
+    slug = normalize_tag(tag) or ""
+    if slug.startswith(CAMPAIGN_PREFIX):
+        return 0, "campaign_tag"  # would empty the campaign; see rename_tag
+    with get_db() as db:
+        removed = db.execute("DELETE FROM deal_tags WHERE tag = ?", (slug,)).rowcount
+        db.execute("DELETE FROM tags WHERE tag = ?", (slug,))
+        db.commit()
+    return removed, None
 
 
 def backfill_campaign_tags(db) -> int:

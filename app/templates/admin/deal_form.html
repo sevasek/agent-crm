@@ -129,9 +129,10 @@
     {% include "admin/_campaign_links.html" %}
     <div class="form-row">
         <label for="tags">Tags</label>
-        <input type="text" id="tags" name="tags"
+        <input type="text" id="tags" name="tags" list="tag-suggestions" data-tag-suggest autocomplete="off"
                placeholder="clinic, referral, campaign:example-2026-09"
                value="{% if form_tags is not none %}{{ form_tags }}{% elif deal and deal.tags %}{{ deal.tags | join(', ') }}{% endif %}">
+        <datalist id="tag-suggestions">{% for t in tag_defs(request).values() %}<option value="{{ t.tag }}" data-tag="{{ t.tag }}">{{ t.description }}</option>{% endfor %}</datalist>
         <p class="muted">Comma-separated. Lowercase letters, digits, hyphens and colons. Saving replaces the set.</p>
     </div>
     <button type="submit">{{ "Save" if deal else "Create opportunity" }}</button>

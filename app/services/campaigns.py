@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from app.database import IntegrityConflict, get_db
 from app.services.auth import sanitize_text
 from app.services.catalog import get_service
-from app.services.deal_tags import CAMPAIGN_PREFIX, TAG_MAX_LEN, is_valid_tag
+from app.services.deal_tags import CAMPAIGN_PREFIX, TAG_MAX_LEN, is_valid_tag, move_tag
 from app.services.deals import list_deals
 from app.services.offers import get_offer
 from app.services.partners import PREFERRED_CHANNELS
@@ -388,23 +388,7 @@ def create_campaign(name, **fields):
 
 
 def _rewrite_campaign_tag(db, old_slug: str, new_slug: str) -> None:
-    old_tag = CAMPAIGN_PREFIX + old_slug
-    new_tag = CAMPAIGN_PREFIX + new_slug
-    if old_tag == new_tag:
-        return
-    # Drop the old tag where the deal already has the new one, then rename
-    # the rest. The primary key is (deal_id, tag), so the delete has to
-    # happen first.
-    db.execute(
-        """DELETE FROM deal_tags
-           WHERE tag = ?
-             AND deal_id IN (SELECT deal_id FROM deal_tags WHERE tag = ?)""",
-        (old_tag, new_tag),
-    )
-    db.execute(
-        "UPDATE deal_tags SET tag = ? WHERE tag = ?",
-        (new_tag, old_tag),
-    )
+    move_tag(db, CAMPAIGN_PREFIX + old_slug, CAMPAIGN_PREFIX + new_slug)
 
 
 def update_campaign(campaign_id: int, **fields):

@@ -44,7 +44,9 @@ from app.services.catalog import (
     slug_from_name,
     update_catalog_service,
 )
-from app.services.deal_tags import TAG_HELP, MAX_TAGS, apply_deal_tags, list_tags, parse_tag_list
+from app.services.deal_tags import (
+    TAG_HELP, MAX_TAGS, apply_deal_tags, define_tag, list_tag_definitions, parse_tag_list, tag_colors,
+)
 from app.services.partner_tags import (
     apply_partner_tags,
     attach_tags as attach_partner_tags,
@@ -636,8 +638,30 @@ def list_due_followups_tool(arguments):
 
 
 def list_tags_tool(_arguments):
-    rows = list_tags()
+    rows = [
+        {key: row[key] for key in ("tag", "description", "color", "count")}
+        for row in list_tag_definitions()
+    ]
     return _ok(tags=rows, count=len(rows))
+
+
+def define_tag_tool(arguments):
+    description = arguments.get("description")
+    if description is not None and not isinstance(description, str):
+        return _err("invalid_description", "description must be a string.")
+    tag, error = define_tag(
+        arguments.get("tag"),
+        description=description,
+        color=arguments.get("color"),
+        set_color="color" in arguments,
+    )
+    if error == "invalid_tag":
+        return _err(error, f"Invalid tag. {TAG_HELP}")
+    if error == "invalid_color":
+        return _err(error, f"color must be one of {', '.join(tag_colors())}, or null for none.")
+    if error:
+        return _err(error, error)
+    return _ok(tag={key: tag[key] for key in ("tag", "description", "color", "count")})
 
 
 def list_catalog_tool(_arguments):
@@ -1722,7 +1746,10 @@ TOOLS = [
     {
         "name": "list_tags",
         "description": (
-            "Tags currently in use, with how many deals carry each one. "
+            "Defined tags with their description, colour (palette slot or null) "
+            "and count (deals that are not lost). Every tag applied to a deal "
+            "is defined, so this includes every tag in use plus any set up with "
+            "define_tag that no deal has yet. "
             "A tag is a lowercase slug of letters, digits, hyphens and colons "
             "(campaign:example-2026-09, clinic, referral). "
             "Use with list_deals(tags=...) to pull every deal in a campaign."
@@ -1736,6 +1763,35 @@ TOOLS = [
             "openWorldHint": False,
         },
         "handler": list_tags_tool,
+    },
+    {
+        "name": "define_tag",
+        "description": (
+            "Create a tag definition, or change its description or colour, so "
+            "staff and agents use the same tag (for example missing:bond, "
+            "\"Bond not paid yet\", yellow). Omitted fields are left as they are. "
+            "color is a palette slot (blue, orange, aqua, yellow, magenta, "
+            "violet) or null for a plain pill. Applying a tag to a deal defines "
+            "it automatically, so this is only needed for the description and colour."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["tag"],
+            "properties": {
+                "tag": {"type": "string"},
+                "description": {"type": "string"},
+                "color": {"type": ["string", "null"]},
+            },
+        },
+        "annotations": {
+            "title": "Define tag",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": define_tag_tool,
     },
     {
         "name": "get_deal",

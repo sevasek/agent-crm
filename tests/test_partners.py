@@ -26,7 +26,7 @@ def test_new_partner_form_hides_company_only_fields(logged_in_client):
     assert "js-person-only" in html
     assert "js-company-only" in html
     assert "Company (if this is a person)" in html
-    assert "Title (role at company)" in html
+    assert "Title (role in the company)" in html
     assert "Team size" in html
     assert 'js-company-only" hidden' in html
     assert html.count('class="form-row js-person-only"') == 2

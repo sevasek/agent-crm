@@ -18,7 +18,7 @@ IntegrityConflict = sqlite3.IntegrityError
 # migrate_00N and bump this constant. Never add columns to an already
 # shipped version in place. Every new migration needs an upgrade test in
 # UPGRADE_TESTS (tests/test_database.py), or CI fails.
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 
 class SchemaVersionError(RuntimeError):
@@ -1109,6 +1109,46 @@ def migrate_016(db) -> None:
     )
 
 
+def migrate_017(db) -> None:
+    """Add custom deal fields and instance-wide workspace settings.
+
+    * `deal_fields`: one row per field an install defines on deals (label,
+      type, choices, which services it applies to, card display).
+    * `deals.custom_fields`: the values, a JSON object keyed by field key.
+      NULL means no values, so existing deals need no backfill.
+    * `workspace_settings`: key/value settings that apply to every user
+      (per-user settings such as currency stay on `users`).
+
+    Re-running is safe: CREATE TABLE IF NOT EXISTS, and the column is only
+    added when missing.
+    """
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS deal_fields (
+            key TEXT PRIMARY KEY,
+            label TEXT NOT NULL,
+            type TEXT NOT NULL,
+            choices TEXT NOT NULL DEFAULT '[]',
+            service_ids TEXT,
+            required INTEGER NOT NULL DEFAULT 0,
+            show_on_card INTEGER NOT NULL DEFAULT 0,
+            is_title INTEGER NOT NULL DEFAULT 0,
+            position INTEGER NOT NULL DEFAULT 0,
+            archived INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT,
+            updated_at TEXT
+        )
+        """
+    )
+    db.execute(
+        "CREATE TABLE IF NOT EXISTS workspace_settings ("
+        "key TEXT PRIMARY KEY, value TEXT NOT NULL)"
+    )
+    columns = {row[1] for row in db.execute("PRAGMA table_info(deals)").fetchall()}
+    if "custom_fields" not in columns:
+        db.execute("ALTER TABLE deals ADD COLUMN custom_fields TEXT")
+
+
 MIGRATIONS = {
     1: migrate_001,
     2: migrate_002,
@@ -1126,6 +1166,7 @@ MIGRATIONS = {
     14: migrate_014,
     15: migrate_015,
     16: migrate_016,
+    17: migrate_017,
 }
 
 

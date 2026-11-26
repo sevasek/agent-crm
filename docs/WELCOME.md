@@ -14,6 +14,7 @@ links to the section about the thing it shows you.
 - [Calls](#calls)
 - [Services](#services)
 - [Stages](#stages)
+- [Deal fields](#deal-fields)
 - [Offers](#offers)
 - [Automations](#automations)
 - [Lost reasons](#lost-reasons)
@@ -79,6 +80,18 @@ your process — for example New, Contacted, or Won. A few special roles
 tell the CRM which stage new deals start in, which stage feeds the call
 list, and which stages close a deal.
 
+## Deal fields
+
+A deal field is a detail you want to record on deals that this CRM
+doesn't have built in, such as a child's first name, a date of birth, or a
+room. You pick the type (text, number, date, yes/no, or a list of
+choices), and whether it applies to every service or only some. One text
+field can be the **card title**: the pipeline then shows that value, for
+example the child's name, instead of the contact's name. One contact can
+have several open deals for the same service when their titles differ, so
+two children from one family can both be on the same waitlist. Archiving a
+field hides it but keeps what was entered.
+
 ## Offers
 
 An offer is the price and the short pitch for a service that you use on a
@@ -125,6 +138,9 @@ taken.
 Settings is where you manage your own password, your currency, and the
 keys an agent or an import uses to connect to this CRM. There's no team
 management here — this CRM is built for one person logged in.
+Under Workspace you can choose what a contact that groups people is
+called, such as Company, or Family when parents sit under one family.
+That wording applies to everyone.
 
 ## Want more detail?
 

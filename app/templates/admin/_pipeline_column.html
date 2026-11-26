@@ -3,9 +3,16 @@
     <div class="pipeline-card-list">
     {% for d in col.deals %}
     <div class="pipeline-card{% if not d.active %} pipeline-card-lost{% endif %}" data-deal-id="{{ d.id }}">
+        {% if d.card_title %}
+        <a class="pipeline-card-title" href="/crm/deals/{{ d.id }}/edit">{{ d.card_title }}</a>
+        {% set record = d %}{% include "admin/_record_badges.html" %}
+        <div class="muted">{% if d.partner_id %}<a href="/contacts/partners/{{ d.partner_id }}">{{ d.partner_name }}</a> · {% endif %}{{ d.service_name }}</div>
+        {% else %}
         {% if d.partner_id %}<a href="/contacts/partners/{{ d.partner_id }}">{{ d.partner_name }}</a>{% else %}<span class="muted">{{ d.company_name or d.name or ("Record #" ~ d.id) }}</span>{% endif %}
         {% set record = d %}{% include "admin/_record_badges.html" %}
         <div class="muted">{{ d.service_name }}</div>
+        {% endif %}
+        {% for cf in d.card_fields %}<div class="muted">{{ cf.label }}: {{ cf.value }}</div>{% endfor %}
         {% if d.tags %}
         <div class="tag-filters">
             {% for tag in d.tags %}

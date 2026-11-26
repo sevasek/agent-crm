@@ -2,7 +2,7 @@
 {% block title %}{{ partner.name }} — crm{% endblock %}
 {% block main_class %}container container-wide{% endblock %}
 {% block content %}
-<h1>{{ partner.name }} <span class="pill">{{ "company" if partner.is_company else "person" }}</span></h1>
+<h1>{{ partner.name }} <span class="pill">{{ org_words(request).lower if partner.is_company else "person" }}</span></h1>
 <p class="muted">
     {% if partner.email %}{{ partner.email }} · {% endif %}
     {% if partner.phone is dialable %}
@@ -108,7 +108,7 @@
 {% endif %}
 
 {% if partner.is_company and children %}
-<h2>People at this company</h2>
+<h2>People in this {{ org_words(request).lower }}</h2>
 <table>
     <tr><th>Name</th><th>Title</th><th>Email</th><th>Deals</th></tr>
     {% for c in children %}
@@ -116,7 +116,7 @@
         <td><a href="/contacts/partners/{{ c.id }}">{{ c.name }}</a></td><td>{{ c.title or "" }}</td><td>{{ c.email or "" }}</td>
         <td>
             {% for d in people_deals.get(c.id, []) %}
-            <a href="/crm/deals/{{ d.id }}/edit">{{ d.service_name }}</a> <span class="pill">{{ d.stage }}</span>{% if not loop.last %} · {% endif %}
+            <a href="/crm/deals/{{ d.id }}/edit">{% if d.card_title %}{{ d.card_title }} · {% endif %}{{ d.service_name }}</a> <span class="pill">{{ d.stage }}</span>{% if not loop.last %} · {% endif %}
             {% else %}<span class="muted">—</span>{% endfor %}
         </td>
     </tr>
@@ -152,7 +152,7 @@
 <h2>Deals</h2>
 {% for d in deals %}
 <div class="deal-card">
-    <strong>{{ d.service_name }}</strong> — {% set record = d %}{% include "admin/_record_badges.html" %} <span class="pill">{{ d.stage }}</span>
+    <strong>{% if d.card_title %}{{ d.card_title }} · {% endif %}{{ d.service_name }}</strong> — {% set record = d %}{% include "admin/_record_badges.html" %} <span class="pill">{{ d.stage }}</span>
     {% if d.value_estimate %}· ${{ "%.0f"|format(d.value_estimate) }}{% endif %}
     {% if d.offer_name %}· {{ d.offer_name }}{% endif %}
     {% if d.owner_key %}· owner {{ d.owner_key }}{% endif %}

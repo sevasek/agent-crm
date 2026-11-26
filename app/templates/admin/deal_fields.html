@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Deal fields — crm{% endblock %}
+{% block main_class %}container container-wide{% endblock %}
+{% block content %}
+<h1>Deal fields</h1>
+<p class="muted">Fields you add here appear on every deal, or only on deals for the services you pick. Use them for details your business tracks, such as a child's first name and date of birth. <a href="{{ help_url('deal-fields') }}" target="_blank" rel="noopener">Learn more ↗</a></p>
+<p class="muted">The <strong>card title</strong> field names the deal on the pipeline, instead of the contact. A contact can have several open deals for the same service when their titles differ. A field's type can't change after it's added. Archiving a field hides it but keeps what was entered.</p>
+{% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+<table>
+    <tr><th>Field</th><th>Type</th><th>Choices</th><th>Services</th><th>Shown</th><th></th><th></th></tr>
+    {% for f in fields %}
+    <tr{% if f.archived %} class="muted"{% endif %}>
+        <td>{{ f.label }}{% if f.required %} <span class="pill">required</span>{% endif %}{% if f.archived %} <span class="pill">archived</span>{% endif %}<br><code class="muted">{{ f.key }}</code></td>
+        <td>{{ f.type_label }}</td>
+        <td>{{ f.choices | join(", ") if f.choices else "" }}</td>
+        <td>{{ f.service_names | join(", ") if f.service_names else "All" }}</td>
+        <td>{% if f.is_title %}Card title{% elif f.show_on_card %}On card{% else %}<span class="muted">Deal page</span>{% endif %}</td>
+        <td>{% if not f.archived %}<a class="btn btn-secondary" href="/definitions/deal-fields?edit={{ f.key }}#field-form">Edit</a>{% endif %}</td>
+        <td>
+            <form method="post" action="/definitions/deal-fields/{{ f.key }}/archive" class="tag-row-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="archived" value="{{ '0' if f.archived else '1' }}">
+                <button type="submit" class="btn-secondary" aria-label="{{ 'Restore' if f.archived else 'Archive' }} {{ f.label }}">{{ "Restore" if f.archived else "Archive" }}</button>
+            </form>
+        </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">No deal fields yet.</td></tr>
+    {% endfor %}
+</table>
+
+{% set f = editing %}
+<h2 id="field-form">{{ "Edit " ~ f.label if f else "Add a field" }}</h2>
+<form method="post" action="/definitions/deal-fields/save">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% if f %}<input type="hidden" name="key" value="{{ f.key }}">{% endif %}
+    <div class="form-row">
+        <label for="label">Label</label>
+        <input type="text" id="label" name="label" required maxlength="80" placeholder="e.g. Child's first name"
+               value="{{ form.get('label', f.label if f else '') }}">
+    </div>
+    <div class="form-row">
+        <label for="type">Type</label>
+        {% if f %}
+        <input type="text" id="type" value="{{ f.type_label }}" disabled>
+        {% else %}
+        <select id="type" name="type" required>
+            {% for key, label in types.items() %}<option value="{{ key }}"{% if form.get('type') == key %} selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+        {% endif %}
+    </div>
+    {% if not f or f.type in ("choice", "multi_choice") %}
+    <div class="form-row">
+        <label for="choices">Choices <span class="muted">(choice types only, one per line)</span></label>
+        <textarea id="choices" name="choices" rows="4" placeholder="Neville&#10;Rosa">{{ form.get('choices', (f.choices | join('\n')) if f else '') }}</textarea>
+    </div>
+    {% endif %}
+    <fieldset class="form-row">
+        <legend>Applies to <span class="muted">(none ticked = all services)</span></legend>
+        {% for s in services %}
+        <label><input type="checkbox" name="service_ids" value="{{ s.id }}"{% if s.id in chosen_services %} checked{% endif %}> {{ s.name }}</label>
+        {% endfor %}
+    </fieldset>
+    <div class="form-row">
+        <label><input type="checkbox" name="required" value="1"{% if (form and form.get('required')) or (not form and f and f.required) %} checked{% endif %}> Required</label>
+        <label><input type="checkbox" name="show_on_card" value="1"{% if (form and form.get('show_on_card')) or (not form and f and f.show_on_card) %} checked{% endif %}> Show on pipeline card</label>
+        <label><input type="checkbox" name="is_title" value="1"{% if (form and form.get('is_title')) or (not form and f and f.is_title) %} checked{% endif %}> Card title (text fields only; replaces the current title field)</label>
+    </div>
+    <div class="form-row">
+        <label for="position">Order</label>
+        <input type="number" id="position" name="position" step="1" value="{{ form.get('position', f.position if f else '') }}">
+    </div>
+    <button type="submit">{{ "Save field" if f else "Add field" }}</button>
+    {% if f %}<a class="btn btn-secondary" href="/definitions/deal-fields">Cancel</a>{% endif %}
+</form>
+{% endblock %}

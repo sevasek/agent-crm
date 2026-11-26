@@ -6,14 +6,14 @@
 <form method="post" action="{{ '/contacts/partners/' ~ partner.id ~ '/edit' if partner else '/contacts/partners/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <div class="form-row">
-        <label><input type="checkbox" id="is_company" name="is_company" value="1" {% if partner and partner.is_company %}checked{% endif %}> This is a company</label>
+        <label><input type="checkbox" id="is_company" name="is_company" value="1" {% if partner and partner.is_company %}checked{% endif %}> This is a {{ org_words(request).lower }}</label>
     </div>
     <div class="form-row">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" value="{{ partner.name if partner else '' }}" required>
     </div>
     <div class="form-row js-person-only" {% if partner and partner.is_company %}hidden{% endif %}>
-        <label for="parent_id">Company (if this is a person)</label>
+        <label for="parent_id">{{ org_words(request).singular }} (if this is a person)</label>
         <select id="parent_id" name="parent_id">
             <option value="">— none —</option>
             {% for c in companies %}
@@ -22,7 +22,7 @@
         </select>
     </div>
     <div class="form-row js-person-only" {% if partner and partner.is_company %}hidden{% endif %}>
-        <label for="title">Title (role at company)</label>
+        <label for="title">Title (role in the {{ org_words(request).lower }})</label>
         <input type="text" id="title" name="title" value="{{ (partner.title or '') if partner else '' }}">
     </div>
     <div class="form-row">

@@ -13,6 +13,23 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ### Added
 
+- Definitions → Deal fields: custom fields on deals (migration 17,
+  `deal_fields` plus `deals.custom_fields`). Types: text, long text,
+  number, date, yes/no, choice, multi-choice. A field can apply to every
+  service or only some, be required, show on the pipeline card, or be the
+  **card title**. Fields are archived, not deleted. The deal form shows
+  them under Details; MCP `create_deal` / `update_deal` take
+  `custom_fields`, `list_deals` filters on them, `list_catalog` lists them,
+  and new `define_deal_field` defines them. Deals return `custom_fields`
+  and `card_title`.
+- Card titles: when a title field is set, the pipeline card, deals list
+  and partner page name the deal by it (for example a child's first name),
+  with the contact underneath.
+- Settings → Workspace: an organisation label (singular and plural) for
+  company-type partners, such as Family / Families. It changes the
+  wording on the partner pages and is returned to agents by
+  `list_catalog` and `get_partner`. Default Company / Companies.
+
 - Definitions → Tags: a `tags` table (migration 16) gives each deal tag a
   description and an optional palette colour. The page lists every tag with
   its deal count, and can add, edit, rename, merge (renaming onto an
@@ -37,6 +54,10 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ### Changed
 
+- The open-deal duplicate check (`create_deal`, lead ingest, client
+  import, lead convert) compares the card title when a title field is
+  defined, so one partner can have several open deals for a service, one
+  per title. Without a title field nothing changes.
 - MCP `list_tags` includes tags that are defined but on no deal yet
   (`count` 0). It used to list only tags in use.
 

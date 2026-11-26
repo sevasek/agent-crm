@@ -11,6 +11,15 @@ as `vX.Y.Z` and `latest`, as documented in the README.
 
 ## [Unreleased]
 
+### Added
+
+- Each deal tag pill (pipeline cards, deals list, partner page, leads list,
+  call view) has an × button that removes that tag from the deal in place,
+  without reloading the page (`POST /crm/deals/{id}/tags/remove`).
+- Tags that start with `missing:` show in the palette's yellow with black
+  text (9.70:1 light, 6.84:1 dark), so outstanding paperwork stands out on
+  the board.
+
 ## [1.1.0] - 2026-11-23
 
 ### Security

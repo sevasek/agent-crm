@@ -17,7 +17,7 @@ A **deal** is a lead you have decided to pursue. It belongs to one partner and o
 
 - **Partners** — companies and people.
 - **Calls** — who to phone, with the offer to pitch and buttons for the outcome. It is laid out for a phone browser.
-- **Pipeline** — the board. Drag a deal from one column to another.
+- **Pipeline** — the board. Drag a deal from one column to another. Tags show on each card. Click a tag to list the deals that have it, or its × to take it off that deal. Tags that start with `missing:` (for example `missing:bond`) are yellow, so outstanding paperwork stands out.
 - **Deals** — the same deals as a list. Due and overdue follow-ups show here.
 - **Leads** — people you are still researching. Open a lead to add notes, or turn it into a deal when you want to pursue it.
 - **Campaigns** — a planned push with one audience, one offer, and one opener. Deals and leads join a campaign when they have its tag (`campaign:` plus the slug). The list shows status, deadline, how much of the target is done, whether the pace is ahead or behind, and win/loss. Open a campaign to read the script, the counts, and the deals. Start calls from there to phone the campaign. Notes about one lead stay on that lead. The period table can be grouped by week, month, or year. Hover a number to see what went into it. Weeks start on Monday, and the dates use the timezone chosen when the CRM was installed.

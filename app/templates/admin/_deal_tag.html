@@ -1,0 +1,10 @@
+{# One deal tag pill with a quick-remove button. Set `tag`, `tag_deal_id`, and optionally `tag_href` / `tag_on` before including. #}
+<span class="pill pill-tag deal-tag{% if tag.startswith('missing:') %} pill-tag-missing{% endif %}{% if tag_on %} pill-tag-on{% endif %}">
+    {%- if tag_href %}<a href="{{ tag_href }}">{{ tag }}</a>{% else %}<span>{{ tag }}</span>{% endif -%}
+    <form method="post" action="/crm/deals/{{ tag_deal_id }}/tags/remove" class="tag-remove-form"
+          hx-post="/crm/deals/{{ tag_deal_id }}/tags/remove" hx-target="closest .deal-tag" hx-swap="delete">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token | default(request.state.csrf_token) }}">
+        <input type="hidden" name="tag" value="{{ tag }}">
+        <button type="submit" class="tag-remove" aria-label="Remove tag {{ tag }}">&times;</button>
+    </form>
+</span>

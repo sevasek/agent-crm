@@ -124,8 +124,9 @@ def test_call_view_shows_deal_tags(logged_in_client, db):
     apply_deal_tags(deal_id, replace=["clinic", "referral"])
     resp = logged_in_client.get(f"/actions/deals/{deal_id}/call")
     assert resp.status_code == 200
-    assert 'class="pill pill-tag">clinic</span>' in resp.text
-    assert 'class="pill pill-tag">referral</span>' in resp.text
+    assert '<span>clinic</span>' in resp.text
+    assert '<span>referral</span>' in resp.text
+    assert 'aria-label="Remove tag clinic"' in resp.text
     assert 'href="/crm/deals?tag=' not in resp.text
 
 

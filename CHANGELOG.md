@@ -19,6 +19,8 @@ as `vX.Y.Z` and `latest`, as documented in the README.
   existing tag, after a confirm; no duplicate tags on a deal) and delete
   (after a confirm that shows the count). The migration defines every tag
   already on a deal and makes `missing:` tags yellow.
+  `campaign:` tags can't be renamed or deleted there, because they are
+  campaign membership; use the Campaigns page.
 - Applying a tag anywhere (deal and lead forms, lead ingest, MCP,
   bulk updates, campaign slug renames) defines it if it is new. Tags are
   never rejected for lacking a definition.

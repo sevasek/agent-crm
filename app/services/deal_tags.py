@@ -334,6 +334,10 @@ def rename_tag(old, new, *, merge=False):
     old_slug, new_slug = normalize_tag(old), normalize_tag(new)
     if not old_slug or not new_slug:
         return False, "invalid_tag"
+    # campaign:<slug> is campaign membership; renaming it here would orphan
+    # the campaign's deals. Campaign renames go through update_campaign.
+    if old_slug.startswith(CAMPAIGN_PREFIX) or new_slug.startswith(CAMPAIGN_PREFIX):
+        return False, "campaign_tag"
     with get_db() as db:
         if not tag_in_use(db, old_slug):
             return False, "not_found"
@@ -347,15 +351,17 @@ def rename_tag(old, new, *, merge=False):
     return exists, None
 
 
-def delete_tag(tag) -> int:
-    """Remove a tag from every deal and drop its definition. Returns the
-    number of deals it was removed from."""
+def delete_tag(tag):
+    """Remove a tag from every deal and drop its definition. Returns
+    (number of deals it was removed from, error_code)."""
     slug = normalize_tag(tag) or ""
+    if slug.startswith(CAMPAIGN_PREFIX):
+        return 0, "campaign_tag"  # would empty the campaign; see rename_tag
     with get_db() as db:
         removed = db.execute("DELETE FROM deal_tags WHERE tag = ?", (slug,)).rowcount
         db.execute("DELETE FROM tags WHERE tag = ?", (slug,))
         db.commit()
-    return removed
+    return removed, None
 
 
 def backfill_campaign_tags(db) -> int:

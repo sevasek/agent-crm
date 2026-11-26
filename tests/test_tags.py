@@ -131,9 +131,18 @@ def test_rename_rejects_unknown_and_invalid(db):
 
 def test_delete_removes_from_every_deal(db):
     a, b = _deal(tags=["missing:bond", "clinic"]), _deal(tags=["missing:bond"], email="bob@acme.example")
-    assert delete_tag("missing:bond") == 2
+    assert delete_tag("missing:bond") == (2, None)
     assert tags_for_deal(a) == ["clinic"] and tags_for_deal(b) == []
     assert "missing:bond" not in _defs()
+
+
+def test_campaign_tags_cannot_be_renamed_or_deleted_from_tags_page(db):
+    """campaign:<slug> is membership; touching it here would orphan the campaign."""
+    deal_id = _deal(tags=["campaign:spring", "clinic"])
+    assert rename_tag("campaign:spring", "campaign:autumn") == (False, "campaign_tag")
+    assert rename_tag("clinic", "campaign:spring") == (False, "campaign_tag")
+    assert delete_tag("campaign:spring") == (0, "campaign_tag")
+    assert tags_for_deal(deal_id) == ["campaign:spring", "clinic"]
 
 
 def test_define_tag_validates_colour_and_slug(db):

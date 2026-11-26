@@ -41,6 +41,9 @@
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}" form="tag-edit-{{ loop.index }}">
             <button type="submit" form="tag-edit-{{ loop.index }}">Save</button>
         </td>
+        {% if t.tag.startswith("campaign:") %}
+        <td colspan="2" class="muted">Campaign membership: rename or remove it on the <a href="/crm/campaigns">Campaigns</a> page.</td>
+        {% else %}
         <td>
             <form method="post" action="/definitions/tags/rename" class="tag-row-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -57,6 +60,7 @@
                         data-confirm="Delete {{ t.tag }}? It is removed from {{ t.total }} deal{{ 's' if t.total != 1 }}.">Delete</button>
             </form>
         </td>
+        {% endif %}
     </tr>
     {% else %}
     <tr><td colspan="7" class="muted">No tags yet.</td></tr>

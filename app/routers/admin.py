@@ -2480,6 +2480,7 @@ _TAG_ERRORS = {
     "invalid_tag": "Not a valid tag. Use lowercase letters, digits, hyphens and colons.",
     "invalid_color": "Pick a colour from the list.",
     "not_found": "That tag no longer exists.",
+    "campaign_tag": "campaign: tags are campaign membership. Rename or remove the campaign on the Campaigns page instead.",
 }
 
 
@@ -2541,7 +2542,9 @@ async def delete_tag_submit(
     csrf_token: str = Form(...), user=Depends(require_login),
 ):
     if validate_csrf_token(csrf_token, get_session_cookie(request)):
-        delete_tag(tag)
+        _removed, error = delete_tag(tag)
+        if error:
+            return _tags_page(request, user, error=_TAG_ERRORS.get(error, error), status_code=400)
     return RedirectResponse("/definitions/tags", status_code=303)
 
 

@@ -6,7 +6,7 @@
 <form method="post" action="{{ '/crm/deals/' ~ deal.id ~ '/edit' if deal else '/crm/deals/new' }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     {% if deal %}
-    <p class="muted">{% if partner %}<a href="/contacts/partners/{{ partner.id }}">{{ partner.name }}</a>{% if company %} at <a href="/contacts/partners/{{ company.id }}">{{ company.name }}</a>{% endif %}{% else %}No partner{% endif %} · <span class="pill">{{ deal.stage }}</span>
+    <p class="muted">{% if deal.card_title %}<strong>{{ deal.card_title }}</strong> · {% endif %}{% if partner %}<a href="/contacts/partners/{{ partner.id }}">{{ partner.name }}</a>{% if company %} at <a href="/contacts/partners/{{ company.id }}">{{ company.name }}</a>{% endif %}{% else %}No partner{% endif %} · <span class="pill">{{ deal.stage }}</span>
         — stage changes on the partner page.
     </p>
     {% set selected_service = form_service_id if form_service_id is not none else (service.id if service else none) %}
@@ -49,6 +49,7 @@
         </select>
     </div>
     {% endif %}
+    {% include "admin/_deal_custom_fields.html" %}
     <div class="form-row">
         <label for="source">Source</label>
         <input type="text" id="source" name="source" placeholder="referral, website, cold outreach..."

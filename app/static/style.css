@@ -571,6 +571,7 @@ a.pill-tag:hover, .pill-tag-on { background: var(--pill-tag-on-bg); color: var(-
 .pipeline-card.sortable-chosen,
 .pipeline-card.sortable-drag { cursor: grabbing; }
 .pipeline-card select { margin-top: 0.4rem; cursor: pointer; }
+.pipeline-card-title { font-weight: 600; }
 .stage-move-form { display: inline; }
 /* Narrower than a normal .btn-secondary (single-glyph arrows), but the
    vertical padding is left alone so the height still matches. */

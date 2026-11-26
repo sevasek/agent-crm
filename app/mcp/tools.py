@@ -30,9 +30,11 @@ from app.mcp.util import (
     clamp_limit,
     paginate,
 )
+from app.services import deal_fields
 from app.services import icp as icp_service
 from app.services import pipeline_stages
 from app.services import stage_automations
+from app.services.workspace import org_label
 from app.services.activities import VALID_TYPES, list_activities_for_deal, list_activities_for_partner, log_activity
 from app.services.call_queue import CALL_QUEUE_LIMIT, list_todays_calls
 from app.services.auth import clean_owner_key, is_valid_slug
@@ -453,6 +455,7 @@ def get_partner_tool(arguments):
         is_customer=is_customer,
         activities=[activity_brief(a) for a in activities],
         activities_truncated=truncated,
+        organisation_label=org_label(),
     )
 
 
@@ -476,6 +479,11 @@ def list_deals_tool(arguments):
     tag_filter, error = _tag_filter_arg(arguments)
     if error:
         return error
+    field_filter = arguments.get("custom_fields") or None
+    if field_filter is not None:
+        _sql, _params, field_error = deal_fields.filter_sql(field_filter)
+        if field_error:
+            return _err(field_error.partition(":")[0], deal_fields.error_message(field_error))
     limit = clamp_limit(arguments.get("limit"))
     if due_only:
         rows = list_due_deals(
@@ -486,11 +494,16 @@ def list_deals_tool(arguments):
             rows = [d for d in rows if d["partner_id"] == partner_id]
         if parent_deal_id:
             rows = [d for d in rows if d.get("parent_deal_id") == parent_deal_id]
+        if field_filter:
+            keep = {d["id"] for d in list_deals(
+                custom_fields=field_filter, type=record_type, include_lost=bool(include_lost),
+            )}
+            rows = [d for d in rows if d["id"] in keep]
     else:
         rows = list_deals(
             stage=stage, partner_id=partner_id, owner_key=owner_key, service_slug=service_slug,
             parent_deal_id=parent_deal_id, tags=tag_filter,
-            type=record_type, include_lost=bool(include_lost),
+            type=record_type, include_lost=bool(include_lost), custom_fields=field_filter,
         )
     sliced, truncated = paginate(rows, limit)
     return _ok(
@@ -664,8 +677,67 @@ def define_tag_tool(arguments):
     return _ok(tag={key: tag[key] for key in ("tag", "description", "color", "count")})
 
 
+def deal_field_brief(field):
+    return {
+        "key": field["key"], "label": field["label"], "type": field["type"],
+        "choices": field["choices"], "service_ids": field["service_ids"],
+        "required": field["required"], "show_on_card": field["show_on_card"],
+        "is_title": field["is_title"], "archived": field["archived"],
+    }
+
+
+def _custom_fields_arg(arguments, service_id, existing=None, check_required=True):
+    """Validate arguments["custom_fields"] -> (values dict, error response)."""
+    raw = arguments.get("custom_fields")
+    if raw is None and existing is None:
+        raw = {}
+    values, error = deal_fields.validate_values(
+        raw, service_id, existing=existing, check_required=check_required,
+    )
+    if error:
+        return None, _err(error.partition(":")[0], deal_fields.error_message(error))
+    return values, None
+
+
+def define_deal_field_tool(arguments):
+    key = as_text(arguments.get("key")).strip().lower() or None
+    has = lambda name: name in arguments
+    field, error = deal_fields.define_field(
+        key,
+        label=arguments.get("label") if has("label") else None,
+        type=as_text(arguments.get("type")).strip().lower() or None,
+        choices=arguments.get("choices") if has("choices") else None,
+        service_ids=arguments.get("service_ids") if has("service_ids") else None,
+        set_service_ids=has("service_ids"),
+        required=arguments.get("required") if has("required") else None,
+        show_on_card=arguments.get("show_on_card") if has("show_on_card") else None,
+        is_title=arguments.get("is_title") if has("is_title") else None,
+        position=arguments.get("position") if has("position") else None,
+        archived=arguments.get("archived") if has("archived") else None,
+    )
+    if error:
+        return _err(error, _DEAL_FIELD_ERRORS.get(error, error))
+    return _ok(field=deal_field_brief(field))
+
+
+_DEAL_FIELD_ERRORS = {
+    "label_required": "label is required when creating a field.",
+    "invalid_key": "key must start with a letter and use lowercase letters, digits and underscores (max 40).",
+    "invalid_type": "type must be one of: " + ", ".join(deal_fields.FIELD_TYPES) + ".",
+    "type_locked": "A field's type can't change once it exists. Archive it and define a new field.",
+    "choices_required": "choice and multi_choice fields need at least one choice.",
+    "invalid_choices": "choices must be a list of strings.",
+    "too_many_choices": f"At most {deal_fields.MAX_CHOICES} choices.",
+    "invalid_service": "service_ids must be existing service ids, or null for all services.",
+    "title_must_be_text": "Only a text field can be the card title.",
+    "invalid_position": "position must be an integer.",
+}
+
+
 def list_catalog_tool(_arguments):
     payload = dict(
+        deal_fields=[deal_field_brief(f) for f in deal_fields.list_fields()],
+        organisation_label=org_label(),
         services=[service_brief(s) for s in list_services(active_only=True)],
         stages=[stage_brief(s) for s in pipeline_stages.list_stages()],
         offers=[offer_brief(o) for o in list_offers(active_only=True)],
@@ -808,12 +880,21 @@ def create_deal_tool(arguments):
         tags, error = _parse_tags_arg(arguments.get("tags"))
         if error:
             return error
-    existing = get_open_deal_for_partner_service(partner_id, service["id"])
+    custom_values, error = _custom_fields_arg(arguments, service["id"])
+    if error:
+        return error
+    title_def = deal_fields.title_field()
+    title = custom_values.get(title_def["key"]) if title_def else None
+    existing = get_open_deal_for_partner_service(partner_id, service["id"], title=title)
     if existing:
+        same = f" with the title {title!r}" if title_def else ""
         return _ok(
             status="duplicate_open_deal",
             deal=deal_brief(existing),
-            message="This partner already has an open deal for that service. Update that deal instead of creating another.",
+            message=(
+                f"This partner already has an open deal for that service{same}. "
+                "Update that deal instead of creating another."
+            ),
         )
     stage = as_text(arguments.get("stage")).strip() or None
     if stage and not pipeline_stages.get_stage(stage):
@@ -846,6 +927,7 @@ def create_deal_tool(arguments):
         probability=as_int(arguments.get("probability")),
         priority=as_int(arguments.get("priority")),
         expected_close=as_text(arguments.get("expected_close")),
+        custom_fields=custom_values,
     )
     return _ok(status="created", deal=deal_brief(get_deal(deal_id)), partner=partner_brief(partner))
 
@@ -878,7 +960,15 @@ def update_deal_tool(arguments):
         offer_arg, error = _explicit_offer_arg(arguments)
         if error:
             return error
-    if not updates and not tag_ops and not changing_service:
+    custom_values = None
+    if "custom_fields" in arguments:
+        target_service_id = service["id"] if changing_service else deal.get("service_id")
+        custom_values, error = _custom_fields_arg(
+            arguments, target_service_id, existing=deal.get("custom_fields"), check_required=False,
+        )
+        if error:
+            return error
+    if not updates and not tag_ops and not changing_service and custom_values is None:
         if service is not None:
             return _ok(status="updated", deal=deal_brief(get_deal(deal_id)))
         return _err(
@@ -904,6 +994,8 @@ def update_deal_tool(arguments):
             return _service_change_error(error, service=service, offer_id=passed_offer)
     if updates:
         update_deal_fields(deal_id, **updates)
+    if custom_values is not None:
+        deal_fields.save_values(deal_id, custom_values)
     if tag_ops:
         tag_error = apply_deal_tags(deal_id, **tag_ops)
         if tag_error:
@@ -1550,6 +1642,17 @@ _AUTOMATION_ACTION_SCHEMA = {
     },
 }
 
+_CUSTOM_FIELDS_PROP = {
+    "type": "object",
+    "description": (
+        "Custom deal field values keyed by field key (list_catalog deal_fields), "
+        "e.g. {\"first_name\": \"Olivia\", \"date_of_birth\": \"2022-08-14\"}. "
+        "Dates are YYYY-MM-DD; choice values must be one of the field's choices; "
+        "multi_choice takes a list. null clears a field."
+    ),
+}
+
+
 TOOLS = [
     {
         "name": "search_partners",
@@ -1693,12 +1796,16 @@ TOOLS = [
             "tags is one or more slugs; a deal must carry every one of them. "
             "tag is a single-tag alias, combined with tags the same way. "
             "Each deal includes tags (an empty array when it has none). "
-            "due_only=true is the follow-up queue (next_action_date today or earlier)."
+            "due_only=true is the follow-up queue (next_action_date today or earlier). "
+            "custom_fields filters on custom deal field values (all must match; a "
+            "multi_choice field matches when the value is one of its selections). "
+            "Each deal includes custom_fields and card_title (the card title field's value, or null)."
         ),
         "inputSchema": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
+                "custom_fields": _CUSTOM_FIELDS_PROP,
                 "stage": {"type": "string", "description": "Pipeline stage key from list_catalog."},
                 "partner_id": {"type": "integer", "minimum": 1},
                 "owner": _OWNER_PROP,
@@ -1792,6 +1899,47 @@ TOOLS = [
             "openWorldHint": False,
         },
         "handler": define_tag_tool,
+    },
+    {
+        "name": "define_deal_field",
+        "description": (
+            "Create a custom deal field, or change one, so this install can record "
+            "its own details on deals (for example a child's first name, date of "
+            "birth or room). Pass key to update an existing field; omit it to create "
+            "one (the key is made from the label). type is text, long_text, number, "
+            "date, yes_no, choice or multi_choice, and can't change later. "
+            "choices is required for choice types. service_ids limits the field to "
+            "those services (null = all). is_title makes this text field the deal's "
+            "card title; only one field can be the title, and open deals for the same "
+            "partner and service are only duplicates when their titles match. "
+            "archived=true hides a field but keeps its values. "
+            "Set values with create_deal / update_deal custom_fields; list_catalog "
+            "lists the fields."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "key": {"type": "string"},
+                "label": {"type": "string"},
+                "type": {"type": "string", "enum": list(deal_fields.FIELD_TYPES)},
+                "choices": {"type": "array", "items": {"type": "string"}, "maxItems": 100},
+                "service_ids": {"type": ["array", "null"], "items": {"type": "integer", "minimum": 1}},
+                "required": {"type": "boolean"},
+                "show_on_card": {"type": "boolean"},
+                "is_title": {"type": "boolean"},
+                "position": {"type": "integer"},
+                "archived": {"type": "boolean"},
+            },
+        },
+        "annotations": {
+            "title": "Define deal field",
+            "readOnlyHint": False,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
+        "handler": define_deal_field_tool,
     },
     {
         "name": "get_deal",
@@ -1919,7 +2067,10 @@ TOOLS = [
         "description": (
             "Services, pipeline stages (with role flags), offers, call-outcome keys, "
             "and allowed activity types. Call this before set_deal_stage or record_call_outcome. "
-            "is_won / is_lost flag the terminal stages."
+            "is_won / is_lost flag the terminal stages. "
+            "deal_fields lists this install's custom deal fields (key, type, choices, "
+            "service_ids, required, is_title). organisation_label is what a company-type "
+            "partner is called here (e.g. Family / Families); use it when writing to people."
         ),
         "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
         "annotations": {
@@ -2107,6 +2258,11 @@ TOOLS = [
             "This creates an opportunity. For an unqualified candidate, use create_lead. "
             "Open a deal for an existing partner + service. If an open deal already "
             "exists for that pair, returns it as duplicate_open_deal instead of creating a second. "
+            "When the install defines a card title field (list_catalog deal_fields, is_title), "
+            "only an open deal with the same title is a duplicate, so one partner can have "
+            "several open deals for a service (for example one per child). Only open deals "
+            "are checked: a won deal is never returned as a duplicate. "
+            "custom_fields sets custom deal field values; required fields must be included. "
             "parent_deal_id links a follow-on (must share partner_id; cycles rejected). "
             "For brand-new inbound leads prefer ingest_leads or create_lead. "
             "tags sets the deal's labels. A duplicate open deal is returned as-is "
@@ -2133,6 +2289,7 @@ TOOLS = [
                 "owner_key": _OWNER_PROP,
                 "external_ref": {"type": "string", "description": "Freeform engagement/project ref. Does not clobber pain_points/goals."},
                 "tags": _TAGS_PROP,
+                "custom_fields": _CUSTOM_FIELDS_PROP,
                 "parent_deal_id": {
                     "type": "integer",
                     "minimum": 1,
@@ -2205,6 +2362,10 @@ TOOLS = [
                 "tags": {
                     **_TAGS_PROP,
                     "description": "Replace the deal's tags. Empty array clears them. Omit to leave tags unchanged.",
+                },
+                "custom_fields": {
+                    **_CUSTOM_FIELDS_PROP,
+                    "description": _CUSTOM_FIELDS_PROP["description"] + " Only the keys passed change.",
                 },
                 "add_tags": {
                     **_TAGS_PROP,

@@ -69,6 +69,11 @@ def deal_brief(deal):
         fields = _DEAL_FIELDS + _LEAD_CONTACT_FIELDS
     out = _pick(annotated, fields)
     out["tags"] = list(annotated.get("tags") or [])
+    if "card_title" not in annotated:
+        from app.services.deal_fields import attach_custom_fields
+        annotated = attach_custom_fields([dict(annotated)])[0]
+    out["custom_fields"] = dict(annotated.get("custom_fields") or {})
+    out["card_title"] = annotated.get("card_title")
     out["due_status"] = annotated.get("due_status")
     out["days_overdue"] = annotated.get("days_overdue")
     out["active"] = bool(annotated.get("active", 1))

@@ -129,6 +129,7 @@ opportunity needs both.
 | `lost_note` | TEXT | Free text for the loss. |
 | `merged_into_id` | INTEGER | FK to `deals(id)`. Set by `merge_leads` on the source. |
 | `board_position` | INTEGER NOT NULL DEFAULT 0 | 0-based order within `stage` on the pipeline board. Drag-and-drop and `set_deal_stage(..., position=)` rewrite the column; a stage change without a position appends. The deals list still sorts by `updated_at`. |
+| `custom_fields` | TEXT | Migration 17. JSON object of custom field values keyed by `deal_fields.key`. NULL when there are none. Read code adds `custom_fields` (a dict) and `card_title` (the title field's value) to every deal; `title` stays the lead contact column. |
 
 `list_deals()` defaults to `type = 'opportunity'` and `include_lost = false`.
 Leads never appear in a pipeline stage column.
@@ -190,6 +191,28 @@ The definition of each deal tag. Added in migration 16, which adds one row per d
 | `created_at`, `updated_at` | TEXT | ISO timestamps. |
 
 Renaming a tag (Definitions → Tags) rewrites `deal_tags`. Renaming onto an existing tag merges: a deal with both keeps one row, and the target keeps its description and colour. Deleting a tag removes it from every deal.
+
+### `deal_fields`
+
+Custom deal fields an install defines (Definitions → Deal fields, MCP `define_deal_field`). Added in migration 17. Values are stored on `deals.custom_fields`. Fields are archived, never deleted.
+
+| Column | Type | Notes |
+|---|---|---|
+| `key` | TEXT PRIMARY KEY | Lowercase letters, digits and underscores, starting with a letter (max 40). Made from the label. |
+| `label` | TEXT NOT NULL | |
+| `type` | TEXT NOT NULL | `text`, `long_text`, `number`, `date`, `yes_no`, `choice`, `multi_choice`. Fixed once created. |
+| `choices` | TEXT NOT NULL DEFAULT '[]' | JSON list, for the choice types. Values are matched case-insensitively and stored as the defined spelling. |
+| `service_ids` | TEXT | JSON list of service ids the field applies to. NULL = every service. |
+| `required` | INTEGER | Required on create for the services it applies to, and can't be cleared afterwards. |
+| `show_on_card` | INTEGER | Shown as `Label: value` on the pipeline card. |
+| `is_title` | INTEGER | At most one active text field. Its value names the card, and the open-deal duplicate check compares it: one partner can have several open deals for a service when their titles differ. |
+| `position` | INTEGER | Display order. |
+| `archived` | INTEGER | Hidden from forms and the catalog; stored values stay. |
+| `created_at`, `updated_at` | TEXT | ISO timestamps. |
+
+### `workspace_settings`
+
+Instance-wide key/value settings (migration 17), as opposed to per-user ones on `users`. `org_label_singular` / `org_label_plural` set what a company-type partner is called on screen and in agent output (default Company / Companies). `partners.is_company` is unchanged.
 
 ### `partner_tags`
 

@@ -26,6 +26,8 @@ from app.services.partner_metrics import (
     record_snapshot,
 )
 from app.services.catalog import create_service, get_service, update_service, list_services
+from app.services import deal_fields as deal_fields_service
+from app.services.workspace import ORG_LABEL_PRESETS, org_label, set_org_label
 from app.services.deal_tags import (
     apply_deal_tags, define_tag, delete_tag, list_tag_definitions, list_tags, normalize_tag,
     parse_tag_list, rename_tag,
@@ -298,6 +300,21 @@ def tag_defs(request):
 
 templates.env.globals["tag_defs"] = tag_defs
 templates.env.globals["tag_pill_colors"] = TAG_PILL_COLORS
+
+
+def org_words(request):
+    """The organisation label, one query per request:
+    {"singular", "plural", "lower", "lower_plural"}."""
+    words = getattr(request.state, "org_words", None)
+    if words is None:
+        label = org_label()
+        words = request.state.org_words = {
+            **label, "lower": label["singular"].lower(), "lower_plural": label["plural"].lower(),
+        }
+    return words
+
+
+templates.env.globals["org_words"] = org_words
 
 
 @router.get("/apps", response_class=HTMLResponse)
@@ -1028,8 +1045,37 @@ def _deal_parent_context(deal=None, partner_id=0):
     }
 
 
+def _form_custom_fields(form):
+    """Deal form -> {key: raw value} for every active field posted.
+
+    Inputs are named cf_<key>. Multi-choice checkboxes come with a hidden
+    empty cf_<key> so unticking them all still clears the field.
+    """
+    values = {}
+    for field in deal_fields_service.list_fields():
+        name = f"cf_{field['key']}"
+        if name not in form:
+            continue
+        if field["type"] == "multi_choice":
+            values[field["key"]] = [v for v in form.getlist(name) if v]
+        else:
+            values[field["key"]] = str(form.get(name) or "")
+    return values
+
+
+def _deal_field_inputs(service_id=None, *, all_services=False):
+    """Fields to show on a deal form, each with the names of its services."""
+    names = {s["id"]: s["name"] for s in list_services()}
+    fields = deal_fields_service.list_fields()
+    if not all_services:
+        fields = [f for f in fields if deal_fields_service.applies_to(f, service_id)]
+    for field in fields:
+        field["service_names"] = [names.get(i, f"#{i}") for i in (field["service_ids"] or [])]
+    return fields
+
+
 def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal_id=None,
-                   error=None, status_code=200):
+                   error=None, status_code=200, form_custom=None):
     ctx = {
         "request": request, "user": user, "partners": list_partners(),
         "services": list_services(active_only=True), "preselect_partner_id": partner_id,
@@ -1037,6 +1083,8 @@ def _new_deal_form(request, user, partner_id=0, form_tags=None, form_parent_deal
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "form_tags": form_tags, "form_parent_deal_id": form_parent_deal_id,
         "error": error, "lost_reasons": list_lost_reasons(active_only=True),
+        "deal_field_inputs": _deal_field_inputs(all_services=True),
+        "custom_values": form_custom or {},
     }
     ctx.update(_deal_parent_context(partner_id=partner_id))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
@@ -1092,7 +1140,7 @@ def _service_form_error(error, service=None, offer_id=None):
 
 def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
                     form_parent_deal_id=None, form_service_id=None, form_offer_id=None,
-                    error=None, status_code=200):
+                    error=None, status_code=200, form_custom=None):
     if deal and deal.get("lost_reason_id") and not isinstance(deal.get("lost_reason"), dict):
         deal = dict(deal)
         deal["lost_reason"] = get_lost_reason(deal["lost_reason_id"])
@@ -1120,6 +1168,8 @@ def _edit_deal_form(request, user, deal, partner, service, form_tags=None,
         "form_service_id": form_service_id, "form_offer_id": form_offer_id,
         "error": error, "lost_reasons": _lost_reason_choices(deal),
         "campaign_links": _campaign_links(deal, form_tags),
+        "deal_field_inputs": _deal_field_inputs(service["id"] if service else None),
+        "custom_values": form_custom if form_custom is not None else (deal or {}).get("custom_fields") or {},
     }
     ctx.update(_deal_parent_context(deal))
     return templates.TemplateResponse(request, "admin/deal_form.html", ctx, status_code=status_code)
@@ -1222,6 +1272,14 @@ async def new_deal_submit(
             form_parent_deal_id=parent_deal_id, error=_parent_form_error(parent_error),
             status_code=400,
         )
+    raw_custom = _form_custom_fields(await request.form())
+    custom_values, custom_error = deal_fields_service.validate_values(raw_custom, parsed_service_id)
+    if custom_error:
+        return _new_deal_form(
+            request, user, partner_id=parsed_partner_id, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, form_custom=raw_custom,
+            error=deal_fields_service.error_message(custom_error), status_code=400,
+        )
     create_deal(
         parsed_partner_id, parsed_service_id, source=source,
         value_estimate=float(value_estimate) if value_estimate else None,
@@ -1230,6 +1288,7 @@ async def new_deal_submit(
         owner_key=owner_key, external_ref=external_ref,
         parent_deal_id=cleaned_parent,
         tags=parsed_tags or None,
+        custom_fields=custom_values,
     )
     return RedirectResponse(f"/contacts/partners/{parsed_partner_id}", status_code=303)
 
@@ -1328,6 +1387,18 @@ async def edit_deal_submit(
         parsed_service_id is not None
         and (current_service_id is None or int(current_service_id) != int(parsed_service_id))
     )
+    raw_custom = _form_custom_fields(raw_form)
+    custom_values, custom_error = deal_fields_service.validate_values(
+        raw_custom, parsed_service_id if changing_service else current_service_id,
+        existing=deal.get("custom_fields"), check_required=False,
+    )
+    if custom_error:
+        return _edit_deal_form(
+            request, user, deal, partner, service, form_tags=tags,
+            form_parent_deal_id=parent_deal_id, form_service_id=service_id,
+            form_offer_id=offer_id, form_custom={**(deal.get("custom_fields") or {}), **raw_custom},
+            error=deal_fields_service.error_message(custom_error), status_code=400,
+        )
     if changing_service:
         if offer_id is None:
             offer_arg = UNSET
@@ -1374,6 +1445,8 @@ async def edit_deal_submit(
                 )
             field_updates["offer_id"] = parsed_offer
     update_deal_fields(deal_id, **field_updates)
+    if custom_values != (deal.get("custom_fields") or {}):
+        deal_fields_service.save_values(deal_id, custom_values)
     apply_deal_tags(deal_id, replace=parsed_tags or [])
     return RedirectResponse(f"/contacts/partners/{deal['partner_id']}", status_code=303)
 
@@ -1861,7 +1934,36 @@ async def account_settings(request: Request, user=Depends(require_login)):
         "api_keys": api_keys_service.list_api_keys(user["id"]),
         "csrf_token": generate_csrf_token(get_session_cookie(request)),
         "currency_choices": offers_service.CURRENCY_CHOICES,
+        "org_label_presets": ORG_LABEL_PRESETS,
     })
+
+
+@router.post("/settings/workspace")
+async def workspace_settings_submit(
+    request: Request,
+    org_label_singular: str = Form(""), org_label_plural: str = Form(""),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    """Instance-wide settings. If the label changed but the plural was left
+    as it was, the plural follows the new label (a preset's, or derived)."""
+    if not validate_csrf_token(csrf_token, get_session_cookie(request)):
+        return RedirectResponse("/settings", status_code=303)
+    current = org_label()
+    singular = org_label_singular.strip()
+    plural = org_label_plural.strip()
+    if singular != current["singular"] and plural == current["plural"]:
+        plural = dict(ORG_LABEL_PRESETS).get(singular.capitalize(), "")
+    _label, error = set_org_label(singular, plural)
+    if error:
+        return templates.TemplateResponse(request, "admin/settings.html", {
+            "request": request, "user": user,
+            "api_keys": api_keys_service.list_api_keys(user["id"]),
+            "csrf_token": generate_csrf_token(get_session_cookie(request)),
+            "currency_choices": offers_service.CURRENCY_CHOICES,
+            "org_label_presets": ORG_LABEL_PRESETS,
+            "workspace_error": "Enter a label, such as Company or Family.",
+        }, status_code=400)
+    return RedirectResponse("/settings#workspace", status_code=303)
 
 
 @router.post("/settings/api-keys/new")
@@ -2546,6 +2648,95 @@ async def delete_tag_submit(
         if error:
             return _tags_page(request, user, error=_TAG_ERRORS.get(error, error), status_code=400)
     return RedirectResponse("/definitions/tags", status_code=303)
+
+
+# ==================== Deal fields ====================
+
+_DEAL_FIELD_FORM_ERRORS = {
+    "label_required": "Give the field a label.",
+    "invalid_key": "The label needs to start with a letter.",
+    "invalid_type": "Pick a field type.",
+    "type_locked": "A field's type can't change once it exists. Archive it and add a new field.",
+    "choices_required": "Choice fields need at least one choice.",
+    "invalid_choices": "Enter one choice per line.",
+    "too_many_choices": f"At most {deal_fields_service.MAX_CHOICES} choices.",
+    "invalid_service": "Pick services that exist, or none for all services.",
+    "title_must_be_text": "Only a text field can be the card title.",
+    "invalid_position": "Order must be a whole number.",
+    "not_found": "That field no longer exists.",
+}
+
+
+def _deal_fields_page(request, user, error=None, editing=None, form=None,
+                      form_service_ids=None, status_code=200):
+    services = list_services()
+    names = {s["id"]: s["name"] for s in services}
+    fields = deal_fields_service.list_fields(include_archived=True)
+    for field in fields:
+        field["service_names"] = [names.get(i, f"#{i}") for i in (field["service_ids"] or [])]
+    return templates.TemplateResponse(request, "admin/deal_fields.html", {
+        "request": request, "user": user,
+        "fields": fields, "types": deal_fields_service.FIELD_TYPES,
+        "services": services, "editing": editing, "form": form or {},
+        "chosen_services": (
+            form_service_ids if form is not None
+            else ((editing or {}).get("service_ids") or [])
+        ),
+        "csrf_token": generate_csrf_token(get_session_cookie(request)),
+        "error": error,
+    }, status_code=status_code)
+
+
+@crm_router.get("/definitions/deal-fields", response_class=HTMLResponse)
+async def deal_fields_list(request: Request, edit: str = "", user=Depends(require_login)):
+    editing = deal_fields_service.get_field(edit) if edit else None
+    return _deal_fields_page(request, user, editing=editing)
+
+
+@crm_router.post("/definitions/deal-fields/save")
+async def save_deal_field_submit(request: Request, user=Depends(require_login)):
+    """Create a field (no key) or update one (key). Checkboxes absent = off."""
+    form = await request.form()
+    if not validate_csrf_token(str(form.get("csrf_token") or ""), get_session_cookie(request)):
+        return RedirectResponse("/definitions/deal-fields", status_code=303)
+    key = str(form.get("key") or "").strip() or None
+    existing = deal_fields_service.get_field(key) if key else None
+    if key and not existing:
+        return _deal_fields_page(request, user, error=_DEAL_FIELD_FORM_ERRORS["not_found"], status_code=400)
+    field_type = str(form.get("type") or "").strip() or None
+    is_choice = (existing["type"] if existing else field_type) in deal_fields_service.CHOICE_TYPES
+    field, error = deal_fields_service.define_field(
+        key,
+        label=str(form.get("label") or ""),
+        type=None if existing else field_type,
+        choices=str(form.get("choices") or "") if is_choice else None,
+        service_ids=[v for v in form.getlist("service_ids") if v],
+        set_service_ids=True,
+        required="required" in form,
+        show_on_card="show_on_card" in form,
+        is_title="is_title" in form,
+        position=str(form.get("position") or "").strip() or None,
+    )
+    if error:
+        return _deal_fields_page(
+            request, user, error=_DEAL_FIELD_FORM_ERRORS.get(error, error),
+            editing=existing, form=dict(form),
+            form_service_ids=[_safe_int(v) for v in form.getlist("service_ids") if _safe_int(v)],
+            status_code=400,
+        )
+    return RedirectResponse("/definitions/deal-fields", status_code=303)
+
+
+@crm_router.post("/definitions/deal-fields/{key}/archive")
+async def archive_deal_field_submit(
+    request: Request, key: str, archived: str = Form("1"),
+    csrf_token: str = Form(...), user=Depends(require_login),
+):
+    if validate_csrf_token(csrf_token, get_session_cookie(request)):
+        if not deal_fields_service.get_field(key):
+            return _deal_fields_page(request, user, error=_DEAL_FIELD_FORM_ERRORS["not_found"], status_code=400)
+        deal_fields_service.define_field(key, archived=archived == "1")
+    return RedirectResponse("/definitions/deal-fields", status_code=303)
 
 
 # ==================== Campaigns ====================

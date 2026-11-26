@@ -6,6 +6,7 @@ from app.database import get_db
 from app.services.activities import list_activities_for_deal, log_activity
 from app.services.auth import clean_owner_key, sanitize_text
 from app.services.catalog import get_service, get_service_by_slug
+from app.services import deal_fields
 from app.services.deal_tags import apply_deal_tags, parse_tag_list, tags_for_deal
 from app.services.deals import (
     get_deal,
@@ -680,7 +681,9 @@ def convert_lead(
         }, "partner_ambiguous"
     if error:
         return None, error
-    other = get_open_deal_for_partner_service(partner["id"], service["id"])
+    title_def = deal_fields.title_field()
+    lead_title = deal_fields.load_values(lead).get(title_def["key"]) if title_def else None
+    other = get_open_deal_for_partner_service(partner["id"], service["id"], title=lead_title)
     if other and other["id"] != lead_id:
         return {"deal_id": other["id"]}, "duplicate_open_opportunity"
     _copy_lead_to_partner(partner, lead)

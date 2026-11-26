@@ -1,0 +1,42 @@
+{# Custom deal fields (Definitions > Deal fields). Inputs are cf_<key>. #}
+{% if deal_field_inputs %}
+<fieldset class="deal-custom-fields">
+    <legend>Details</legend>
+    {% for f in deal_field_inputs %}
+    {% set v = custom_values.get(f.key) %}
+    {% set input_id = "cf_" ~ f.key %}
+    {% set scope = (" (" ~ (f.service_names | join(", ")) ~ " only)") if (f.service_names and not deal) else "" %}
+    <div class="form-row">
+        {% if f.type == "multi_choice" %}
+        <fieldset>
+            <legend>{{ f.label }}{% if f.required %} *{% endif %}<span class="muted">{{ scope }}</span></legend>
+            <input type="hidden" name="{{ input_id }}" value="">
+            {% for c in f.choices %}
+            <label><input type="checkbox" name="{{ input_id }}" value="{{ c }}"{% if v and c in v %} checked{% endif %}> {{ c }}</label>
+            {% endfor %}
+        </fieldset>
+        {% else %}
+        <label for="{{ input_id }}">{{ f.label }}{% if f.required %} *{% endif %}<span class="muted">{{ scope }}</span></label>
+        {% if f.type == "long_text" %}
+        <textarea id="{{ input_id }}" name="{{ input_id }}">{{ v if v is not none else "" }}</textarea>
+        {% elif f.type == "choice" %}
+        <select id="{{ input_id }}" name="{{ input_id }}">
+            <option value="">— none —</option>
+            {% for c in f.choices %}<option value="{{ c }}"{% if v == c %} selected{% endif %}>{{ c }}</option>{% endfor %}
+            {% if v and v not in f.choices %}<option value="{{ v }}" selected>{{ v }} (no longer a choice)</option>{% endif %}
+        </select>
+        {% elif f.type == "yes_no" %}
+        <select id="{{ input_id }}" name="{{ input_id }}">
+            <option value="">— not set —</option>
+            <option value="yes"{% if v is sameas true or v == "yes" %} selected{% endif %}>Yes</option>
+            <option value="no"{% if v is sameas false or v == "no" %} selected{% endif %}>No</option>
+        </select>
+        {% else %}
+        <input type="{{ 'date' if f.type == 'date' else ('number' if f.type == 'number' else 'text') }}"{% if f.type == 'number' %} step="any"{% endif %}
+               id="{{ input_id }}" name="{{ input_id }}" value="{{ v if v is not none else '' }}">
+        {% endif %}
+        {% endif %}
+    </div>
+    {% endfor %}
+</fieldset>
+{% endif %}

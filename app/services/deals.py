@@ -11,7 +11,7 @@ from app.services.catalog import get_service
 from app.services.partners import get_partner
 from app.services.nurture import SENT as NURTURE_SENT, SKIPPED as NURTURE_SKIPPED, enroll_partner_in_nurture
 from app.services.won_webhook import SENT as WON_SENT, SKIPPED as WON_SKIPPED, notify_deal_won
-from app.services import pipeline_stages
+from app.services import deal_fields, pipeline_stages
 from app.services.offers import default_offer_id, get_offer
 
 logger = logging.getLogger(__name__)
@@ -325,7 +325,8 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
                  created_note: str = "Deal created", stage: str = None, offer_id: int = None,
                  owner_key: str = "", external_ref: str = "", parent_deal_id=None,
                  attach_default_offer: bool = True, tags=None,
-                 probability=None, priority=None, expected_close=""):
+                 probability=None, priority=None, expected_close="", custom_fields=None):
+    """custom_fields must already be checked with deal_fields.validate_values."""
     if not stage or not pipeline_stages.get_stage(stage):
         stage = pipeline_stages.default_stage_key()
     if offer_id and get_offer(offer_id):
@@ -358,9 +359,9 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
                 partner_id, service_id, stage, source, value_estimate,
                 pain_points, goals, next_action, next_action_date, offer_id,
                 owner_key, external_ref, parent_deal_id,
-                probability, priority, expected_close, board_position
+                probability, priority, expected_close, board_position, custom_fields
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             partner_id, service_id, stage,
             sanitize_text(source, max_len=120) or None,
@@ -377,6 +378,7 @@ def create_deal(partner_id: int, service_id: int, source: str = "", value_estima
             priority_value,
             sanitize_text(expected_close, max_len=32) or None,
             next_pos,
+            deal_fields.dump_values(custom_fields),
         ))
         db.commit()
         deal_id = db.execute("SELECT last_insert_rowid()").fetchone()[0]
@@ -394,21 +396,32 @@ def get_deal(deal_id: int):
             return None
         deal = dict(row)
     deal["tags"] = tags_for_deal(deal_id)
+    deal_fields.attach_custom_fields([deal])
     return deal
 
 
-def get_open_deal_for_partner_service(partner_id: int, service_id: int):
+def get_open_deal_for_partner_service(partner_id: int, service_id: int, title=None):
     """Most recent open deal this partner already has for this service, if any —
     used by the lead-ingestion API to avoid piling up duplicate deals when an ETL job
     re-submits the same lead on a later run.
 
     Open is active = 1 and the stage is not is_won.
+
+    When the install defines a card title field, deals with a different
+    title are not duplicates (two children of one family on the same
+    waitlist). `title` is compared trimmed and case-insensitively; an empty
+    title only matches deals that have none.
     """
     won = pipeline_stages.won_stage_keys()
+    title_def = deal_fields.title_field()
     with get_db() as db:
         query = """SELECT * FROM deals
             WHERE partner_id = ? AND service_id = ? AND active = 1"""
         params = [partner_id, service_id]
+        if title_def:
+            query += (" AND lower(trim(coalesce(json_extract(custom_fields, ?), '')))"
+                      " = lower(trim(?))")
+            params.extend([deal_fields.json_path(title_def["key"]), title or ""])
         if won:
             placeholders = ",".join("?" * len(won))
             query += f" AND stage NOT IN ({placeholders})"
@@ -419,15 +432,21 @@ def get_open_deal_for_partner_service(partner_id: int, service_id: int):
             return None
         deal = dict(row)
     deal["tags"] = tags_for_deal(deal["id"])
+    deal_fields.attach_custom_fields([deal])
     return deal
 
 
 def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
                service_id: int = None, service_slug: str = None, deal_ids=None,
                parent_deal_id: int = None, tags=None, type: str = "opportunity",
-               include_lost: bool = False, order: str = None):
+               include_lost: bool = False, order: str = None, custom_fields=None):
+    """custom_fields filters on field values ({key: value}); callers check
+    it first with deal_fields.filter_sql, so a bad filter here returns []."""
     wanted_tags, impossible = coerce_tag_filter(tags)
     if impossible:
+        return []
+    field_sql, field_params, field_error = deal_fields.filter_sql(custom_fields)
+    if field_error:
         return []
     record_type = type if type in ("opportunity", "lead", "all") else "opportunity"
     # LEFT JOIN so a lead with a null partner/service is not dropped (§5.8).
@@ -456,6 +475,8 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
             " WHERE deal_tags.deal_id = deals.id AND deal_tags.tag = ?)"
         )
         params.append(tag)
+    query += field_sql
+    params.extend(field_params)
     if stage:
         query += " AND deals.stage = ?"
         params.append(stage)
@@ -492,6 +513,7 @@ def list_deals(stage: str = None, partner_id: int = None, owner_key: str = None,
         rows = db.execute(query, params).fetchall()
         deals = [dict(r) for r in rows]
     deals = attach_tags(deals)
+    deal_fields.attach_custom_fields(deals)
     from app.services.deal_outcome import attach_outcomes
     return attach_outcomes(deals)
 
